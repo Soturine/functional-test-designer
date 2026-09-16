@@ -41,6 +41,36 @@ SCOPE_PROOF_METRICS = (
     "temporary_files_created",
 )
 
+AGGREGATION_STRATEGIES = {
+    "selected_scope_roots": "set",
+    "resolved_scope_paths": "set",
+    "files_opened": "last",
+    "files_opened_outside_scope": "last",
+    "files_skipped_out_of_scope": "last",
+    "source_reads": "sum",
+    "source_rereads": "sum",
+    "temporary_files_created": "sum",
+    "normative_clauses_extracted": "last",
+    "normative_clauses_mapped": "last",
+    "unmapped_normative_clauses": "last",
+    "coverage_points": "last",
+    "scenario_candidates": "last",
+    "scenarios_after_dedup": "last",
+    "independent_scenarios_preserved": "last",
+    "semantic_duplicates_removed": "last",
+    "test_cases_generated": "last",
+    "steps_generated": "last",
+    "individual_json_files_written": "last",
+    "json_bytes_written": "last",
+    "validator_runs": "sum",
+    "validation_fix_rounds": "sum",
+    "markdown_files_generated": "last",
+    "artifact_root": "last",
+    "output_path": "last",
+    "diagnostics_path": "last",
+    "artifact_root_source": "last",
+}
+
 
 def now_utc() -> datetime:
     return datetime.now(timezone.utc)
@@ -214,18 +244,29 @@ def output_totals(output_dir: Path | None) -> dict[str, Any]:
 
 
 def observed_metrics(document: dict[str, Any]) -> dict[str, Any]:
-    observed: dict[str, Any] = {}
+    values: dict[str, list[Any]] = {}
     for item in document["stages"]:
         for key, value in item.get("metrics", {}).items():
-            if isinstance(value, (int, float)) and not isinstance(value, bool):
-                observed[key] = observed.get(key, 0) + value
-            elif isinstance(value, list):
-                current = observed.setdefault(key, [])
-                for entry in value:
-                    if entry not in current:
-                        current.append(entry)
-            else:
-                observed[key] = value
+            values.setdefault(key, []).append(value)
+    observed: dict[str, Any] = {}
+    for key, entries in values.items():
+        strategy = AGGREGATION_STRATEGIES.get(key)
+        if strategy is None:
+            raise ValueError(f"No aggregation strategy is defined for metric {key!r}")
+        if strategy == "sum":
+            if not all(isinstance(value, (int, float)) and not isinstance(value, bool) for value in entries):
+                raise ValueError(f"Metric {key!r} requires numeric values for sum aggregation")
+            observed[key] = sum(entries)
+        elif strategy == "set":
+            if not all(isinstance(value, list) for value in entries):
+                raise ValueError(f"Metric {key!r} requires arrays for set aggregation")
+            observed[key] = []
+            for value in entries:
+                for member in value:
+                    if member not in observed[key]:
+                        observed[key].append(member)
+        else:  # last
+            observed[key] = entries[-1]
     return observed
 
 
@@ -248,6 +289,9 @@ def finish_run(
     document["totals"] = output_totals(output_dir)
     observed = observed_metrics(document)
     document["totals"].update(observed)
+    document["aggregation_strategies"] = {
+        key: AGGREGATION_STRATEGIES[key] for key in observed
+    }
     measured = [
         item
         for item in document["stages"]
@@ -273,6 +317,9 @@ def finish_run(
     document["scope_proof"]["scope_violation"] = bool(
         document["scope_proof"]["files_opened_outside_scope"]
     )
+    for key in ("selected_scope_roots", "resolved_scope_paths", "files_opened", "files_opened_outside_scope"):
+        if key in observed and document["totals"].get(key) != document["scope_proof"].get(key):
+            raise ValueError(f"totals.{key} differs from scope_proof.{key}")
     if measured and known_stage_time > 0:
         slowest = max(measured, key=lambda item: item["elapsed_seconds"])
         document["observed_bottlenecks"] = [

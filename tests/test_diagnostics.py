@@ -139,6 +139,70 @@ class DiagnosticsTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Finish or skip every diagnostic stage"):
             DIAGNOSTICS.finish_run(self.metrics)
 
+    def test_metric_aggregation_does_not_double_generation_counts_and_preserves_arrays(self) -> None:
+        DIAGNOSTICS.start_run(self.metrics)
+        DIAGNOSTICS.begin_stage(self.metrics, "scope_resolution")
+        DIAGNOSTICS.end_stage(
+            self.metrics,
+            "scope_resolution",
+            ["Resolved synthetic scope."],
+            {
+                "selected_scope_roots": ["apps", "config", "docs/user"],
+                "resolved_scope_paths": ["apps/a.py"],
+                "files_opened": 1,
+                "files_opened_outside_scope": 0,
+            },
+        )
+        DIAGNOSTICS.begin_stage(self.metrics, "test_case_generation")
+        DIAGNOSTICS.end_stage(
+            self.metrics,
+            "test_case_generation",
+            ["Generated cases in memory."],
+            {"test_cases_generated": 58},
+        )
+        DIAGNOSTICS.begin_stage(self.metrics, "json_write")
+        DIAGNOSTICS.end_stage(
+            self.metrics,
+            "json_write",
+            ["Serialized prepared cases."],
+            {"individual_json_files_written": 58, "json_bytes_written": 4096},
+        )
+        DIAGNOSTICS.begin_stage(self.metrics, "validation")
+        DIAGNOSTICS.end_stage(
+            self.metrics,
+            "validation",
+            ["Ran validator once."],
+            {"validator_runs": 1},
+        )
+        for name in DIAGNOSTICS.STAGE_NAMES:
+            if DIAGNOSTICS.stage(DIAGNOSTICS.read_document(self.metrics), name)["status"] == "pending":
+                DIAGNOSTICS.skip_stage(self.metrics, name, ["Not needed for aggregation test."])
+
+        document = DIAGNOSTICS.finish_run(self.metrics)
+
+        self.assertEqual(58, document["totals"]["test_cases_generated"])
+        self.assertEqual(58, document["totals"]["individual_json_files_written"])
+        self.assertEqual(1, document["totals"]["validator_runs"])
+        self.assertEqual(["apps", "config", "docs/user"], document["totals"]["selected_scope_roots"])
+        self.assertIsInstance(document["totals"]["selected_scope_roots"], list)
+        self.assertEqual(document["totals"]["selected_scope_roots"], document["scope_proof"]["selected_scope_roots"])
+        self.assertEqual("last", document["aggregation_strategies"]["test_cases_generated"])
+
+    def test_unknown_metric_requires_an_explicit_aggregation_strategy(self) -> None:
+        DIAGNOSTICS.start_run(self.metrics)
+        DIAGNOSTICS.begin_stage(self.metrics, "scope_resolution")
+        DIAGNOSTICS.end_stage(
+            self.metrics,
+            "scope_resolution",
+            ["Recorded an unsupported metric."],
+            {"mystery_metric": 1},
+        )
+        for name in DIAGNOSTICS.STAGE_NAMES[1:]:
+            DIAGNOSTICS.skip_stage(self.metrics, name, ["Not needed for strategy test."])
+
+        with self.assertRaisesRegex(ValueError, "No aggregation strategy"):
+            DIAGNOSTICS.finish_run(self.metrics)
+
 
 if __name__ == "__main__":
     unittest.main()

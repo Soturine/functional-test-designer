@@ -7,7 +7,7 @@ Use this procedure only when the user explicitly requests diagnostics. It measur
 Start before resolving scope:
 
 ```bash
-python scripts/diagnostics.py start diagnostics/run-metrics.json
+python scripts/diagnostics.py start <artifact_root>/diagnostics/run-metrics.json
 ```
 
 Time actual work with `begin` and `end`, or use `skip` when a stage is genuinely unnecessary. `begin` must happen before analysis or reasoning for that stage; materialize the result while the timer is active, then call `end`. Do not reason first and time only persistence:
@@ -54,24 +54,36 @@ Record these when naturally observable:
 - `source_reads`
 - `source_rereads`
 - `temporary_files_created`
+- `normative_clauses_extracted`
+- `normative_clauses_mapped`
+- `unmapped_normative_clauses`
+- `coverage_points`
 - `scenario_candidates`
 - `scenarios_after_dedup`
 - `independent_scenarios_preserved`
 - `semantic_duplicates_removed`
 - `test_cases_generated`
 - `steps_generated`
+- `individual_json_files_written`
+- `json_bytes_written`
 - `validator_runs`
 - `validation_fix_rounds`
 - `markdown_files_generated`
+- `artifact_root`
+- `output_path`
+- `diagnostics_path`
+- `artifact_root_source`
 
-`selected_scope_roots` and `resolved_scope_paths` may contain normalized relative paths. Other metrics should normally be counts. Never record source text, client names, payloads, credentials, production data, or confidential identifiers.
+`selected_scope_roots` and `resolved_scope_paths` are arrays of normalized paths. Destination metrics are strings; other metrics should normally be counts. Never record source text, client names, payloads, credentials, production data, or confidential identifiers.
+
+Aggregation is explicit per metric: event counters such as reads and real validator executions use `sum`; generated artifact/state counts use the last authoritative stage; roots and paths use ordered set/array aggregation; destination fields use the last resolved value. Do not repeat `test_cases_generated` in `json_write`; record `individual_json_files_written` there. A summary that reads a validation result does not increment `validator_runs`. The helper rejects unknown metrics until an aggregation strategy is defined and verifies that scope values in `totals` and `scope_proof` match by value and type.
 
 ## Finish
 
 Address every stage, then run:
 
 ```bash
-python scripts/diagnostics.py finish diagnostics/run-metrics.json --output output
+python scripts/diagnostics.py finish <artifact_root>/diagnostics/run-metrics.json --output <artifact_root>/output
 ```
 
 The helper derives artifact totals, the slowest measured stage, `unattributed_seconds`, and `unattributed_percent`. More than 20% unattributed time adds a non-blocking `HIGH_UNATTRIBUTED_TIME` warning; it does not fail the run. A large interval between stages that contains useful reasoning belongs inside the relevant stage timer.
