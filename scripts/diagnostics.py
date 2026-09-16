@@ -13,19 +13,32 @@ from typing import Any
 
 
 STAGE_NAMES = (
+    "scope_resolution",
     "source_read",
-    "requirements_normalization",
+    "evidence_normalization",
     "coverage_point_extraction",
+    "coverage_extraction_audit",
     "testability_and_questions",
     "test_design_and_scenarios",
-    "test_data_design",
+    "early_deduplication",
     "test_case_generation",
-    "deduplication",
     "json_write",
     "validation",
     "validation_fixes",
+    "markdown_render",
     "html_render",
     "final_summary",
+)
+
+SCOPE_PROOF_METRICS = (
+    "selected_scope_roots",
+    "resolved_scope_paths",
+    "files_opened",
+    "files_opened_outside_scope",
+    "files_skipped_out_of_scope",
+    "source_reads",
+    "source_rereads",
+    "temporary_files_created",
 )
 
 
@@ -75,16 +88,13 @@ def start_run(path: Path) -> dict[str, Any]:
         raise ValueError(f"Diagnostics file already exists: {path}")
     started_at = timestamp()
     document = {
-        "schema_version": "1.0",
+        "schema_version": "1.2",
         "run": {
-            "mode": "GREENFIELD_REQUIREMENTS_ONLY",
             "diagnostic": True,
             "started_at": started_at,
             "finished_at": None,
             "total_elapsed_seconds": None,
             "timing_available": True,
-            "source_code_used": False,
-            "existing_test_assets_used": False,
         },
         "stages": [
             {
@@ -101,6 +111,7 @@ def start_run(path: Path) -> dict[str, Any]:
             for name in STAGE_NAMES
         ],
         "totals": {},
+        "scope_proof": {},
         "observed_bottlenecks": [],
         "optimization_candidates": [],
     }
@@ -197,7 +208,24 @@ def output_totals(output_dir: Path | None) -> dict[str, Any]:
         "needs_review": statuses["NEEDS_REVIEW"],
         "blocked": statuses["BLOCKED"],
         "questions": len(questions),
+        "markdown_files": len(list((output_dir / "test-cases-md").glob("*.md"))),
     }
+
+
+def observed_metrics(document: dict[str, Any]) -> dict[str, Any]:
+    observed: dict[str, Any] = {}
+    for item in document["stages"]:
+        for key, value in item.get("metrics", {}).items():
+            if isinstance(value, (int, float)) and not isinstance(value, bool):
+                observed[key] = observed.get(key, 0) + value
+            elif isinstance(value, list):
+                current = observed.setdefault(key, [])
+                for entry in value:
+                    if entry not in current:
+                        current.append(entry)
+            else:
+                observed[key] = value
+    return observed
 
 
 def finish_run(
@@ -217,12 +245,25 @@ def finish_run(
     run["finished_at"] = finished_at
     run["total_elapsed_seconds"] = elapsed(run["started_at"], finished_at)
     document["totals"] = output_totals(output_dir)
+    observed = observed_metrics(document)
+    document["totals"].update(observed)
     measured = [
         item
         for item in document["stages"]
         if item.get("timing_available") and isinstance(item.get("elapsed_seconds"), (int, float))
     ]
     known_stage_time = sum(item["elapsed_seconds"] for item in measured)
+    total_elapsed = run["total_elapsed_seconds"]
+    unattributed = round(max(0.0, total_elapsed - known_stage_time), 6)
+    run["unattributed_seconds"] = unattributed
+    run["unattributed_percent"] = round(100 * unattributed / total_elapsed, 2) if total_elapsed else 0.0
+    document["scope_proof"] = {
+        key: observed.get(key, [] if key in {"selected_scope_roots", "resolved_scope_paths"} else 0)
+        for key in SCOPE_PROOF_METRICS
+    }
+    document["scope_proof"]["scope_violation"] = bool(
+        document["scope_proof"]["files_opened_outside_scope"]
+    )
     if measured and known_stage_time > 0:
         slowest = max(measured, key=lambda item: item["elapsed_seconds"])
         document["observed_bottlenecks"] = [

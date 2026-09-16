@@ -36,12 +36,21 @@ class DiagnosticsTests(unittest.TestCase):
 
     def test_diagnostics_records_real_macro_timing_without_affecting_validator(self) -> None:
         DIAGNOSTICS.start_run(self.metrics)
-        DIAGNOSTICS.begin_stage(self.metrics, "source_read")
+        DIAGNOSTICS.begin_stage(self.metrics, "scope_resolution")
         DIAGNOSTICS.end_stage(
             self.metrics,
-            "source_read",
-            ["Read one synthetic requirements document."],
-            {"source_files": 1},
+            "scope_resolution",
+            ["Resolved explicitly selected synthetic sources."],
+            {
+                "selected_scope_roots": ["examples/requirements.md"],
+                "resolved_scope_paths": ["examples/requirements.md"],
+                "files_opened": 1,
+                "files_opened_outside_scope": 0,
+                "files_skipped_out_of_scope": 2,
+                "source_reads": 1,
+                "source_rereads": 0,
+                "temporary_files_created": 0,
+            },
         )
         for name in DIAGNOSTICS.STAGE_NAMES[1:]:
             DIAGNOSTICS.skip_stage(self.metrics, name, ["Not exercised by this helper unit test."])
@@ -51,15 +60,27 @@ class DiagnosticsTests(unittest.TestCase):
             ["Measure a complete synthetic agent run before changing the workflow."],
         )
 
-        source_stage = document["stages"][0]
-        self.assertTrue(source_stage["timing_available"])
-        self.assertIsInstance(source_stage["elapsed_seconds"], float)
-        self.assertGreaterEqual(source_stage["elapsed_seconds"], 0)
-        self.assertEqual("GREENFIELD_REQUIREMENTS_ONLY", document["run"]["mode"])
-        self.assertFalse(document["run"]["source_code_used"])
-        self.assertFalse(document["run"]["existing_test_assets_used"])
+        scope_stage = document["stages"][0]
+        self.assertTrue(scope_stage["timing_available"])
+        self.assertIsInstance(scope_stage["elapsed_seconds"], float)
+        self.assertGreaterEqual(scope_stage["elapsed_seconds"], 0)
+        self.assertNotIn("mode", document["run"])
+        self.assertIn("unattributed_seconds", document["run"])
+        self.assertIn("unattributed_percent", document["run"])
+        self.assertEqual(1, document["scope_proof"]["files_opened"])
+        self.assertEqual(0, document["scope_proof"]["files_opened_outside_scope"])
+        self.assertEqual(0, document["scope_proof"]["source_rereads"])
+        self.assertFalse(document["scope_proof"]["scope_violation"])
         self.assertEqual(10, document["totals"]["test_cases"])
+        self.assertEqual(10, document["totals"]["markdown_files"])
         self.assertEqual([], VALIDATOR.validate(self.output))
+
+    def test_v12_stage_order_has_audit_deduplication_and_markdown(self) -> None:
+        self.assertEqual(15, len(DIAGNOSTICS.STAGE_NAMES))
+        self.assertIn("coverage_extraction_audit", DIAGNOSTICS.STAGE_NAMES)
+        self.assertIn("early_deduplication", DIAGNOSTICS.STAGE_NAMES)
+        self.assertIn("markdown_render", DIAGNOSTICS.STAGE_NAMES)
+        self.assertNotIn("test_data_design", DIAGNOSTICS.STAGE_NAMES)
 
     def test_finish_requires_every_stage_to_be_addressed(self) -> None:
         DIAGNOSTICS.start_run(self.metrics)
