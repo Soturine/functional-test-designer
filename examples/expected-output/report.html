@@ -1,0 +1,253 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Functional Test Report</title>
+<style>
+:root { --ink:#202427; --muted:#667078; --line:#d9dfe2; --surface:#fff; --soft:#f4f6f5; --accent:#087f5b; --warning:#9a6700; --danger:#b42318; }
+* { box-sizing:border-box; }
+body { margin:0; color:var(--ink); background:var(--soft); font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif; letter-spacing:0; }
+a { color:inherit; }
+.shell { width:min(1180px,calc(100% - 32px)); margin:0 auto; }
+header { background:#fff; border-bottom:1px solid var(--line); padding:28px 0 18px; }
+h1 { margin:0 0 4px; font-size:30px; }
+.subtitle,.empty,.requirement-source { color:var(--muted); }
+nav { display:flex; gap:8px; flex-wrap:wrap; margin-top:20px; }
+nav a { padding:7px 10px; border-bottom:2px solid transparent; text-decoration:none; font-weight:650; }
+nav a:hover { border-color:var(--accent); }
+main { padding:24px 0 56px; }
+main>section { padding:20px 0; scroll-margin-top:12px; }
+h2 { margin:0 0 16px; font-size:22px; }
+h3 { margin:0 0 8px; font-size:15px; }
+.metrics { display:grid; grid-template-columns:repeat(auto-fit,minmax(135px,1fr)); gap:10px; }
+.metric { background:#fff; border:1px solid var(--line); border-radius:6px; padding:14px; }
+.metric strong { display:block; font-size:24px; }
+.metric span { color:var(--muted); font-size:13px; }
+.alert { margin-top:14px; padding:12px 14px; background:#fff6dd; border-left:4px solid var(--warning); }
+.filters { display:grid; grid-template-columns:minmax(220px,1fr) 180px 180px; gap:10px; margin-bottom:14px; }
+input,select { width:100%; min-height:40px; border:1px solid #aeb7bc; border-radius:4px; background:#fff; padding:8px 10px; font:inherit; }
+.tc-card { margin-bottom:10px; border:1px solid var(--line); border-radius:6px; background:#fff; }
+.tc-card>summary { display:flex; align-items:center; justify-content:space-between; gap:16px; min-height:58px; padding:12px 16px; cursor:pointer; font-weight:700; }
+.tc-heading { display:flex; gap:10px; align-items:baseline; }
+.tc-id { color:var(--muted); font-size:13px; white-space:nowrap; }
+.badges { display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end; }
+.badge { display:inline-block; border:1px solid var(--line); border-radius:999px; padding:3px 8px; font-size:11px; font-weight:750; white-space:nowrap; }
+.status-ready { color:#08633f; background:#eaf7f0; border-color:#b8dfc9; }
+.status-needs_review { color:#765500; background:#fff6dd; border-color:#ead28e; }
+.status-blocked { color:#8f1d14; background:#fff0ee; border-color:#efb8b2; }
+.tc-content { border-top:1px solid var(--line); padding:16px; }
+.two-column { display:grid; grid-template-columns:1fr 1fr; gap:24px; }
+ul { margin:6px 0 14px; padding-left:20px; }
+.table-wrap { overflow-x:auto; }
+table { width:100%; border-collapse:collapse; background:#fff; }
+th,td { border:1px solid var(--line); padding:10px; text-align:left; vertical-align:top; }
+th { background:#f0f3f2; font-size:13px; }
+.step-number { width:48px; text-align:center; font-weight:700; }
+.technical { margin-top:12px; color:var(--muted); font-size:13px; }
+.technical>summary { cursor:pointer; }
+.question-item,.requirement-block { margin-bottom:10px; border:1px solid var(--line); border-radius:6px; background:#fff; padding:16px; }
+.question-item.blocking { border-left:4px solid var(--danger); }
+.question-title { display:flex; justify-content:space-between; gap:14px; font-weight:750; }
+.coverage-list { list-style:none; padding:0; margin:12px 0 0; }
+.coverage-list>li { display:flex; gap:10px; padding:10px 0; border-top:1px solid #edf0f1; }
+.coverage-list span { display:block; color:var(--muted); }
+.coverage-marker { flex:0 0 22px; color:var(--accent)!important; font-size:18px; font-weight:800; }
+.needs-answer { color:var(--danger); font-weight:700; }
+[hidden] { display:none!important; }
+@media (max-width:720px) { .shell { width:min(100% - 20px,1180px); } .filters,.two-column { grid-template-columns:1fr; } .tc-card>summary,.question-title { align-items:flex-start; flex-direction:column; } .badges { justify-content:flex-start; } }
+</style>
+</head>
+<body>
+<header><div class="shell"><h1>Functional Test Report</h1><p class="subtitle">Casos manuais derivados exclusivamente do documento de requisitos.</p><nav aria-label="Relat&oacute;rio"><a href="#resumo">Resumo</a><a href="#test-cases">Test Cases</a><a href="#perguntas">Perguntas</a><a href="#cobertura">Cobertura</a></nav></div></header>
+<main class="shell">
+<section id="resumo"><h2>Resumo</h2><div class="metrics">
+<div class="metric"><strong>10</strong><span>Total de TCs</span></div>
+<div class="metric"><strong>9</strong><span>READY</span></div>
+<div class="metric"><strong>1</strong><span>NEEDS REVIEW</span></div>
+<div class="metric"><strong>0</strong><span>BLOCKED</span></div>
+<div class="metric"><strong>3</strong><span>Perguntas</span></div>
+<div class="metric"><strong>7</strong><span>Requisitos</span></div>
+<div class="metric"><strong>10</strong><span>Cen&aacute;rios</span></div>
+<div class="metric"><strong>22</strong><span>Coverage Points</span></div>
+<div class="metric"><strong>22/22</strong><span>Cobertura com destino</span></div>
+</div><div class="alert"><strong>Aten&ccedil;&atilde;o:</strong> 2 pergunta(s) bloqueante(s) requerem decis&atilde;o.</div></section>
+<section id="test-cases"><h2>Test Cases</h2><div class="filters"><label>Buscar<input id="search" type="search" placeholder="T&iacute;tulo, objetivo ou tag"></label><label>Status<select id="status-filter"><option value="">Todos</option><option>READY</option><option>NEEDS_REVIEW</option><option>BLOCKED</option></select></label><label>Prioridade<select id="priority-filter"><option value="">Todas</option><option>CRITICAL</option><option>HIGH</option><option>MEDIUM</option><option>LOW</option></select></label></div><div id="case-list">
+<details class="tc-card" data-status="READY" data-priority="HIGH" data-search="tc-001 create a draft order confirm that an authorized customer can create an order with a visible reference in draft state. order creation happy-path">
+  <summary>
+    <span class="tc-heading"><span class="tc-id">TC-001</span>Create a draft order</span>
+    <span class="badges"><span class="badge status-ready">READY</span><span class="badge priority">Alta</span></span>
+  </summary>
+  <div class="tc-content">
+    <section><h3>Objetivo</h3><p>Confirm that an authorized customer can create an order with a visible reference in DRAFT state.</p></section>
+    <div class="two-column">
+      <section><h3>Pr&eacute;-condi&ccedil;&otilde;es</h3><ul><li>A synthetic customer is signed in with ORDER_EDIT permission.</li></ul></section>
+      <section><h3>Dados</h3><ul><li><strong>order</strong>: Synthetic order data accepted by the available order entry point.</li></ul></section>
+    </div>
+    <section><h3>Passos</h3><div class="table-wrap"><table class="steps"><thead><tr><th scope="col">#</th><th scope="col">A&ccedil;&atilde;o</th><th scope="col">Resultado esperado</th></tr></thead><tbody><tr><td class="step-number">1</td><td>Submit a create-order request using the synthetic order data.</td><td>An order is created and a visible order reference is provided.</td></tr><tr><td class="step-number">2</td><td>Observe the state shown for the created order.</td><td>The order state is DRAFT.</td></tr></tbody></table></div></section>
+    <details class="technical"><summary>Detalhes t&eacute;cnicos</summary><p>Requisitos: REQ-001 | Cen&aacute;rios: SCN-001 | Coverage Points: CP-001, CP-002, CP-003</p></details>
+  </div>
+</details>
+<details class="tc-card" data-status="READY" data-priority="MEDIUM" data-search="tc-002 accept the minimum quantity confirm that the documented minimum quantity is accepted. order quantity boundary">
+  <summary>
+    <span class="tc-heading"><span class="tc-id">TC-002</span>Accept the minimum quantity</span>
+    <span class="badges"><span class="badge status-ready">READY</span><span class="badge priority">M&eacute;dia</span></span>
+  </summary>
+  <div class="tc-content">
+    <section><h3>Objetivo</h3><p>Confirm that the documented minimum quantity is accepted.</p></section>
+    <div class="two-column">
+      <section><h3>Pr&eacute;-condi&ccedil;&otilde;es</h3><ul><li>A synthetic order exists in DRAFT state with an editable line.</li></ul></section>
+      <section><h3>Dados</h3><ul><li><strong>quantity</strong>: Minimum valid integer quantity: 1.</li></ul></section>
+    </div>
+    <section><h3>Passos</h3><div class="table-wrap"><table class="steps"><thead><tr><th scope="col">#</th><th scope="col">A&ccedil;&atilde;o</th><th scope="col">Resultado esperado</th></tr></thead><tbody><tr><td class="step-number">1</td><td>Set the order-line quantity to 1 and submit the change.</td><td>The quantity 1 is accepted.</td></tr></tbody></table></div></section>
+    <details class="technical"><summary>Detalhes t&eacute;cnicos</summary><p>Requisitos: REQ-002 | Cen&aacute;rios: SCN-002 | Coverage Points: CP-004</p></details>
+  </div>
+</details>
+<details class="tc-card" data-status="READY" data-priority="MEDIUM" data-search="tc-003 accept the maximum quantity confirm that the documented maximum quantity is accepted. order quantity boundary">
+  <summary>
+    <span class="tc-heading"><span class="tc-id">TC-003</span>Accept the maximum quantity</span>
+    <span class="badges"><span class="badge status-ready">READY</span><span class="badge priority">M&eacute;dia</span></span>
+  </summary>
+  <div class="tc-content">
+    <section><h3>Objetivo</h3><p>Confirm that the documented maximum quantity is accepted.</p></section>
+    <div class="two-column">
+      <section><h3>Pr&eacute;-condi&ccedil;&otilde;es</h3><ul><li>A synthetic order exists in DRAFT state with an editable line.</li></ul></section>
+      <section><h3>Dados</h3><ul><li><strong>quantity</strong>: Maximum valid integer quantity: 10.</li></ul></section>
+    </div>
+    <section><h3>Passos</h3><div class="table-wrap"><table class="steps"><thead><tr><th scope="col">#</th><th scope="col">A&ccedil;&atilde;o</th><th scope="col">Resultado esperado</th></tr></thead><tbody><tr><td class="step-number">1</td><td>Set the order-line quantity to 10 and submit the change.</td><td>The quantity 10 is accepted.</td></tr></tbody></table></div></section>
+    <details class="technical"><summary>Detalhes t&eacute;cnicos</summary><p>Requisitos: REQ-002 | Cen&aacute;rios: SCN-003 | Coverage Points: CP-005</p></details>
+  </div>
+</details>
+<details class="tc-card" data-status="READY" data-priority="MEDIUM" data-search="tc-004 reject a quantity below the minimum confirm that a quantity immediately below the permitted range is rejected without changing the existing quantity. order quantity boundary negative">
+  <summary>
+    <span class="tc-heading"><span class="tc-id">TC-004</span>Reject a quantity below the minimum</span>
+    <span class="badges"><span class="badge status-ready">READY</span><span class="badge priority">M&eacute;dia</span></span>
+  </summary>
+  <div class="tc-content">
+    <section><h3>Objetivo</h3><p>Confirm that a quantity immediately below the permitted range is rejected without changing the existing quantity.</p></section>
+    <div class="two-column">
+      <section><h3>Pr&eacute;-condi&ccedil;&otilde;es</h3><ul><li>A synthetic DRAFT order line has an existing quantity of 5.</li></ul></section>
+      <section><h3>Dados</h3><ul><li><strong>quantity</strong>: Below-minimum integer quantity: 0.</li></ul></section>
+    </div>
+    <section><h3>Passos</h3><div class="table-wrap"><table class="steps"><thead><tr><th scope="col">#</th><th scope="col">A&ccedil;&atilde;o</th><th scope="col">Resultado esperado</th></tr></thead><tbody><tr><td class="step-number">1</td><td>Set the order-line quantity to 0 and submit the change.</td><td>The value is rejected and the existing quantity remains 5.</td></tr></tbody></table></div></section>
+    <details class="technical"><summary>Detalhes t&eacute;cnicos</summary><p>Requisitos: REQ-002 | Cen&aacute;rios: SCN-004 | Coverage Points: CP-006, CP-007</p></details>
+  </div>
+</details>
+<details class="tc-card" data-status="READY" data-priority="MEDIUM" data-search="tc-005 reject a quantity above the maximum confirm that a quantity immediately above the permitted range is rejected without changing the existing quantity. order quantity boundary negative">
+  <summary>
+    <span class="tc-heading"><span class="tc-id">TC-005</span>Reject a quantity above the maximum</span>
+    <span class="badges"><span class="badge status-ready">READY</span><span class="badge priority">M&eacute;dia</span></span>
+  </summary>
+  <div class="tc-content">
+    <section><h3>Objetivo</h3><p>Confirm that a quantity immediately above the permitted range is rejected without changing the existing quantity.</p></section>
+    <div class="two-column">
+      <section><h3>Pr&eacute;-condi&ccedil;&otilde;es</h3><ul><li>A synthetic DRAFT order line has an existing quantity of 5.</li></ul></section>
+      <section><h3>Dados</h3><ul><li><strong>quantity</strong>: Above-maximum integer quantity: 11.</li></ul></section>
+    </div>
+    <section><h3>Passos</h3><div class="table-wrap"><table class="steps"><thead><tr><th scope="col">#</th><th scope="col">A&ccedil;&atilde;o</th><th scope="col">Resultado esperado</th></tr></thead><tbody><tr><td class="step-number">1</td><td>Set the order-line quantity to 11 and submit the change.</td><td>The value is rejected and the existing quantity remains 5.</td></tr></tbody></table></div></section>
+    <details class="technical"><summary>Detalhes t&eacute;cnicos</summary><p>Requisitos: REQ-002 | Cen&aacute;rios: SCN-005 | Coverage Points: CP-008, CP-009</p></details>
+  </div>
+</details>
+<details class="tc-card" data-status="READY" data-priority="HIGH" data-search="tc-006 submit a draft order confirm the valid transition from draft to submitted. order submit state-transition">
+  <summary>
+    <span class="tc-heading"><span class="tc-id">TC-006</span>Submit a draft order</span>
+    <span class="badges"><span class="badge status-ready">READY</span><span class="badge priority">Alta</span></span>
+  </summary>
+  <div class="tc-content">
+    <section><h3>Objetivo</h3><p>Confirm the valid transition from DRAFT to SUBMITTED.</p></section>
+    <div class="two-column">
+      <section><h3>Pr&eacute;-condi&ccedil;&otilde;es</h3><ul><li>A synthetic order exists in DRAFT state.</li></ul></section>
+      <section><h3>Dados</h3><ul><li><strong>draft order</strong>: A synthetic order currently shown in DRAFT state.</li></ul></section>
+    </div>
+    <section><h3>Passos</h3><div class="table-wrap"><table class="steps"><thead><tr><th scope="col">#</th><th scope="col">A&ccedil;&atilde;o</th><th scope="col">Resultado esperado</th></tr></thead><tbody><tr><td class="step-number">1</td><td>Submit the DRAFT order.</td><td>The order is submitted and its state changes to SUBMITTED.</td></tr></tbody></table></div></section>
+    <details class="technical"><summary>Detalhes t&eacute;cnicos</summary><p>Requisitos: REQ-003 | Cen&aacute;rios: SCN-006 | Coverage Points: CP-010, CP-011</p></details>
+  </div>
+</details>
+<details class="tc-card" data-status="READY" data-priority="MEDIUM" data-search="tc-007 reject edits to a submitted order confirm that an edit attempt in submitted state is rejected without changing order data. order edit state-transition negative">
+  <summary>
+    <span class="tc-heading"><span class="tc-id">TC-007</span>Reject edits to a submitted order</span>
+    <span class="badges"><span class="badge status-ready">READY</span><span class="badge priority">M&eacute;dia</span></span>
+  </summary>
+  <div class="tc-content">
+    <section><h3>Objetivo</h3><p>Confirm that an edit attempt in SUBMITTED state is rejected without changing order data.</p></section>
+    <div class="two-column">
+      <section><h3>Pr&eacute;-condi&ccedil;&otilde;es</h3><ul><li>A synthetic order exists in SUBMITTED state with a line quantity of 5.</li></ul></section>
+      <section><h3>Dados</h3><ul><li><strong>attempted edit</strong>: Change the quantity from 5 to 6.</li></ul></section>
+    </div>
+    <section><h3>Passos</h3><div class="table-wrap"><table class="steps"><thead><tr><th scope="col">#</th><th scope="col">A&ccedil;&atilde;o</th><th scope="col">Resultado esperado</th></tr></thead><tbody><tr><td class="step-number">1</td><td>Attempt to change the submitted order-line quantity from 5 to 6.</td><td>The edit is rejected and the order-line quantity remains 5.</td></tr></tbody></table></div></section>
+    <details class="technical"><summary>Detalhes t&eacute;cnicos</summary><p>Requisitos: REQ-003 | Cen&aacute;rios: SCN-007 | Coverage Points: CP-012, CP-013</p></details>
+  </div>
+</details>
+<details class="tc-card" data-status="READY" data-priority="CRITICAL" data-search="tc-008 deny order creation without permission confirm that order creation is denied without order_edit and creates no order data. order permission creation negative">
+  <summary>
+    <span class="tc-heading"><span class="tc-id">TC-008</span>Deny order creation without permission</span>
+    <span class="badges"><span class="badge status-ready">READY</span><span class="badge priority">Cr&iacute;tica</span></span>
+  </summary>
+  <div class="tc-content">
+    <section><h3>Objetivo</h3><p>Confirm that order creation is denied without ORDER_EDIT and creates no order data.</p></section>
+    <div class="two-column">
+      <section><h3>Pr&eacute;-condi&ccedil;&otilde;es</h3><ul><li>A synthetic customer is signed in without ORDER_EDIT permission.</li></ul></section>
+      <section><h3>Dados</h3><ul><li><strong>order</strong>: Synthetic create-order data.</li></ul></section>
+    </div>
+    <section><h3>Passos</h3><div class="table-wrap"><table class="steps"><thead><tr><th scope="col">#</th><th scope="col">A&ccedil;&atilde;o</th><th scope="col">Resultado esperado</th></tr></thead><tbody><tr><td class="step-number">1</td><td>Attempt to create an order using the synthetic order data.</td><td>The operation is denied and no order data is created.</td></tr></tbody></table></div></section>
+    <details class="technical"><summary>Detalhes t&eacute;cnicos</summary><p>Requisitos: REQ-004 | Cen&aacute;rios: SCN-008 | Coverage Points: CP-014, CP-015</p></details>
+  </div>
+</details>
+<details class="tc-card" data-status="READY" data-priority="CRITICAL" data-search="tc-009 deny order editing without permission confirm that order editing is denied without order_edit and leaves order data unchanged. order permission edit negative">
+  <summary>
+    <span class="tc-heading"><span class="tc-id">TC-009</span>Deny order editing without permission</span>
+    <span class="badges"><span class="badge status-ready">READY</span><span class="badge priority">Cr&iacute;tica</span></span>
+  </summary>
+  <div class="tc-content">
+    <section><h3>Objetivo</h3><p>Confirm that order editing is denied without ORDER_EDIT and leaves order data unchanged.</p></section>
+    <div class="two-column">
+      <section><h3>Pr&eacute;-condi&ccedil;&otilde;es</h3><ul><li>A synthetic customer is signed in without ORDER_EDIT permission.</li><li>A synthetic order exists with a line quantity of 5.</li></ul></section>
+      <section><h3>Dados</h3><ul><li><strong>attempted edit</strong>: Change the quantity from 5 to 6.</li></ul></section>
+    </div>
+    <section><h3>Passos</h3><div class="table-wrap"><table class="steps"><thead><tr><th scope="col">#</th><th scope="col">A&ccedil;&atilde;o</th><th scope="col">Resultado esperado</th></tr></thead><tbody><tr><td class="step-number">1</td><td>Attempt to change the order-line quantity from 5 to 6.</td><td>The operation is denied and the order-line quantity remains 5.</td></tr></tbody></table></div></section>
+    <details class="technical"><summary>Detalhes t&eacute;cnicos</summary><p>Requisitos: REQ-004 | Cen&aacute;rios: SCN-009 | Coverage Points: CP-016, CP-017</p></details>
+  </div>
+</details>
+<details class="tc-card" data-status="NEEDS_REVIEW" data-priority="HIGH" data-search="tc-010 handle billing unavailability during submission confirm the defined failure and retry behavior when billing is unavailable while exposing the undefined post-failure state. order billing recovery clarification-required">
+  <summary>
+    <span class="tc-heading"><span class="tc-id">TC-010</span>Handle billing unavailability during submission</span>
+    <span class="badges"><span class="badge status-needs_review">NEEDS REVIEW</span><span class="badge priority">Alta</span></span>
+  </summary>
+  <div class="tc-content">
+    <section><h3>Objetivo</h3><p>Confirm the defined failure and retry behavior when billing is unavailable while exposing the undefined post-failure state.</p></section>
+    <div class="two-column">
+      <section><h3>Pr&eacute;-condi&ccedil;&otilde;es</h3><ul><li>A synthetic order exists in DRAFT state.</li><li>The billing service is unavailable through an approved test-environment control.</li></ul></section>
+      <section><h3>Dados</h3><ul><li><strong>draft order</strong>: A synthetic DRAFT order eligible for submission.</li></ul></section>
+    </div>
+    <section><h3>Passos</h3><div class="table-wrap"><table class="steps"><thead><tr><th scope="col">#</th><th scope="col">A&ccedil;&atilde;o</th><th scope="col">Resultado esperado</th></tr></thead><tbody><tr><td class="step-number">1</td><td>Submit the DRAFT order while the billing service is unavailable.</td><td>Submission does not complete and a retry action is available; the resulting state and retained data require clarification.</td></tr></tbody></table></div></section>
+    <details class="technical"><summary>Detalhes t&eacute;cnicos</summary><p>Requisitos: REQ-006 | Cen&aacute;rios: SCN-010 | Coverage Points: CP-019, CP-020</p></details>
+  </div>
+</details></div><p id="no-results" hidden>Nenhum Test Case corresponde aos filtros.</p></section>
+<section id="perguntas"><h2>Perguntas</h2>
+<article class="question-item blocking">
+  <div class="question-title"><span>What observable result and final order state confirm a successful cancellation before invoicing?</span><span class="badge">Bloqueante: Sim</span></div>
+  <p><strong>Motivo:</strong> The source permits cancellation but defines no observable outcome, resulting state, message, status code, or side effect.</p>
+  <p><strong>TCs impactados:</strong> Nenhum TC criado</p>
+  <details class="technical"><summary>Detalhes t&eacute;cnicos</summary><p>Q-001 | REQ-005</p></details>
+</article>
+<article class="question-item ">
+  <div class="question-title"><span>What order state and retained data are expected after submission fails because billing is unavailable?</span><span class="badge">Bloqueante: N&atilde;o</span></div>
+  <p><strong>Motivo:</strong> Failure and retry availability are defined, but the post-failure state and data consistency rules are not.</p>
+  <p><strong>TCs impactados:</strong> TC-010</p>
+  <details class="technical"><summary>Detalhes t&eacute;cnicos</summary><p>Q-002 | REQ-006</p></details>
+</article>
+<article class="question-item blocking">
+  <div class="question-title"><span>What measurable processing-time target, percentile, load, and start/end points define &#x27;quickly&#x27;?</span><span class="badge">Bloqueante: Sim</span></div>
+  <p><strong>Motivo:</strong> The statement has no measurable oracle, so a meaningful performance test case cannot be created.</p>
+  <p><strong>TCs impactados:</strong> Nenhum TC criado</p>
+  <details class="technical"><summary>Detalhes t&eacute;cnicos</summary><p>Q-003 | REQ-007</p></details>
+</article></section>
+<section id="cobertura"><h2>Cobertura</h2><section class="requirement-block"><h3>A signed-in customer with ORDER_EDIT can create an order that receives a visible reference and starts in DRAFT state.</h3><p class="requirement-source">ORD-001</p><ul class="coverage-list"><li class="coverage-test_case"><span class="coverage-marker">&#10003;</span><div><strong>An authorized signed-in customer can create an order.</strong><span>TC: Create a draft order</span><details class="technical"><summary>Detalhes t&eacute;cnicos</summary><p>CP-001</p></details></div></li><li class="coverage-test_case"><span class="coverage-marker">&#10003;</span><div><strong>Successful order creation provides a visible order reference.</strong><span>TC: Create a draft order</span><details class="technical"><summary>Detalhes t&eacute;cnicos</summary><p>CP-002</p></details></div></li><li class="coverage-test_case"><span class="coverage-marker">&#10003;</span><div><strong>A created order is shown in DRAFT state.</strong><span>TC: Create a draft order</span><details class="technical"><summary>Detalhes t&eacute;cnicos</summary><p>CP-003</p></details></div></li></ul></section><section class="requirement-block"><h3>A DRAFT order line accepts integer quantities from 1 through 10 and rejects values outside that range without changing the existing quantity.</h3><p class="requirement-source">ORD-002</p><ul class="coverage-list"><li class="coverage-test_case"><span class="coverage-marker">&#10003;</span><div><strong>The minimum quantity 1 is accepted.</strong><span>TC: Accept the minimum quantity</span><details class="technical"><summary>Detalhes t&eacute;cnicos</summary><p>CP-004</p></details></div></li><li class="coverage-test_case"><span class="coverage-marker">&#10003;</span><div><strong>The maximum quantity 10 is accepted.</strong><span>TC: Accept the maximum quantity</span><details class="technical"><summary>Detalhes t&eacute;cnicos</summary><p>CP-005</p></details></div></li><li class="coverage-test_case"><span class="coverage-marker">&#10003;</span><div><strong>A quantity below the minimum is rejected.</strong><span>TC: Reject a quantity below the minimum</span><details class="technical"><summary>Detalhes t&eacute;cnicos</summary><p>CP-006</p></details></div></li><li class="coverage-test_case"><span class="coverage-marker">&#10003;</span><div><strong>After a below-minimum rejection, the existing quantity remains unchanged.</strong><span>TC: Reject a quantity below the minimum</span><details class="technical"><summary>Detalhes t&eacute;cnicos</summary><p>CP-007</p></details></div></li><li class="coverage-test_case"><span class="coverage-marker">&#10003;</span><div><strong>A quantity above the maximum is rejected.</strong><span>TC: Reject a quantity above the maximum</span><details class="technical"><summary>Detalhes t&eacute;cnicos</summary><p>CP-008</p></details></div></li><li class="coverage-test_case"><span class="coverage-marker">&#10003;</span><div><strong>After an above-maximum rejection, the existing quantity remains unchanged.</strong><span>TC: Reject a quantity above the maximum</span><details class="technical"><summary>Detalhes t&eacute;cnicos</summary><p>CP-009</p></details></div></li></ul></section><section class="requirement-block"><h3>Submitting a DRAFT order changes it to SUBMITTED, after which edits are rejected without changing order data.</h3><p class="requirement-source">ORD-003</p><ul class="coverage-list"><li class="coverage-test_case"><span class="coverage-marker">&#10003;</span><div><strong>A DRAFT order can be submitted.</strong><span>TC: Submit a draft order</span><details class="technical"><summary>Detalhes t&eacute;cnicos</summary><p>CP-010</p></details></div></li><li class="coverage-test_case"><span class="coverage-marker">&#10003;</span><div><strong>Successful submission changes the order state to SUBMITTED.</strong><span>TC: Submit a draft order</span><details class="technical"><summary>Detalhes t&eacute;cnicos</summary><p>CP-011</p></details></div></li><li class="coverage-test_case"><span class="coverage-marker">&#10003;</span><div><strong>An edit to a SUBMITTED order is rejected.</strong><span>TC: Reject edits to a submitted order</span><details class="technical"><summary>Detalhes t&eacute;cnicos</summary><p>CP-012</p></details></div></li><li class="coverage-test_case"><span class="coverage-marker">&#10003;</span><div><strong>A rejected edit leaves submitted order data unchanged.</strong><span>TC: Reject edits to a submitted order</span><details class="technical"><summary>Detalhes t&eacute;cnicos</summary><p>CP-013</p></details></div></li></ul></section><section class="requirement-block"><h3>A signed-in customer without ORDER_EDIT cannot create or edit orders, and denied attempts do not change order data.</h3><p class="requirement-source">ORD-004</p><ul class="coverage-list"><li class="coverage-test_case"><span class="coverage-marker">&#10003;</span><div><strong>Order creation without ORDER_EDIT is denied.</strong><span>TC: Deny order creation without permission</span><details class="technical"><summary>Detalhes t&eacute;cnicos</summary><p>CP-014</p></details></div></li><li class="coverage-test_case"><span class="coverage-marker">&#10003;</span><div><strong>A denied create attempt creates no order data.</strong><span>TC: Deny order creation without permission</span><details class="technical"><summary>Detalhes t&eacute;cnicos</summary><p>CP-015</p></details></div></li><li class="coverage-test_case"><span class="coverage-marker">&#10003;</span><div><strong>Order editing without ORDER_EDIT is denied.</strong><span>TC: Deny order editing without permission</span><details class="technical"><summary>Detalhes t&eacute;cnicos</summary><p>CP-016</p></details></div></li><li class="coverage-test_case"><span class="coverage-marker">&#10003;</span><div><strong>A denied edit attempt leaves order data unchanged.</strong><span>TC: Deny order editing without permission</span><details class="technical"><summary>Detalhes t&eacute;cnicos</summary><p>CP-017</p></details></div></li></ul></section><section class="requirement-block"><h3>A customer can cancel an order before invoicing.</h3><p class="requirement-source">ORD-005</p><ul class="coverage-list"><li class="coverage-question"><span class="coverage-marker">?</span><div><strong>A customer can cancel an order before invoicing, but the observable success result is undefined.</strong><span>Pergunta: What observable result and final order state confirm a successful cancellation before invoicing?</span><details class="technical"><summary>Detalhes t&eacute;cnicos</summary><p>CP-018</p></details></div></li></ul></section><section class="requirement-block"><h3>When billing is unavailable during submission, submission does not complete and retry is available.</h3><p class="requirement-source">ORD-006</p><ul class="coverage-list"><li class="coverage-test_case"><span class="coverage-marker">&#10003;</span><div><strong>Submission does not complete when billing is unavailable.</strong><span>TC: Handle billing unavailability during submission</span><details class="technical"><summary>Detalhes t&eacute;cnicos</summary><p>CP-019</p></details></div></li><li class="coverage-test_case"><span class="coverage-marker">&#10003;</span><div><strong>A retry action is available after billing unavailability.</strong><span>TC: Handle billing unavailability during submission</span><details class="technical"><summary>Detalhes t&eacute;cnicos</summary><p>CP-020</p></details></div></li><li class="coverage-question"><span class="coverage-marker">?</span><div><strong>The order state and retained data after billing failure are undefined.</strong><span>Pergunta: What order state and retained data are expected after submission fails because billing is unavailable?</span><details class="technical"><summary>Detalhes t&eacute;cnicos</summary><p>CP-021</p></details></div></li></ul></section><section class="requirement-block"><h3>Orders should be processed quickly.</h3><p class="requirement-source">ORD-007</p><ul class="coverage-list"><li class="coverage-question"><span class="coverage-marker">?</span><div><strong>The required processing speed has no measurable target.</strong><span>Pergunta: What measurable processing-time target, percentile, load, and start/end points define &#x27;quickly&#x27;?</span><details class="technical"><summary>Detalhes t&eacute;cnicos</summary><p>CP-022</p></details></div></li></ul></section></section>
+</main>
+<script>
+const search=document.getElementById('search');const statusFilter=document.getElementById('status-filter');const priorityFilter=document.getElementById('priority-filter');const cards=[...document.querySelectorAll('.tc-card')];const noResults=document.getElementById('no-results');
+function applyFilters(){const term=search.value.trim().toLocaleLowerCase();let visible=0;cards.forEach(card=>{const show=(!term||card.dataset.search.includes(term))&&(!statusFilter.value||card.dataset.status===statusFilter.value)&&(!priorityFilter.value||card.dataset.priority===priorityFilter.value);card.hidden=!show;if(show)visible+=1;});noResults.hidden=visible!==0;}
+[search,statusFilter,priorityFilter].forEach(control=>control.addEventListener(control===search?'input':'change',applyFilters));
+</script>
+</body>
+</html>
