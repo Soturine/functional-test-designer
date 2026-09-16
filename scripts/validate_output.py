@@ -212,6 +212,21 @@ def validate(output_dir: Path) -> list[str]:
     check_duplicates(entries, "markdown_file", "test case Markdown file", errors)
     check_duplicates(questions, "id", "question ID", errors)
 
+    scenario_signatures: list[tuple[Any, ...]] = []
+    for scenario in scenarios:
+        if not isinstance(scenario, dict):
+            continue
+        title = scenario.get("title")
+        scenario_type = scenario.get("type")
+        refs = scenario.get("requirement_refs")
+        if isinstance(title, str) and isinstance(refs, list):
+            scenario_signatures.append(
+                (title.strip().casefold(), scenario_type, tuple(sorted(string_set(refs))))
+            )
+    for signature, count in Counter(scenario_signatures).items():
+        if count > 1:
+            errors.append(f"duplicate scenario remains after early deduplication: {signature[0]}")
+
     normalized_questions = []
     for question in questions:
         text = question.get("question") if isinstance(question, dict) else None

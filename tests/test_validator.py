@@ -58,6 +58,34 @@ class ValidatorTests(unittest.TestCase):
         self.assertIn("SUBMITTED", case["steps"][0]["expected_result"])
         self.assertNotIn("PROCESSING", case["steps"][0]["expected_result"])
         self.assertTrue(any("diverges" in note for note in case["notes"]))
+        self.assertEqual(1, len(case["steps"]))
+
+    def test_test_data_is_local_to_each_case(self) -> None:
+        index = self.read("test-cases.json")
+        cases = [self.read(entry["file"]) for entry in index["test_cases"]]
+
+        self.assertNotIn("test_data", index)
+        self.assertTrue(all("test_data" in case for case in cases))
+
+    def test_known_and_ambiguous_parts_have_separate_destinations(self) -> None:
+        coverage = {
+            item["id"]: item for item in self.read("test-cases.json")["coverage_points"]
+        }
+
+        self.assertEqual("TEST_CASE", coverage["CP-019"]["disposition"])
+        self.assertEqual("TEST_CASE", coverage["CP-020"]["disposition"])
+        self.assertEqual("QUESTION", coverage["CP-021"]["disposition"])
+
+    def test_coverage_audit_preserves_independently_failing_effects(self) -> None:
+        coverage = self.read("test-cases.json")["coverage_points"]
+        by_requirement = {
+            requirement: [item for item in coverage if item["requirement_ref"] == requirement]
+            for requirement in {item["requirement_ref"] for item in coverage}
+        }
+
+        self.assertEqual(3, len(by_requirement["REQ-001"]))
+        self.assertEqual(4, len(by_requirement["REQ-004"]))
+        self.assertEqual(3, len(by_requirement["REQ-006"]))
 
     def test_duplicate_requirement_id_fails(self) -> None:
         index = self.read("test-cases.json")
@@ -67,6 +95,17 @@ class ValidatorTests(unittest.TestCase):
         errors = VALIDATOR.validate(self.output)
 
         self.assertTrue(any("duplicate requirement ID: REQ-001" in error for error in errors))
+
+    def test_duplicate_scenario_candidate_fails_after_early_deduplication(self) -> None:
+        index = self.read("test-cases.json")
+        duplicate = copy.deepcopy(index["scenarios"][0])
+        duplicate["id"] = "SCN-999"
+        index["scenarios"].append(duplicate)
+        self.write("test-cases.json", index)
+
+        errors = VALIDATOR.validate(self.output)
+
+        self.assertTrue(any("duplicate scenario remains after early deduplication" in error for error in errors))
 
     def test_missing_case_file_fails(self) -> None:
         (self.output / "test-cases" / "TC-001.json").unlink()
