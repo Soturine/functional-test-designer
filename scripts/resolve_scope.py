@@ -21,6 +21,12 @@ IGNORED_DIRECTORIES = {
     ".cache",
 }
 
+TEXT_EXTENSIONS = {
+    ".md", ".txt", ".rst", ".pdf", ".docx", ".py", ".js", ".ts", ".tsx", ".jsx",
+    ".html", ".htm", ".json", ".yaml", ".yml", ".toml", ".ini", ".cfg", ".sql", ".xml",
+}
+BINARY_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".ico", ".webp", ".gz", ".zip", ".exe", ".dll", ".pyc"}
+
 
 class ScopeResolutionError(ValueError):
     """Raised when a requested scope cannot be resolved safely and uniquely."""
@@ -128,9 +134,33 @@ def resolve_selected_scope(workspace: Path, selectors: list[str]) -> dict[str, l
 
     unique_roots = sorted({path.resolve() for path in roots}, key=str)
     unique_files = sorted({path.resolve() for path in files}, key=str)
+    resolved_paths = [relative_display(path, workspace) for path in unique_files]
+    read_plan = plan_source_reads(unique_files, workspace)
     return {
         "selected_scope_roots": [relative_display(path, workspace) for path in unique_roots],
-        "resolved_scope_paths": [relative_display(path, workspace) for path in unique_files],
+        "resolved_scope_paths": resolved_paths,
+        **read_plan,
+    }
+
+
+def plan_source_reads(paths: list[Path], workspace: Path) -> dict[str, list[str]]:
+    """Separate useful text from metadata-only binaries without opening file content."""
+    recommended: list[str] = []
+    deferred: list[str] = []
+    metadata_only: list[str] = []
+    for path in paths:
+        display = relative_display(path, workspace)
+        suffix = path.suffix.casefold()
+        if suffix in BINARY_EXTENSIONS:
+            metadata_only.append(display)
+        elif suffix in TEXT_EXTENSIONS:
+            recommended.append(display)
+        else:
+            deferred.append(display)
+    return {
+        "recommended_source_reads": recommended,
+        "deferred_source_paths": deferred,
+        "metadata_only_paths": metadata_only,
     }
 
 

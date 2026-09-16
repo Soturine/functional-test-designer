@@ -29,6 +29,8 @@ class ScopeResolutionTests(unittest.TestCase):
         (self.workspace / "hidden_module.py").write_text("SECRET = True\n", encoding="utf-8")
         (self.workspace / "node_modules").mkdir()
         (self.workspace / "node_modules" / "noise.js").write_text("noise", encoding="utf-8")
+        (self.workspace / "docs" / "diagram.png").write_bytes(b"not-opened")
+        (self.workspace / "docs" / "theme.css").write_text("body {}", encoding="utf-8")
 
     def tearDown(self) -> None:
         self.temp_dir.cleanup()
@@ -40,11 +42,19 @@ class ScopeResolutionTests(unittest.TestCase):
     def test_selected_directory_is_recursive_without_siblings_or_noise(self) -> None:
         result = SCOPE.resolve_selected_scope(self.workspace, ["docs"])
         self.assertEqual(
-            ["docs/nested/adr.md", "docs/requirements.md"],
+            ["docs/diagram.png", "docs/nested/adr.md", "docs/requirements.md", "docs/theme.css"],
             result["resolved_scope_paths"],
         )
         self.assertNotIn("sibling/private.md", result["resolved_scope_paths"])
         self.assertNotIn("node_modules/noise.js", result["resolved_scope_paths"])
+
+    def test_binary_content_is_metadata_only_and_unknown_text_is_deferred(self) -> None:
+        result = SCOPE.resolve_selected_scope(self.workspace, ["docs"])
+
+        self.assertIn("docs/diagram.png", result["metadata_only_paths"])
+        self.assertNotIn("docs/diagram.png", result["recommended_source_reads"])
+        self.assertIn("docs/theme.css", result["deferred_source_paths"])
+        self.assertIn("docs/requirements.md", result["recommended_source_reads"])
 
     def test_import_is_not_followed(self) -> None:
         result = SCOPE.resolve_selected_scope(self.workspace, ["src/service.py"])
