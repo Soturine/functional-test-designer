@@ -1,49 +1,84 @@
 # Functional Test Designer V1.2
 
-An Agent Skill that designs traceable functional manual tests from only the sources explicitly selected by the user. It supports requirements, selected implementation evidence, technical context, and existing QA assets while preserving their different authority roles.
+Agent Skill para projetar Test Cases funcionais manuais, rastreáveis e executáveis a partir somente das fontes explicitamente selecionadas pelo usuário.
 
-## Install
+## Objetivo
 
-```bash
-python -m pip install -r requirements.txt
-```
+Transformar requisitos, documentação, código selecionado e artefatos de QA em Test Cases independentes com passos claros, `Action + Expected Result`, rastreabilidade e cobertura comportamental verificável.
 
-## Use
+A skill foi feita para ser simples de usar: o usuário informa o que quer analisar e quais fontes entram no escopo; a skill cuida do restante.
+
+## Como funciona
 
 ```text
-Use the functional-test-designer skill.
-
-Analyze only:
-- docs/requirements.md
-- src/order_service.py
-
-Write the artifacts to output/.
+Fontes selecionadas pelo usuário
+            ↓
+        Scope Lock
+            ↓
+Entendimento do papel de cada fonte
+            ↓
+      Coverage Points
+            ↓
+         Cenários
+            ↓
+  Test Cases independentes
+            ↓
+      Validação JSON
+            ↓
+ Markdown + Mermaid por TC
+            ↓
+     Relatório HTML offline
 ```
 
-A selected directory is recursive only within that directory. Files, imports, links, dependencies, and sibling directories are not implicitly selected.
+Uma pasta selecionada pode ser analisada recursivamente apenas dentro dela. Imports, links, dependências, arquivos vizinhos e outras áreas do projeto não expandem o escopo automaticamente.
 
-## Validate and Render
+## Confiança, autoridade e segurança
 
-Run the artifact pipeline in order:
+- somente fontes explicitamente selecionadas são analisadas;
+- a skill não faz crawl automático do repositório nem segue dependências fora do escopo;
+- requisitos e especificações aprovadas representam o comportamento esperado;
+- código selecionado é tratado como evidência da implementação observada, não como autoridade funcional automática;
+- divergência entre requisito e implementação vira finding, não um novo requisito silencioso;
+- comportamento sem oracle suficiente vira Question ou permanece visivelmente bloqueado;
+- Expected Results não devem ser inventados;
+- JSON é a fonte de verdade dos Test Cases; Markdown e HTML são projeções derivadas;
+- outputs e diagnósticos reais ficam fora do versionamento por padrão.
 
-```bash
-python scripts/validate_output.py output
-python scripts/render_markdown.py output
-python scripts/render_report.py output
+Em resumo:
+
+```text
+LLM pode interpretar evidências.
+LLM não deve inventar autoridade.
 ```
 
-The validator checks JSON. The Markdown renderer writes one file per TC without changing JSON. The offline HTML report reads the Mermaid flow from each corresponding Markdown file.
+## Uso
 
-Validate the synthetic example:
+Exemplo simples:
 
-```bash
-python scripts/validate_output.py examples/expected-output
-python scripts/render_markdown.py examples/expected-output
-python scripts/render_report.py examples/expected-output
-python -m unittest discover -s tests -v
+```text
+Use a functional-test-designer para gerar os Test Cases de:
+
+docs/requisitos.pdf
+
+Diagnostic: true.
 ```
 
-## Artifacts
+Exemplo com documentação e código selecionado:
+
+```text
+Use a functional-test-designer.
+
+Analise somente:
+- docs;
+- dentro de backend, somente rfid.
+
+Gere os Test Cases e aponte possíveis divergências.
+Diagnostic: true.
+```
+
+A skill pode analisar, quando explicitamente selecionados, requisitos, especificações, documentação funcional/técnica, código-fonte, configuração, Test Cases existentes, planos de teste e outros artefatos relevantes à tarefa.
+
+## Saída
 
 ```text
 output/
@@ -56,24 +91,48 @@ output/
     `-- TC-XXX.md
 ```
 
-Optional execution diagnostics live separately under `diagnostics/` and contain timings, counts, and scope proof only.
+Cada TC possui um JSON individual e um Markdown correspondente. O Markdown inclui o fluxo Mermaid do caso, e o HTML agrega os TCs em uma visão amigável com seus artefatos associados.
 
-## Repository Layout
+Diagnósticos opcionais ficam em `diagnostics/` e registram tempos, contagens e evidências de respeito ao escopo, sem copiar o conteúdo das fontes.
 
-```text
-SKILL.md                       Scoped-source agent workflow
-references/                    Contract, test design, and diagnostics guidance
-schemas/                       JSON Schema Draft 2020-12 documents
-scripts/resolve_scope.py       Metadata-only selected-path resolver
-scripts/validate_output.py     JSON and cross-file validator
-scripts/render_markdown.py     Deterministic per-TC Markdown renderer
-scripts/render_report.py       Offline HTML renderer
-scripts/diagnostics.py         Optional execution diagnostics
-examples/                      Synthetic multi-source V1.2 example
-tests/                         Scope, contract, renderer, and diagnostics tests
+## Validar e renderizar
+
+```bash
+python -m pip install -r requirements.txt
+python scripts/validate_output.py output
+python scripts/render_markdown.py output
+python scripts/render_report.py output
 ```
 
-This skill does not crawl dependencies, index a repository, automate tests, create Shared Steps, or integrate with the Azure DevOps API.
+O validator verifica o contrato JSON e as referências cruzadas. Os renderers não alteram o conteúdo normativo dos JSONs.
+
+Para validar o exemplo sintético:
+
+```bash
+python scripts/validate_output.py examples/expected-output
+python scripts/render_markdown.py examples/expected-output
+python scripts/render_report.py examples/expected-output
+python -m unittest discover -s tests -v
+```
+
+## Estrutura do repositório
+
+```text
+SKILL.md                       Workflow da Agent Skill
+references/                    Contrato, test design e diagnóstico
+schemas/                       JSON Schema Draft 2020-12
+scripts/resolve_scope.py       Resolução do escopo selecionado
+scripts/validate_output.py     Validação JSON e cross-file
+scripts/render_markdown.py     Markdown determinístico por TC
+scripts/render_report.py       Relatório HTML offline
+scripts/diagnostics.py         Diagnóstico opcional de execução
+examples/                      Exemplo sintético multi-source
+tests/                         Testes de escopo, contrato e renderização
+```
+
+## Limites atuais
+
+A skill não automatiza testes, não cria Shared Steps, não faz indexação automática do repositório e não integra diretamente com a API do Azure DevOps. O contrato dos TCs permanece simples de adaptar futuramente para TMS/MCP, preservando `title`, prioridade, preconditions e `steps` com `Action + Expected Result`.
 
 ## License and Attribution
 
