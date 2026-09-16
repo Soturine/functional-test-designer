@@ -1,4 +1,4 @@
-# Functional Test Designer V1.2
+# Functional Test Designer
 
 Agent Skill para projetar Test Cases funcionais manuais, rastreáveis e executáveis a partir somente das fontes explicitamente selecionadas pelo usuário.
 
@@ -44,8 +44,6 @@ Uma pasta selecionada pode ser analisada recursivamente apenas dentro dela. Impo
 - JSON é a fonte de verdade dos Test Cases; Markdown e HTML são projeções derivadas;
 - outputs e diagnósticos reais ficam fora do versionamento por padrão.
 
-Em resumo:
-
 ```text
 LLM pode interpretar evidências.
 LLM não deve inventar autoridade.
@@ -58,7 +56,7 @@ Exemplo simples:
 ```text
 Use a functional-test-designer para gerar os Test Cases de:
 
-docs/requisitos.pdf
+docs/requirements.pdf
 
 Diagnostic: true.
 ```
@@ -70,7 +68,7 @@ Use a functional-test-designer.
 
 Analise somente:
 - docs;
-- dentro de backend, somente rfid.
+- dentro de src, somente orders.
 
 Gere os Test Cases e aponte possíveis divergências.
 Diagnostic: true.
@@ -86,14 +84,36 @@ output/
 |-- questions.json
 |-- report.html
 |-- test-cases/
-|   `-- TC-XXX.json
+|   |-- TC-001.json
+|   |-- TC-002.json
+|   `-- ...
 `-- test-cases-md/
-    `-- TC-XXX.md
+    |-- TC-001.md
+    |-- TC-002.md
+    `-- ...
 ```
 
-Cada TC possui um JSON individual e um Markdown correspondente. O Markdown inclui o fluxo Mermaid do caso, e o HTML agrega os TCs em uma visão amigável com seus artefatos associados.
+A saída é organizada para servir tanto ao agente quanto a uma pessoa executando ou revisando os testes:
 
-Diagnósticos opcionais ficam em `diagnostics/` e registram tempos, contagens e evidências de respeito ao escopo, sem copiar o conteúdo das fontes.
+- `test-cases.json`: índice consolidado com requisitos, Coverage Points, cenários, rastreabilidade e referências para cada TC;
+- `questions.json`: dúvidas e lacunas que precisam de confirmação antes de assumir um comportamento como verdade;
+- `test-cases/TC-XXX.json`: fonte estruturada de cada Test Case, com objetivo, prioridade, preconditions, dados, steps, Expected Results, rastreabilidade, postconditions e cleanup;
+- `test-cases-md/TC-XXX.md`: versão humana do mesmo TC, incluindo tabela de passos e fluxo Mermaid no final;
+- `report.html`: visão agregada offline para revisar os TCs, pesquisar, filtrar, consultar cobertura, visualizar o fluxo de cada caso e abrir o JSON ou Markdown individual correspondente.
+
+Para cada caso existe uma relação direta:
+
+```text
+TC-001.json
+↔
+TC-001.md
+↔
+TC-001 no report.html
+```
+
+O JSON continua sendo a fonte de verdade. Markdown e HTML apenas apresentam o mesmo conteúdo de formas mais fáceis de revisar e executar.
+
+Quando `Diagnostic: true` é usado, métricas separadas são escritas em `diagnostics/`, com tempos, contagens, escopo analisado, releituras e overhead, sem copiar o conteúdo das fontes.
 
 ## Validar e renderizar
 
@@ -132,7 +152,7 @@ tests/                         Testes de escopo, contrato e renderização
 
 ## Limites atuais
 
-A skill não automatiza testes, não cria Shared Steps, não faz indexação automática do repositório e não integra diretamente com a API do Azure DevOps. O contrato dos TCs permanece simples de adaptar futuramente para TMS/MCP, preservando `title`, prioridade, preconditions e `steps` com `Action + Expected Result`.
+A skill não automatiza testes, não cria Shared Steps, não faz indexação automática do repositório e não integra diretamente com APIs de Test Management. O contrato dos TCs permanece simples de adaptar futuramente para TMS/MCP, preservando `title`, prioridade, preconditions e `steps` com `Action + Expected Result`.
 
 ## License and Attribution
 
