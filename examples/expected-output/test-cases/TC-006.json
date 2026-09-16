@@ -1,5 +1,5 @@
 {
-  "schema_version": "1.1",
+  "schema_version": "1.2",
   "id": "TC-006",
   "title": "Submit a draft order",
   "status": "READY",
@@ -9,7 +9,10 @@
   "requirement_refs": ["REQ-003"],
   "scenario_refs": ["SCN-006"],
   "coverage_point_refs": ["CP-010", "CP-011"],
-  "source_refs": [{"source": "examples/requirements.md", "reference": "ORD-003"}],
+  "source_refs": [
+    {"source": "examples/requirements.md", "reference": "ORD-003"},
+    {"source": "examples/selected-source/order_service.py", "reference": "submit_order"}
+  ],
   "preconditions": ["A synthetic order exists in DRAFT state."],
   "test_data": [{"name": "draft order", "description": "A synthetic order currently shown in DRAFT state."}],
   "steps": [
@@ -18,5 +21,5 @@
   "postconditions": ["The synthetic order is in SUBMITTED state."],
   "cleanup": ["Remove the synthetic order using an approved test-environment procedure."],
   "tags": ["order", "submit", "state-transition"],
-  "notes": []
+  "notes": ["Selected implementation evidence sets PROCESSING, which diverges from the authoritative SUBMITTED result. The expected result remains based on ORD-003."]
 }

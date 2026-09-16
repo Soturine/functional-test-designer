@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate functional-test-designer V1.1 output and cross-file invariants."""
+"""Validate functional-test-designer V1.2 JSON output and cross-file invariants."""
 
 from __future__ import annotations
 
@@ -75,6 +75,16 @@ def check_duplicates(items: list[dict[str, Any]], field: str, label: str, errors
 
 def string_set(values: Any) -> set[str]:
     return {value for value in values if isinstance(value, str)} if isinstance(values, list) else set()
+
+
+def source_paths(values: Any) -> set[str]:
+    if not isinstance(values, list):
+        return set()
+    return {
+        value["path"]
+        for value in values
+        if isinstance(value, dict) and isinstance(value.get("path"), str)
+    }
 
 
 def check_refs(values: Any, known: set[str], label: str, owner: str, errors: list[str]) -> None:
@@ -185,18 +195,21 @@ def validate(output_dir: Path) -> list[str]:
         return errors
 
     requirements = index.get("requirements", [])
+    findings = index.get("findings", [])
     coverage_points = index.get("coverage_points", [])
     scenarios = index.get("scenarios", [])
     entries = index.get("test_cases", [])
     questions = questions_doc.get("questions", [])
-    collections = (requirements, coverage_points, scenarios, entries, questions)
+    collections = (requirements, findings, coverage_points, scenarios, entries, questions)
     if not all(isinstance(value, list) for value in collections):
         return errors
 
     check_duplicates(requirements, "id", "requirement ID", errors)
+    check_duplicates(findings, "id", "finding ID", errors)
     check_duplicates(scenarios, "id", "scenario ID", errors)
     check_duplicates(entries, "id", "test case ID", errors)
     check_duplicates(entries, "file", "test case file", errors)
+    check_duplicates(entries, "markdown_file", "test case Markdown file", errors)
     check_duplicates(questions, "id", "question ID", errors)
 
     normalized_questions = []
@@ -228,13 +241,23 @@ def validate(output_dir: Path) -> list[str]:
         for item in questions
         if isinstance(item, dict) and isinstance(item.get("id"), str)
     }
-    sources = string_set(index.get("sources", []))
+    declared_sources = index.get("sources", [])
+    sources = source_paths(declared_sources)
+    if isinstance(declared_sources, list):
+        check_duplicates(declared_sources, "path", "source path", errors)
 
     for requirement in requirements:
         if isinstance(requirement, dict):
             check_source_refs(
                 requirement.get("source_refs", []), sources, requirement.get("id", "requirement"), errors
             )
+
+    for finding in findings:
+        if not isinstance(finding, dict):
+            continue
+        finding_id = finding.get("id", "finding")
+        check_refs(finding.get("requirement_refs", []), requirement_ids, "requirement", finding_id, errors)
+        check_source_refs(finding.get("source_refs", []), sources, finding_id, errors)
 
     scenario_requirements: dict[str, set[str]] = {}
     for scenario in scenarios:
@@ -284,6 +307,11 @@ def validate(output_dir: Path) -> list[str]:
         relative = entry.get("file", "")
         if relative != expected_relative:
             errors.append(f"{tc_id} file must be {expected_relative}, got {relative!r}")
+        expected_markdown = f"test-cases-md/{tc_id}.md"
+        if entry.get("markdown_file") != expected_markdown:
+            errors.append(
+                f"{tc_id} markdown_file must be {expected_markdown}, got {entry.get('markdown_file')!r}"
+            )
         case_path = safe_case_path(output_dir, relative, tc_id, errors)
         if case_path is None:
             continue

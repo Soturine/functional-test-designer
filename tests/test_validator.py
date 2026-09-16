@@ -35,11 +35,29 @@ class ValidatorTests(unittest.TestCase):
     def test_expected_output_passes(self) -> None:
         self.assertEqual([], VALIDATOR.validate(self.output))
 
-    def test_v11_cases_have_no_subtests_and_can_have_multiple_steps(self) -> None:
+    def test_v12_cases_have_no_subtests_and_can_have_multiple_steps(self) -> None:
         cases = [self.read(entry["file"]) for entry in self.read("test-cases.json")["test_cases"]]
 
         self.assertTrue(all("subtests" not in case for case in cases))
         self.assertGreater(len(cases[0]["steps"]), 1)
+
+    def test_sources_declare_roles_and_selected_code_is_evidence(self) -> None:
+        index = self.read("test-cases.json")
+        sources = {item["path"]: item["role"] for item in index["sources"]}
+
+        self.assertEqual("FUNCTIONAL_AUTHORITY", sources["examples/requirements.md"])
+        self.assertEqual(
+            "IMPLEMENTATION_EVIDENCE",
+            sources["examples/selected-source/order_service.py"],
+        )
+        self.assertEqual("IMPLEMENTATION_DIVERGENCE", index["findings"][0]["type"])
+
+    def test_implementation_evidence_does_not_replace_normative_result(self) -> None:
+        case = self.read("test-cases/TC-006.json")
+
+        self.assertIn("SUBMITTED", case["steps"][0]["expected_result"])
+        self.assertNotIn("PROCESSING", case["steps"][0]["expected_result"])
+        self.assertTrue(any("diverges" in note for note in case["notes"]))
 
     def test_duplicate_requirement_id_fails(self) -> None:
         index = self.read("test-cases.json")
@@ -154,6 +172,24 @@ class ValidatorTests(unittest.TestCase):
         errors = VALIDATOR.validate(self.output)
 
         self.assertTrue(any("REQ-999 is TESTABLE but has no coverage point" in error for error in errors))
+
+    def test_unknown_finding_source_fails(self) -> None:
+        index = self.read("test-cases.json")
+        index["findings"][0]["source_refs"][1]["source"] = "unselected.py"
+        self.write("test-cases.json", index)
+
+        errors = VALIDATOR.validate(self.output)
+
+        self.assertTrue(any("FND-001 references source absent" in error for error in errors))
+
+    def test_markdown_path_is_specific_to_case(self) -> None:
+        index = self.read("test-cases.json")
+        index["test_cases"][0]["markdown_file"] = "test-cases-md/TC-002.md"
+        self.write("test-cases.json", index)
+
+        errors = VALIDATOR.validate(self.output)
+
+        self.assertTrue(any("TC-001 markdown_file must be test-cases-md/TC-001.md" in error for error in errors))
 
 
 if __name__ == "__main__":

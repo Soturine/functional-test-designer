@@ -9,23 +9,28 @@
     "generated_at",
     "sources",
     "requirements",
+    "findings",
     "coverage_points",
     "scenarios",
     "test_cases"
   ],
   "properties": {
-    "schema_version": {"const": "1.1"},
+    "schema_version": {"const": "1.2"},
     "generated_at": {"type": "string", "format": "date-time"},
     "sources": {
       "type": "array",
       "minItems": 1,
       "uniqueItems": true,
-      "items": {"type": "string", "minLength": 1}
+      "items": {"$ref": "#/$defs/source"}
     },
     "requirements": {
       "type": "array",
       "minItems": 1,
       "items": {"$ref": "#/$defs/requirement"}
+    },
+    "findings": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/finding"}
     },
     "coverage_points": {
       "type": "array",
@@ -42,6 +47,23 @@
     }
   },
   "$defs": {
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "role"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "role": {
+          "enum": [
+            "FUNCTIONAL_AUTHORITY",
+            "IMPLEMENTATION_EVIDENCE",
+            "TEST_ASSET",
+            "TECHNICAL_CONTEXT",
+            "OTHER_SELECTED"
+          ]
+        }
+      }
+    },
     "sourceRef": {
       "type": "object",
       "additionalProperties": false,
@@ -59,6 +81,29 @@
         "id": {"type": "string", "pattern": "^REQ-[0-9]{3,}$"},
         "statement": {"type": "string", "minLength": 1},
         "status": {"enum": ["TESTABLE", "NEEDS_CLARIFICATION"]},
+        "source_refs": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/sourceRef"}
+        }
+      }
+    },
+    "finding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "type", "statement", "requirement_refs", "source_refs"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^FND-[0-9]{3,}$"},
+        "type": {
+          "enum": ["IMPLEMENTATION_DIVERGENCE", "SOURCE_CONFLICT", "COVERAGE_GAP", "INFORMATION"]
+        },
+        "statement": {"type": "string", "minLength": 1},
+        "requirement_refs": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"type": "string", "pattern": "^REQ-[0-9]{3,}$"}
+        },
         "source_refs": {
           "type": "array",
           "minItems": 1,
@@ -157,7 +202,8 @@
         "requirement_refs",
         "scenario_refs",
         "coverage_point_refs",
-        "file"
+        "file",
+        "markdown_file"
       ],
       "properties": {
         "id": {"type": "string", "pattern": "^TC-[0-9]{3,}$"},
@@ -181,7 +227,8 @@
           "uniqueItems": true,
           "items": {"type": "string", "pattern": "^CP-[0-9]{3,}$"}
         },
-        "file": {"type": "string", "pattern": "^test-cases/TC-[0-9]{3,}\\.json$"}
+        "file": {"type": "string", "pattern": "^test-cases/TC-[0-9]{3,}\\.json$"},
+        "markdown_file": {"type": "string", "pattern": "^test-cases-md/TC-[0-9]{3,}\\.md$"}
       }
     }
   }
