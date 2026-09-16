@@ -72,7 +72,27 @@ class ValidatorTests(unittest.TestCase):
 
         self.assertTrue(any("step numbers must be ordered consecutively" in error for error in errors))
 
+    def test_case_source_must_be_declared(self) -> None:
+        case = self.read("test-cases/TC-001.json")
+        case["source_refs"][0]["source"] = "unknown.md"
+        self.write("test-cases/TC-001.json", case)
+
+        errors = VALIDATOR.validate(self.output)
+
+        self.assertTrue(any("TC-001 references source absent from index sources" in error for error in errors))
+
+    def test_case_requirement_must_be_covered_by_scenario(self) -> None:
+        index = self.read("test-cases.json")
+        case = self.read("test-cases/TC-001.json")
+        index["test_cases"][0]["requirement_refs"] = ["REQ-002"]
+        case["requirement_refs"] = ["REQ-002"]
+        self.write("test-cases.json", index)
+        self.write("test-cases/TC-001.json", case)
+
+        errors = VALIDATOR.validate(self.output)
+
+        self.assertTrue(any("REQ-002 is not covered by its referenced scenarios" in error for error in errors))
+
 
 if __name__ == "__main__":
     unittest.main()
-

@@ -52,7 +52,8 @@ def validate_schema(instance: Any, schema_name: str, label: str, errors: list[st
         return
     try:
         validator = Draft202012Validator(schema, format_checker=FormatChecker())
-        for error in sorted(validator.iter_errors(instance), key=lambda item: list(item.absolute_path)):
+        sort_key = lambda item: tuple(str(part) for part in item.absolute_path)
+        for error in sorted(validator.iter_errors(instance), key=sort_key):
             errors.append(f"{label} {json_path(error.absolute_path)}: {error.message}")
     except Exception as exc:  # Invalid schemas should fail with a useful message.
         errors.append(f"cannot apply schema {schema_path}: {exc}")
@@ -74,6 +75,15 @@ def check_refs(values: Any, known: set[str], label: str, owner: str, errors: lis
     for value in values:
         if isinstance(value, str) and value not in known:
             errors.append(f"{owner} references unknown {label}: {value}")
+
+
+def check_source_refs(values: Any, sources: set[str], owner: str, errors: list[str]) -> None:
+    if not isinstance(values, list):
+        return
+    for source_ref in values:
+        source = source_ref.get("source") if isinstance(source_ref, dict) else None
+        if isinstance(source, str) and source not in sources:
+            errors.append(f"{owner} references source absent from index sources: {source}")
 
 
 def safe_case_path(output_dir: Path, relative: str, owner: str, errors: list[str]) -> Path | None:
@@ -144,12 +154,10 @@ def validate(output_dir: Path) -> list[str]:
         if not isinstance(requirement, dict):
             continue
         owner = requirement.get("id", "requirement")
-        for source_ref in requirement.get("source_refs", []):
-            source = source_ref.get("source") if isinstance(source_ref, dict) else None
-            if source and source not in sources:
-                errors.append(f"{owner} references source absent from index sources: {source}")
+        check_source_refs(requirement.get("source_refs", []), sources, owner, errors)
 
     mapped_requirements: set[str] = set()
+    scenario_requirements: dict[str, set[str]] = {}
     for scenario in scenarios:
         if not isinstance(scenario, dict):
             continue
@@ -157,9 +165,14 @@ def validate(output_dir: Path) -> list[str]:
         refs = scenario.get("requirement_refs", [])
         check_refs(refs, requirement_ids, "requirement", owner, errors)
         if isinstance(refs, list):
-            mapped_requirements.update(ref for ref in refs if isinstance(ref, str))
+            known_refs = {ref for ref in refs if isinstance(ref, str)}
+            mapped_requirements.update(known_refs)
+            if isinstance(scenario.get("id"), str):
+                scenario_requirements[scenario["id"]] = known_refs
 
     questioned_requirements: set[str] = set()
+    questioned_case_ids: set[str] = set()
+    blocking_case_ids: set[str] = set()
     for question in questions:
         if not isinstance(question, dict):
             continue
@@ -168,10 +181,15 @@ def validate(output_dir: Path) -> list[str]:
         tc_refs = question.get("related_test_cases", [])
         check_refs(requirement_refs, requirement_ids, "requirement", owner, errors)
         check_refs(tc_refs, set(entry_by_id), "test case", owner, errors)
+        check_source_refs(question.get("source_refs", []), sources, owner, errors)
         if isinstance(requirement_refs, list):
             questioned_requirements.update(ref for ref in requirement_refs if isinstance(ref, str))
+        if isinstance(tc_refs, list):
+            questioned_case_ids.update(ref for ref in tc_refs if isinstance(ref, str))
         if question.get("blocking"):
             for tc_id in tc_refs if isinstance(tc_refs, list) else []:
+                if isinstance(tc_id, str):
+                    blocking_case_ids.add(tc_id)
                 entry = entry_by_id.get(tc_id)
                 if entry and entry.get("status") != "BLOCKED":
                     errors.append(f"{owner} is blocking but {tc_id} status is not BLOCKED")
@@ -207,13 +225,40 @@ def validate(output_dir: Path) -> list[str]:
 
         check_refs(case.get("requirement_refs", []), requirement_ids, "requirement", tc_id, errors)
         check_refs(case.get("scenario_refs", []), scenario_ids, "scenario", tc_id, errors)
+        check_source_refs(case.get("source_refs", []), sources, tc_id, errors)
+        raw_case_requirement_refs = case.get("requirement_refs", [])
+        case_requirement_refs = (
+            {ref for ref in raw_case_requirement_refs if isinstance(ref, str)}
+            if isinstance(raw_case_requirement_refs, list)
+            else set()
+        )
+        scenario_requirement_refs: set[str] = set()
+        raw_case_scenario_refs = case.get("scenario_refs", [])
+        for scenario_id in raw_case_scenario_refs if isinstance(raw_case_scenario_refs, list) else []:
+            if isinstance(scenario_id, str):
+                scenario_requirement_refs.update(scenario_requirements.get(scenario_id, set()))
+        for req_id in sorted(case_requirement_refs - scenario_requirement_refs):
+            errors.append(f"{tc_id} requirement {req_id} is not covered by its referenced scenarios")
         step_numbers = [step.get("step") for step in case.get("steps", []) if isinstance(step, dict)]
         if step_numbers != list(range(1, len(step_numbers) + 1)):
             errors.append(f"{tc_id} step numbers must be ordered consecutively from 1")
         check_duplicates(case.get("subtests", []), "id", f"subtest ID in {tc_id}", errors)
+        pending_items = []
+        for field in ("steps", "subtests"):
+            values = case.get(field, [])
+            if isinstance(values, list):
+                pending_items.extend(
+                    item
+                    for item in values
+                    if isinstance(item, dict) and item.get("needs_clarification") is True
+                )
+        if pending_items and tc_id not in questioned_case_ids:
+            errors.append(f"{tc_id} has clarification-pending items but no related question")
+        if case.get("status") == "BLOCKED" and tc_id not in blocking_case_ids:
+            errors.append(f"{tc_id} is BLOCKED but has no related blocking question")
 
     case_dir = output_dir / "test-cases"
-    actual_files = {path.resolve() for path in case_dir.glob("TC-*.json")} if case_dir.is_dir() else set()
+    actual_files = {path.resolve() for path in case_dir.glob("*.json")} if case_dir.is_dir() else set()
     for path in sorted(actual_files - indexed_files):
         errors.append(f"unindexed test case file: {path}")
     for path in sorted(indexed_files - actual_files):
