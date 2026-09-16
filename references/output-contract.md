@@ -1,149 +1,126 @@
-# Output Contract 1.1
+# Output Contract 1.2
 
-Write UTF-8 JSON with two-space indentation. Paths are relative to the output directory and use `/` separators. Use the exact `schema_version` value `1.1`.
+Write UTF-8 JSON with two-space indentation. Paths are relative to the output directory and use `/` separators. Use the exact `schema_version` value `1.2`.
 
-## Files
+## Files and Order
 
 ```text
 output/
 |-- test-cases.json
 |-- questions.json
 |-- report.html
-`-- test-cases/
-    |-- TC-001.json
-    `-- TC-XXX.json
+|-- test-cases/
+|   `-- TC-XXX.json
+`-- test-cases-md/
+    `-- TC-XXX.md
 ```
 
-`report.html` is derived presentation, not source data. Do not write analysis notes, source copies, diagnostics, or confidential data into `output/`.
+Write JSON directly, validate it, render Markdown, then render HTML. Markdown and HTML are derived presentation and never repair or modify JSON. Do not put source copies, diagnostics, temporary files, or confidential data in `output/`.
 
 ## Index
 
-`test-cases.json` contains requirements, Coverage Points, scenarios, and the TC file manifest:
+`test-cases.json` contains selected sources and their roles, normalized requirements, findings, Coverage Points, deduplicated scenarios, and the TC manifest:
 
 ```json
 {
-  "schema_version": "1.1",
+  "schema_version": "1.2",
   "generated_at": "2026-09-16T12:00:00Z",
-  "sources": ["docs/requirements.md"],
+  "sources": [
+    {"path": "docs/requirements.md", "role": "FUNCTIONAL_AUTHORITY"},
+    {"path": "src/order_service.py", "role": "IMPLEMENTATION_EVIDENCE"}
+  ],
   "requirements": [
     {
       "id": "REQ-001",
-      "statement": "A customer can cancel an order before invoicing.",
-      "status": "NEEDS_CLARIFICATION",
-      "source_refs": [{"source": "docs/requirements.md", "reference": "Cancellation"}]
+      "statement": "Submitting a draft order changes it to SUBMITTED.",
+      "status": "TESTABLE",
+      "source_refs": [{"source": "docs/requirements.md", "reference": "Submit order"}]
     }
   ],
-  "coverage_points": [
+  "findings": [
     {
-      "id": "CP-001",
-      "requirement_ref": "REQ-001",
-      "statement": "The observable result of cancellation must be defined.",
-      "source_refs": [{"source": "docs/requirements.md", "reference": "Cancellation"}],
-      "disposition": "QUESTION",
-      "target_refs": ["Q-001"]
+      "id": "FND-001",
+      "type": "IMPLEMENTATION_DIVERGENCE",
+      "statement": "Selected code sets PROCESSING instead of the required SUBMITTED state.",
+      "requirement_refs": ["REQ-001"],
+      "source_refs": [
+        {"source": "docs/requirements.md", "reference": "Submit order"},
+        {"source": "src/order_service.py", "reference": "submit_order"}
+      ]
     }
   ],
+  "coverage_points": [],
   "scenarios": [],
   "test_cases": []
 }
 ```
 
-Requirement status is `TESTABLE` or `NEEDS_CLARIFICATION`. Scenario type is `HAPPY_PATH`, `NEGATIVE`, `BOUNDARY`, `PERMISSION`, `STATE_TRANSITION`, `RECOVERY`, or `EXPLORATORY`.
+Source roles are `FUNCTIONAL_AUTHORITY`, `IMPLEMENTATION_EVIDENCE`, `TEST_ASSET`, `TECHNICAL_CONTEXT`, and `OTHER_SELECTED`. Finding types are `IMPLEMENTATION_DIVERGENCE`, `SOURCE_CONFLICT`, `COVERAGE_GAP`, and `INFORMATION`.
 
-## Coverage Point Dispositions
+Functional authority owns normative expected results. Other selected sources can add evidence and execution context. They cannot silently change the oracle.
 
-Each Coverage Point represents one normative behavior and has exactly one disposition:
+## Coverage Points
+
+Each Coverage Point represents one independently meaningful behavior and has one disposition:
 
 - `TEST_CASE`: `target_refs` contains one or more `TC-XXX` IDs.
 - `QUESTION`: `target_refs` contains one or more `Q-XXX` IDs.
-- `OUT_OF_SCOPE`: `target_refs` is empty and `reason` explains the user's explicit exclusion.
+- `OUT_OF_SCOPE`: `target_refs` is empty and `reason` records the user's explicit exclusion.
 
-Several Coverage Points may target the same TC when they are observations in one coherent flow. One Coverage Point may target several TCs when separate execution contexts are necessary.
+Several Coverage Points may target one TC when they are observations in the same coherent flow. The internal Coverage Extraction Audit adds missing points to this same catalog; it creates no second artifact or layer.
 
 ## Test Case Entry
 
-Every index entry includes `coverage_point_refs` and points to one file:
+Every entry identifies its exact JSON and Markdown artifacts:
 
 ```json
 {
   "id": "TC-001",
-  "title": "Reject a quantity below the minimum",
+  "title": "Submit a draft order",
   "status": "READY",
-  "requirement_refs": ["REQ-002"],
-  "scenario_refs": ["SCN-002"],
-  "coverage_point_refs": ["CP-002", "CP-003"],
-  "file": "test-cases/TC-001.json"
+  "requirement_refs": ["REQ-001"],
+  "scenario_refs": ["SCN-001"],
+  "coverage_point_refs": ["CP-001"],
+  "file": "test-cases/TC-001.json",
+  "markdown_file": "test-cases-md/TC-001.md"
 }
 ```
 
 ## Individual Test Case
 
-```json
-{
-  "schema_version": "1.1",
-  "id": "TC-001",
-  "title": "Reject a quantity below the minimum",
-  "status": "READY",
-  "priority": "MEDIUM",
-  "type": "FUNCTIONAL",
-  "objective": "Confirm that quantity 0 is rejected without changing the existing quantity.",
-  "requirement_refs": ["REQ-002"],
-  "scenario_refs": ["SCN-002"],
-  "coverage_point_refs": ["CP-002", "CP-003"],
-  "source_refs": [{"source": "docs/requirements.md", "reference": "Quantity"}],
-  "preconditions": ["A DRAFT order line has quantity 5."],
-  "test_data": [{"name": "quantity", "description": "Below-minimum value: 0."}],
-  "steps": [
-    {
-      "step": 1,
-      "action": "Set the quantity to 0 and submit the change.",
-      "expected_result": "The value is rejected and the quantity remains 5.",
-      "needs_clarification": false
-    }
-  ],
-  "postconditions": ["The quantity remains 5."],
-  "cleanup": ["Remove the synthetic order."],
-  "tags": ["quantity", "boundary"],
-  "notes": []
-}
-```
+Each `test-cases/TC-XXX.json` contains `schema_version`, ID, title, status, priority, type, objective, requirement/scenario/Coverage Point/source references, preconditions, local test data, ordered steps, postconditions, cleanup, tags, and notes.
 
-Use `READY`, `NEEDS_REVIEW`, or `BLOCKED` for status and `CRITICAL`, `HIGH`, `MEDIUM`, or `LOW` for priority. There is no `subtests` or `automation_candidate` field in V1.1.
-
-Every step owns its Action and Expected Result. A `null` expected result requires `needs_clarification: true` and a related Question.
+Use `READY`, `NEEDS_REVIEW`, or `BLOCKED` for status and `CRITICAL`, `HIGH`, `MEDIUM`, or `LOW` for priority. Every step owns its Action and Expected Result. A `null` expected result requires `needs_clarification: true` and a related Question. There are no `subtests` or `automation_candidate` fields.
 
 ## Questions
 
-```json
-{
-  "schema_version": "1.1",
-  "questions": [
-    {
-      "id": "Q-001",
-      "related_test_cases": [],
-      "requirement_refs": ["REQ-001"],
-      "source_refs": [{"source": "docs/requirements.md", "reference": "Cancellation"}],
-      "question": "What observable result confirms successful cancellation?",
-      "reason": "The source permits cancellation but defines no observable outcome.",
-      "blocking": true
-    }
-  ]
-}
-```
+`questions.json` uses schema version `1.2`. Each Question has a stable `Q-XXX` ID, affected TCs and requirements, selected source references, one actionable question, its reason, and a blocking flag. Use an empty `related_test_cases` array when a missing oracle prevents a meaningful TC.
 
-Use an empty `related_test_cases` array when the missing oracle prevents creation of a meaningful case.
+## Markdown and Mermaid
+
+`scripts/render_markdown.py` writes one Markdown file for each indexed TC. It includes title, status, priority, type, objective, preconditions, test data, all steps and expected results, postconditions, cleanup, traceability, and the JSON artifact path.
+
+`## Fluxo do Teste` is the final section. Its final fenced `mermaid` block is a linear action-to-expected-result flow in step order. It does not invent branches or results. A missing result is labeled as requiring clarification.
+
+## HTML
+
+`report.html` is offline and has Summary, Test Cases, Questions, and Coverage navigation. Each TC card shows objective, preconditions, test data, steps, the visual flow extracted from that TC's Markdown, links to the exact JSON and Markdown artifacts, and technical traceability. It does not load a CDN or show raw JSON by default.
+
+For N indexed cases there must be exactly N JSON files, N Markdown files, and N HTML cards, all aligned by TC ID and step content.
 
 ## Consistency Invariants
 
-- IDs are unique and use their declared prefixes.
+- IDs and selected source paths are unique.
+- Every source reference points to a declared selected source.
+- Finding references point to existing requirements and selected sources.
 - Every testable requirement has at least one Coverage Point.
-- Every Coverage Point references an existing requirement and source.
-- Every Coverage Point has a valid `TEST_CASE`, `QUESTION`, or explicit `OUT_OF_SCOPE` destination.
-- TC and Coverage Point links agree in both directions.
-- Every TC maps to existing scenarios and requirements, and index metadata matches its file.
-- Every indexed file exists; unindexed TC JSON files are invalid.
-- Step numbers start at 1 and increase consecutively.
+- Every Coverage Point has a valid destination and bidirectional TC links agree.
+- Every TC maps to existing scenarios, requirements, and Coverage Points.
+- Index metadata and individual case metadata agree.
+- Every indexed JSON exists; unindexed TC JSON is invalid.
+- JSON and Markdown paths match the TC ID.
+- Steps start at 1 and increase consecutively.
 - Blocking Questions linked to a TC require that TC to be `BLOCKED`.
 - A `READY` case has no clarification-pending step.
 
-The schemas validate document shape. `scripts/validate_output.py` enforces uniqueness, paths, file presence, referential integrity, and cross-file rules.
+Schemas validate document shape. `scripts/validate_output.py` enforces JSON cross-file invariants. Renderers enforce JSON/Markdown/HTML correspondence.

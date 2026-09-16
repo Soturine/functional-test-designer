@@ -1,137 +1,139 @@
 ---
 name: functional-test-designer
-description: Converts requirement documents into traceable Coverage Points, independent executable manual test cases, validated JSON, and an offline HTML report. Use for greenfield functional test design when requirements are the only functional authority. Do not use backlog, source code, implementations, existing tests, or project history as generation sources.
+description: Designs traceable functional manual tests from only the sources explicitly selected by the user, including requirements, code, technical documents, and existing QA assets. Use to resolve a bounded source scope, extract and audit Coverage Points, create independent executable test cases, validate JSON, and render per-case Markdown plus an offline HTML report.
 ---
 
 # Functional Test Designer
 
-Operate only in `GREENFIELD_REQUIREMENTS_ONLY` mode. Turn user-designated requirement documents into source-grounded manual test cases using the V1.1 contract in [references/output-contract.md](references/output-contract.md). Validate the JSON and render a friendly offline report.
+Operate only on sources explicitly selected by the user. Selected paths are the complete content-analysis boundary: a selected directory is recursive only inside itself, and a selected file authorizes only that file. Produce source-grounded Coverage Points, independent manual Test Cases, validated JSON, per-case Markdown, and an offline HTML report using [references/output-contract.md](references/output-contract.md).
 
-## Authority and Scope
+## Scope Boundary
 
-- Treat the requirement document as the only functional authority.
-- Do not inspect or use backlog items, source code, APIs, databases, implementations, commits, issues, existing test cases, test plans, execution history, or automation as input.
-- Do not use observed implementation behavior to fill a requirement gap or expected result.
-- Preserve: requirement != hypothesis; question != requirement; scenario != requirement; risk != expected result; implementation != contract.
-- Never invent messages, status codes, internal states, fields, side effects, permissions, or recovery behavior.
-- Use only synthetic, non-sensitive test data.
+Resolve natural-language selections into exact files, directories, or explicit globs before reading content.
 
-If a necessary oracle is absent, route the behavior to a Question. Create a `BLOCKED` case only when useful executable structure remains but the missing oracle prevents a correct Pass/Fail decision.
+- A selected directory permits recursive discovery only below that directory, never its siblings.
+- A selected file permits only that file.
+- Multiple selected paths form the allowed roots; no neighboring path is implied.
+- Do not follow imports, includes, links, dependencies, references, or repository structure outside those roots.
+- Metadata-only path discovery is allowed for resolution. Do not grep or inspect content outside scope.
+- If a basename has multiple matches, ask one short disambiguation question before reading either match.
+- Normalize paths and reject `..`, symlink, or junction escapes from the workspace or selected directory.
+- Ignore `.git`, `.venv`, `venv`, `node_modules`, `dist`, `build`, `coverage`, `__pycache__`, and `.cache` during directory discovery.
+- If another source seems necessary, identify its path and why it matters, then wait for explicit selection. Do not read it.
 
-## Optional Diagnostic Mode
+Use `scripts/resolve_scope.py` when deterministic path resolution is useful. It reads metadata only.
 
-When the user requests `Diagnostic: true`, read [references/diagnostics.md](references/diagnostics.md) before reading the source. Start the timer immediately and record real wall-clock time for the macro stages. Do not estimate missing timings or record requirement text, names, payloads, credentials, or other sensitive content.
+## Evidence Authority
+
+Classify every selected source in `test-cases.json`:
+
+- `FUNCTIONAL_AUTHORITY`: approved requirement, specification, or acceptance criteria.
+- `IMPLEMENTATION_EVIDENCE`: selected source code or runtime configuration.
+- `TEST_ASSET`: selected existing Test Case, test plan, script, or QA artifact.
+- `TECHNICAL_CONTEXT`: selected ADR, API description, or technical documentation.
+- `OTHER_SELECTED`: selected evidence that fits none of the above.
+
+Functional authority defines normative expected behavior. Implementation evidence may improve executable context or reveal divergence, but never silently replaces a normative expected result. Existing Test Cases are artifacts to audit, not automatic truth. Test plans and scripts are coverage evidence. Technical documents are context unless the user explicitly establishes them as authority.
+
+When selected sources disagree, record a finding with traceability and keep the authoritative oracle. If no functional authority exists and the task audits implementation, label derived behavior as implementation evidence. Never invent messages, statuses, fields, states, side effects, permissions, or recovery behavior. Use only synthetic, non-sensitive test data.
 
 ## Workflow
 
-### 1. Read Requirement Sources
+### 1. Resolve Scope and Read Sources Once
 
-Locate and read only the requirement documents designated by the user. Record source paths, original identifiers, explicit scope, and explicit exclusions. Do not build parsers when the host can read the format.
+Resolve the user's selected roots, list the exact files in scope, and read only those files. Build a compact internal evidence map during the initial read so later stages do not repeatedly reopen sources. Track rereads when diagnostics are requested.
 
-### 2. Normalize Requirements
+### 2. Normalize Evidence
 
-Extract actors, rules, permissions, states, inputs, outputs, constraints, and acceptance behavior.
+Extract actors, rules, permissions, states, inputs, outputs, constraints, acceptance behavior, and existing coverage evidence.
 
-- Assign stable local `REQ-001`, `REQ-002`, ... IDs in source order.
+- Assign stable `REQ-001`, `REQ-002`, ... IDs in source order.
 - Preserve original identifiers and locations in `source_refs`.
-- Split compound requirements only where their behaviors can be evaluated independently.
-- Mark unsupported or contradictory behavior `NEEDS_CLARIFICATION`; do not strengthen the source.
+- Separate normative authority from implementation and test evidence.
+- Split compound requirements only where behaviors can fail independently.
+- Mark unsupported or contradictory behavior `NEEDS_CLARIFICATION`; do not strengthen a source.
 
-### 3. Extract Coverage Points
+### 3. Extract and Audit Coverage Points
 
-Decompose every normative behavior into a stable `CP-001`, `CP-002`, ... Coverage Point. A Coverage Point controls behavioral coverage; it is not automatically a Test Case.
+Decompose normative behavior into stable `CP-001`, `CP-002`, ... Coverage Points. A Coverage Point controls behavioral coverage; it does not automatically create a Test Case.
 
-Route every Coverage Point to exactly one disposition:
+After the initial extraction, make a short second pass over the internal evidence map. Confirm that every normative clause, bullet, acceptance criterion, flow step, alternate, exception, postcondition, transition, restriction, observable outcome, explicit side effect, cancellation, reversal, finalization, permission, boundary, message, and state has a Coverage Point.
 
-- `TEST_CASE`: one or more independent TCs cover the behavior.
-- `QUESTION`: the behavior lacks a sufficient oracle and points to one or more Questions.
-- `OUT_OF_SCOPE`: the user explicitly excluded the behavior; include a specific reason and no target.
+- Merge duplicates that describe the same behavior and retain all relevant `source_refs`.
+- Keep separate points for effects that can fail independently.
+- Route known behavior toward a TC and ambiguous behavior toward a Question.
+- Do not create a second coverage artifact or another CP layer.
 
-Never use `OUT_OF_SCOPE` to hide a gap. No Coverage Point may disappear or remain without a valid destination.
+Every Coverage Point has exactly one disposition: `TEST_CASE`, `QUESTION`, or an explicitly justified `OUT_OF_SCOPE`. Never use `OUT_OF_SCOPE` to hide a gap.
 
-### 4. Evaluate Testability and Ask Questions
+### 4. Evaluate Testability and Questions
 
-Check actor, starting state, trigger, normative rule, and observable result. Probe only relevant gaps such as bounds, null/empty input, permissions, invalid order/state, repetition, concurrency, unavailable dependencies, partial failure, retry, and recovery.
+Check actor, starting state, trigger, normative rule, and observable result. A missing oracle becomes a focused Question. Create a `BLOCKED` case only when useful executable structure remains but the missing decision prevents a correct Pass/Fail result.
 
-Questions must resolve a specific decision, remain source-grounded, avoid duplication, and link to affected requirements and cases.
+### 5. Apply Test Design Selectively
 
-### 5. Select Test Design Only When Useful
+Read [references/test-design.md](references/test-design.md) only when ranges, partitions, states, interacting conditions, or combinatorial inputs justify it. BVA, EP, Decision Tables, State Transition, and Pairwise are reasoning tools, not output multiplication tools.
 
-Read [references/test-design.md](references/test-design.md) only when the requirements contain ranges, partitions, states, multiple interacting conditions, many combinations, or another concrete need for a design technique. Otherwise continue without loading it.
+Use techniques to improve coverage and reduce redundant combinations. Pairwise specifically replaces unnecessary exhaustive combinations. Do not apply every technique or emit every analyzed value.
 
-Use techniques to choose better scenarios and remove redundant combinations. They must not invent oracles, create extra structures, or hide independent behaviors.
+### 6. Design and Deduplicate Scenarios Early
 
-### 6. Create Scenarios and Independent Test Cases
+Create candidate scenarios, then remove semantic duplicates before materializing TCs. Keep separate scenarios when behavior, risk, setup, flow, oracle, or evidence can fail independently. Assign stable `SCN-001`, `SCN-002`, ... IDs only after deduplication.
 
-Assign stable `SCN-001`, `SCN-002`, ... scenario IDs and `TC-001`, `TC-002`, ... case IDs.
+### 7. Generate Independent Test Cases
 
-Create a separate TC when a condition:
+Assign stable `TC-001`, `TC-002`, ... IDs. Independent scenario means independent TC. Use multiple steps only for one coherent flow. There are no `subtests` and no `automation_candidate`.
 
-- needs its own Pass/Fail result;
-- can fail or produce a bug independently;
-- requires independent evidence;
-- has different setup, action sequence, risk, or oracle.
-
-Use multiple steps in one TC when they form one coherent flow. There are no subtests in V1.1. Do not compress independent boundaries, permissions, or failure modes into one case merely to reduce volume.
-
-### 7. Write Test Data, Priority, and Steps
-
-Specify only data that affects execution: representative values, roles, states, boundaries, and required setup. Derive exact values from documented constraints.
-
-Choose priority from source evidence or this fallback:
-
-- `CRITICAL`: central flow, integrity, critical security, or central blocker.
-- `HIGH`: important mandatory business rule.
-- `MEDIUM`: alternative flow, important validation, or insufficient priority evidence.
-- `LOW`: non-blocking edge or performance concern.
+Generate test data lazily with the TC that uses it; do not create a global test-data phase or catalog. Additional selected context may add setup or steps only when that evidence confirms a real executable flow.
 
 For every step:
 
-- write one concrete, executable action;
-- write its corresponding observable, source-supported expected result;
+- write one concrete action;
+- attach its corresponding observable expected result;
 - use `expected_result: null` and `needs_clarification: true` when unsupported;
-- create a related Question for every clarification-pending step.
+- link every clarification-pending step to a Question.
 
-Do not use vague actions such as "verify it works". Do not create one giant expected result after several actions.
+### 8. Write, Validate, and Render
 
-### 8. Deduplicate Without Hiding Behavior
-
-Remove true duplicates and combinations that add no coverage. Keep separate cases for independently reportable behavior. Several Coverage Points may map to one TC when they are observations in the same coherent execution flow.
-
-### 9. Write, Validate, and Render
-
-Read [references/output-contract.md](references/output-contract.md), then write the V1.1 JSON. Treat schemas as validator internals: do not read them before generation unless validation fails and the error is insufficient.
+Write final contract artifacts directly. Do not create per-run generator scripts or temporary source copies. Read schemas only if a validator failure is unclear.
 
 ```text
 output/
 |-- test-cases.json
 |-- questions.json
 |-- report.html
-`-- test-cases/
-    `-- TC-XXX.json
+|-- test-cases/
+|   `-- TC-XXX.json
+`-- test-cases-md/
+    `-- TC-XXX.md
 ```
 
 Run in this order:
 
 ```bash
 python scripts/validate_output.py output
+python scripts/render_markdown.py output
 python scripts/render_report.py output
 ```
 
-Fix all validation errors before rendering or reporting completion. The renderer must never change JSON or repair content.
+The Markdown renderer reads validated JSON and changes no JSON. The HTML renderer reads each corresponding Markdown Mermaid block and displays that same linear flow. Fix all errors before completion.
 
-### 10. Summarize
+### 9. Summarize
 
-Report counts for requirements, Coverage Points, scenarios, Test Cases, steps, statuses, and questions; state validator and HTML results. In diagnostic mode, finish the metrics file and include only real timing in a compact `Stage | Time | Work | Result` table.
+Report selected scope roots, resolved files, files opened outside scope, source rereads, temporary files, requirements, Coverage Points, findings, scenarios, TCs, steps, statuses, Questions, Markdown count, validator result, and HTML result. Files opened outside scope must be zero; any nonzero value is a scope violation.
+
+When diagnostics are explicitly requested, follow [references/diagnostics.md](references/diagnostics.md). Record real observations only and no sensitive content.
 
 ## Completion Check
 
-- Requirements were the only generation source.
-- Every testable behavior has a Coverage Point with a valid destination.
-- Every TC traces through Coverage Points, scenarios, and requirements.
-- Each independently reportable behavior has its own TC.
-- Every step has Action and Expected Result; unsupported results remain visible.
-- No generated JSON contains `subtests` or `automation_candidate`.
-- JSON validation passes before the offline HTML is rendered.
-- Diagnostic metrics, when requested, remain outside the TC output and contain no sensitive content.
-
+- Only explicitly selected source content was analyzed.
+- Functional authority and other evidence roles remained distinct.
+- The internal Coverage Extraction Audit found no unmapped normative clause.
+- Known and ambiguous parts were split between TCs and Questions.
+- Scenario candidates were deduplicated before TC generation.
+- Test design improved coverage without inflating output.
+- Every TC is independently reportable; coherent flows use ordered steps.
+- JSON contains neither `subtests` nor `automation_candidate`.
+- JSON validated before Markdown; Markdown existed before HTML.
+- JSON, Markdown, and HTML cards correspond 1:1 by TC ID.
+- Every Markdown ends with its Mermaid flow, and HTML uses the same flow.

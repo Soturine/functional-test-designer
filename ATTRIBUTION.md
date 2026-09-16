@@ -4,4 +4,4 @@ This skill adapts concepts and portions of `designing-functional-tests`, `requir
 
 Original work copyright GitHub, Inc., licensed under the MIT License. The applicable license text is preserved in [LICENSE](LICENSE).
 
-The adapted workflow adds a JSON contract, contextual test-design guidance, cross-file validation, and synthetic examples for an independent functional-test-design workflow.
+The adapted workflow adds explicit selected-source boundaries, evidence roles, a JSON contract, contextual test-design guidance, cross-file validation, per-case Markdown and Mermaid rendering, offline HTML, execution diagnostics, and synthetic examples for an independent functional-test-design workflow.
