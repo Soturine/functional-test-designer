@@ -1,0 +1,32 @@
+{
+  "schema_version": "1.0",
+  "questions": [
+    {
+      "id": "Q-001",
+      "related_test_cases": ["TC-007"],
+      "requirement_refs": ["REQ-005"],
+      "source_refs": [{"source": "examples/requirements.md", "reference": "ORD-005"}],
+      "question": "What observable result and final order state confirm a successful cancellation before invoicing?",
+      "reason": "The source permits cancellation but defines no observable outcome, resulting state, message, status code, or side effect.",
+      "blocking": true
+    },
+    {
+      "id": "Q-002",
+      "related_test_cases": ["TC-008"],
+      "requirement_refs": ["REQ-006"],
+      "source_refs": [{"source": "examples/requirements.md", "reference": "ORD-006"}],
+      "question": "What order state and retained data are expected after submission fails because billing is unavailable?",
+      "reason": "Failure and retry availability are defined, but the post-failure state and data consistency rules are not.",
+      "blocking": false
+    },
+    {
+      "id": "Q-003",
+      "related_test_cases": [],
+      "requirement_refs": ["REQ-007"],
+      "source_refs": [{"source": "examples/requirements.md", "reference": "ORD-007"}],
+      "question": "What measurable processing-time target, percentile, load, and start/end points define 'quickly'?",
+      "reason": "The statement has no measurable oracle, so a meaningful performance test case cannot be created.",
+      "blocking": true
+    }
+  ]
+}

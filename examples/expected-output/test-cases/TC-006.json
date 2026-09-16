@@ -1,0 +1,37 @@
+{
+  "schema_version": "1.0",
+  "id": "TC-006",
+  "title": "Deny order operations without permission",
+  "status": "READY",
+  "priority": "HIGH",
+  "type": "FUNCTIONAL",
+  "objective": "Confirm that create and edit operations are denied when the customer lacks ORDER_EDIT and do not change order data.",
+  "requirement_refs": ["REQ-004"],
+  "scenario_refs": ["SCN-006"],
+  "source_refs": [{"source": "examples/requirements.md", "reference": "ORD-004"}],
+  "preconditions": [
+    "A synthetic customer is signed in without ORDER_EDIT permission.",
+    "Synthetic create-order data is available.",
+    "For the edit subtest, a synthetic order exists with a recorded quantity of 5."
+  ],
+  "test_data": [
+    {"name": "permission variants", "description": "Create and edit attempts performed by the same customer without ORDER_EDIT."}
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "action": "Attempt the order operation specified by the current subtest.",
+      "expected_result": "The operation is denied and no order data is changed.",
+      "needs_clarification": false
+    }
+  ],
+  "subtests": [
+    {"id": "ST-001", "title": "Create without permission", "input": {"operation": "create"}, "expected_result": "The operation is denied and no order data is changed.", "needs_clarification": false},
+    {"id": "ST-002", "title": "Edit without permission", "input": {"operation": "edit", "quantity_change": "5 to 6"}, "expected_result": "The operation is denied and no order data is changed.", "needs_clarification": false}
+  ],
+  "postconditions": ["No order is created or changed by either denied attempt."],
+  "cleanup": ["Remove the synthetic order used by the edit subtest."],
+  "tags": ["order", "permission", "negative"],
+  "automation_candidate": true,
+  "notes": ["Create and edit are subtests because the actor, permission rule, denial behavior, and no-change oracle are shared."]
+}

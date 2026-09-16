@@ -1,0 +1,39 @@
+{
+  "schema_version": "1.0",
+  "id": "TC-001",
+  "title": "Create a draft order",
+  "status": "READY",
+  "priority": "HIGH",
+  "type": "FUNCTIONAL",
+  "objective": "Confirm that an authorized customer can create an order with a visible reference in DRAFT state.",
+  "requirement_refs": ["REQ-001"],
+  "scenario_refs": ["SCN-001"],
+  "source_refs": [{"source": "examples/requirements.md", "reference": "ORD-001"}],
+  "preconditions": [
+    "A synthetic customer is signed in.",
+    "The customer has ORDER_EDIT permission."
+  ],
+  "test_data": [
+    {"name": "order", "description": "Synthetic order data accepted by the available order entry point."}
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "action": "Submit a create-order request using the synthetic order data.",
+      "expected_result": "An order is created and a visible order reference is provided.",
+      "needs_clarification": false
+    },
+    {
+      "step": 2,
+      "action": "Observe the state shown for the created order.",
+      "expected_result": "The order state is DRAFT.",
+      "needs_clarification": false
+    }
+  ],
+  "subtests": [],
+  "postconditions": ["A synthetic order exists in DRAFT state."],
+  "cleanup": ["Remove the synthetic order using an approved test-environment procedure."],
+  "tags": ["order", "creation", "happy-path"],
+  "automation_candidate": true,
+  "notes": []
+}

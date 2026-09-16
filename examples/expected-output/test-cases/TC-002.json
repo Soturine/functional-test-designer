@@ -1,0 +1,36 @@
+{
+  "schema_version": "1.0",
+  "id": "TC-002",
+  "title": "Accept valid quantity boundaries",
+  "status": "READY",
+  "priority": "HIGH",
+  "type": "FUNCTIONAL",
+  "objective": "Confirm that the documented minimum and maximum quantities are accepted.",
+  "requirement_refs": ["REQ-002"],
+  "scenario_refs": ["SCN-002"],
+  "source_refs": [{"source": "examples/requirements.md", "reference": "ORD-002"}],
+  "preconditions": [
+    "A synthetic order exists in DRAFT state.",
+    "The order has a line whose quantity can be changed."
+  ],
+  "test_data": [
+    {"name": "valid boundary quantities", "description": "Minimum 1 and maximum 10 from ORD-002."}
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "action": "Set the order-line quantity to the value specified by the current subtest and submit the change.",
+      "expected_result": "The submitted quantity is accepted for the DRAFT order line.",
+      "needs_clarification": false
+    }
+  ],
+  "subtests": [
+    {"id": "ST-001", "title": "Minimum valid quantity", "input": 1, "expected_result": "The submitted quantity is accepted for the DRAFT order line.", "needs_clarification": false},
+    {"id": "ST-002", "title": "Maximum valid quantity", "input": 10, "expected_result": "The submitted quantity is accepted for the DRAFT order line.", "needs_clarification": false}
+  ],
+  "postconditions": ["The order line retains the last accepted quantity."],
+  "cleanup": ["Restore or remove the synthetic order."],
+  "tags": ["order", "quantity", "boundary", "valid-partition"],
+  "automation_candidate": true,
+  "notes": ["BVA and EP values are consolidated as subtests because the setup, action, and oracle are shared."]
+}

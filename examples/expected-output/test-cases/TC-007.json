@@ -1,0 +1,32 @@
+{
+  "schema_version": "1.0",
+  "id": "TC-007",
+  "title": "Cancel an order before invoicing",
+  "status": "BLOCKED",
+  "priority": "HIGH",
+  "type": "FUNCTIONAL",
+  "objective": "Confirm that a customer can cancel an order before invoicing once the observable success outcome is defined.",
+  "requirement_refs": ["REQ-005"],
+  "scenario_refs": ["SCN-007"],
+  "source_refs": [{"source": "examples/requirements.md", "reference": "ORD-005"}],
+  "preconditions": [
+    "A synthetic customer has an order that has not been invoiced."
+  ],
+  "test_data": [
+    {"name": "pre-invoice order", "description": "A synthetic order that has not been invoiced."}
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "action": "Request cancellation of the pre-invoice order.",
+      "expected_result": null,
+      "needs_clarification": true
+    }
+  ],
+  "subtests": [],
+  "postconditions": [],
+  "cleanup": [],
+  "tags": ["order", "cancellation", "clarification-required"],
+  "automation_candidate": false,
+  "notes": ["No message, status, resulting state, HTTP code, or side effect is asserted because ORD-005 does not define one."]
+}

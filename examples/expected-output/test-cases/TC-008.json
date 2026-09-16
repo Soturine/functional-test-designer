@@ -1,0 +1,34 @@
+{
+  "schema_version": "1.0",
+  "id": "TC-008",
+  "title": "Handle billing unavailability during submission",
+  "status": "NEEDS_REVIEW",
+  "priority": "HIGH",
+  "type": "FUNCTIONAL",
+  "objective": "Confirm the defined failure and retry behavior when billing is unavailable, while exposing the undefined post-failure state.",
+  "requirement_refs": ["REQ-006"],
+  "scenario_refs": ["SCN-008"],
+  "source_refs": [{"source": "examples/requirements.md", "reference": "ORD-006"}],
+  "preconditions": [
+    "A synthetic order exists in DRAFT state.",
+    "The billing service is unavailable in the test environment."
+  ],
+  "test_data": [
+    {"name": "draft order", "description": "A synthetic DRAFT order eligible for submission."},
+    {"name": "dependency state", "description": "Billing service unavailable through an approved test-environment control."}
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "action": "Submit the DRAFT order while the billing service is unavailable.",
+      "expected_result": "Submission does not complete and a retry action is available; the resulting order state and retained data require clarification.",
+      "needs_clarification": true
+    }
+  ],
+  "subtests": [],
+  "postconditions": [],
+  "cleanup": ["Restore the billing service test control and remove the synthetic order after recording its observed state."],
+  "tags": ["order", "billing", "recovery", "clarification-required"],
+  "automation_candidate": false,
+  "notes": ["The known failure and retry behavior is testable, but ORD-006 does not define the final order state or partial-data handling."]
+}

@@ -1,0 +1,30 @@
+{
+  "schema_version": "1.0",
+  "id": "TC-004",
+  "title": "Submit a draft order",
+  "status": "READY",
+  "priority": "HIGH",
+  "type": "FUNCTIONAL",
+  "objective": "Confirm the valid transition from DRAFT to SUBMITTED.",
+  "requirement_refs": ["REQ-003"],
+  "scenario_refs": ["SCN-004"],
+  "source_refs": [{"source": "examples/requirements.md", "reference": "ORD-003"}],
+  "preconditions": ["A synthetic order exists in DRAFT state."],
+  "test_data": [
+    {"name": "draft order", "description": "A synthetic order currently shown in DRAFT state."}
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "action": "Submit the DRAFT order.",
+      "expected_result": "The order state changes to SUBMITTED.",
+      "needs_clarification": false
+    }
+  ],
+  "subtests": [],
+  "postconditions": ["The synthetic order is in SUBMITTED state."],
+  "cleanup": ["Remove the synthetic order using an approved test-environment procedure."],
+  "tags": ["order", "submit", "state-transition"],
+  "automation_candidate": true,
+  "notes": []
+}

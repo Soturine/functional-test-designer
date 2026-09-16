@@ -1,0 +1,36 @@
+{
+  "schema_version": "1.0",
+  "id": "TC-003",
+  "title": "Reject invalid quantity boundaries",
+  "status": "READY",
+  "priority": "HIGH",
+  "type": "FUNCTIONAL",
+  "objective": "Confirm that quantities immediately outside the permitted range are rejected without changing the existing quantity.",
+  "requirement_refs": ["REQ-002"],
+  "scenario_refs": ["SCN-003"],
+  "source_refs": [{"source": "examples/requirements.md", "reference": "ORD-002"}],
+  "preconditions": [
+    "A synthetic order exists in DRAFT state.",
+    "An order line has an existing quantity of 5."
+  ],
+  "test_data": [
+    {"name": "invalid boundary quantities", "description": "Values 0 and 11, immediately outside the inclusive range 1 through 10."}
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "action": "Set the order-line quantity to the value specified by the current subtest and submit the change.",
+      "expected_result": "The value is rejected and the existing quantity remains 5.",
+      "needs_clarification": false
+    }
+  ],
+  "subtests": [
+    {"id": "ST-001", "title": "Below minimum", "input": 0, "expected_result": "The value is rejected and the existing quantity remains 5.", "needs_clarification": false},
+    {"id": "ST-002", "title": "Above maximum", "input": 11, "expected_result": "The value is rejected and the existing quantity remains 5.", "needs_clarification": false}
+  ],
+  "postconditions": ["The order-line quantity remains 5."],
+  "cleanup": ["Remove the synthetic order."],
+  "tags": ["order", "quantity", "boundary", "invalid-partition"],
+  "automation_candidate": true,
+  "notes": ["No rejection message is asserted because ORD-002 does not specify one."]
+}

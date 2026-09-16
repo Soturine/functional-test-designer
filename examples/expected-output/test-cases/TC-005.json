@@ -1,0 +1,33 @@
+{
+  "schema_version": "1.0",
+  "id": "TC-005",
+  "title": "Reject edits to a submitted order",
+  "status": "READY",
+  "priority": "HIGH",
+  "type": "FUNCTIONAL",
+  "objective": "Confirm that an invalid edit attempt in SUBMITTED state is rejected without changing order data.",
+  "requirement_refs": ["REQ-003"],
+  "scenario_refs": ["SCN-005"],
+  "source_refs": [{"source": "examples/requirements.md", "reference": "ORD-003"}],
+  "preconditions": [
+    "A synthetic order exists in SUBMITTED state.",
+    "The current order-line quantity is 5."
+  ],
+  "test_data": [
+    {"name": "attempted edit", "description": "Change the existing quantity from 5 to 6."}
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "action": "Attempt to change the submitted order-line quantity from 5 to 6.",
+      "expected_result": "The edit is rejected and the order-line quantity remains 5.",
+      "needs_clarification": false
+    }
+  ],
+  "subtests": [],
+  "postconditions": ["The order remains unchanged in SUBMITTED state."],
+  "cleanup": ["Remove the synthetic order using an approved test-environment procedure."],
+  "tags": ["order", "edit", "invalid-transition"],
+  "automation_candidate": true,
+  "notes": []
+}

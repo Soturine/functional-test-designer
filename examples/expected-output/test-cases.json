@@ -1,0 +1,71 @@
+{
+  "schema_version": "1.0",
+  "generated_at": "2026-09-16T12:00:00Z",
+  "sources": [
+    "examples/requirements.md"
+  ],
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "statement": "A signed-in customer with ORDER_EDIT can create an order that receives a visible reference and starts in DRAFT state.",
+      "status": "TESTABLE",
+      "source_refs": [{"source": "examples/requirements.md", "reference": "ORD-001"}]
+    },
+    {
+      "id": "REQ-002",
+      "statement": "A DRAFT order line accepts integer quantities from 1 through 10 and rejects values outside that range without changing the existing quantity.",
+      "status": "TESTABLE",
+      "source_refs": [{"source": "examples/requirements.md", "reference": "ORD-002"}]
+    },
+    {
+      "id": "REQ-003",
+      "statement": "Submitting a DRAFT order changes it to SUBMITTED, after which edits are rejected without changing order data.",
+      "status": "TESTABLE",
+      "source_refs": [{"source": "examples/requirements.md", "reference": "ORD-003"}]
+    },
+    {
+      "id": "REQ-004",
+      "statement": "A signed-in customer without ORDER_EDIT cannot create or edit orders, and denied attempts do not change order data.",
+      "status": "TESTABLE",
+      "source_refs": [{"source": "examples/requirements.md", "reference": "ORD-004"}]
+    },
+    {
+      "id": "REQ-005",
+      "statement": "A customer can cancel an order before invoicing.",
+      "status": "NEEDS_CLARIFICATION",
+      "source_refs": [{"source": "examples/requirements.md", "reference": "ORD-005"}]
+    },
+    {
+      "id": "REQ-006",
+      "statement": "When billing is unavailable during submission, submission does not complete and retry is available.",
+      "status": "NEEDS_CLARIFICATION",
+      "source_refs": [{"source": "examples/requirements.md", "reference": "ORD-006"}]
+    },
+    {
+      "id": "REQ-007",
+      "statement": "Orders should be processed quickly.",
+      "status": "NEEDS_CLARIFICATION",
+      "source_refs": [{"source": "examples/requirements.md", "reference": "ORD-007"}]
+    }
+  ],
+  "scenarios": [
+    {"id": "SCN-001", "title": "Create a draft order", "type": "HAPPY_PATH", "requirement_refs": ["REQ-001"]},
+    {"id": "SCN-002", "title": "Accept valid quantity boundaries", "type": "BOUNDARY", "requirement_refs": ["REQ-002"]},
+    {"id": "SCN-003", "title": "Reject invalid quantity boundaries", "type": "BOUNDARY", "requirement_refs": ["REQ-002"]},
+    {"id": "SCN-004", "title": "Submit a draft order", "type": "STATE_TRANSITION", "requirement_refs": ["REQ-003"]},
+    {"id": "SCN-005", "title": "Reject edits to a submitted order", "type": "STATE_TRANSITION", "requirement_refs": ["REQ-003"]},
+    {"id": "SCN-006", "title": "Deny order changes without permission", "type": "PERMISSION", "requirement_refs": ["REQ-004"]},
+    {"id": "SCN-007", "title": "Cancel before invoicing", "type": "HAPPY_PATH", "requirement_refs": ["REQ-005"]},
+    {"id": "SCN-008", "title": "Retry after billing unavailability", "type": "RECOVERY", "requirement_refs": ["REQ-006"]}
+  ],
+  "test_cases": [
+    {"id": "TC-001", "title": "Create a draft order", "status": "READY", "requirement_refs": ["REQ-001"], "scenario_refs": ["SCN-001"], "file": "test-cases/TC-001.json"},
+    {"id": "TC-002", "title": "Accept valid quantity boundaries", "status": "READY", "requirement_refs": ["REQ-002"], "scenario_refs": ["SCN-002"], "file": "test-cases/TC-002.json"},
+    {"id": "TC-003", "title": "Reject invalid quantity boundaries", "status": "READY", "requirement_refs": ["REQ-002"], "scenario_refs": ["SCN-003"], "file": "test-cases/TC-003.json"},
+    {"id": "TC-004", "title": "Submit a draft order", "status": "READY", "requirement_refs": ["REQ-003"], "scenario_refs": ["SCN-004"], "file": "test-cases/TC-004.json"},
+    {"id": "TC-005", "title": "Reject edits to a submitted order", "status": "READY", "requirement_refs": ["REQ-003"], "scenario_refs": ["SCN-005"], "file": "test-cases/TC-005.json"},
+    {"id": "TC-006", "title": "Deny order operations without permission", "status": "READY", "requirement_refs": ["REQ-004"], "scenario_refs": ["SCN-006"], "file": "test-cases/TC-006.json"},
+    {"id": "TC-007", "title": "Cancel an order before invoicing", "status": "BLOCKED", "requirement_refs": ["REQ-005"], "scenario_refs": ["SCN-007"], "file": "test-cases/TC-007.json"},
+    {"id": "TC-008", "title": "Handle billing unavailability during submission", "status": "NEEDS_REVIEW", "requirement_refs": ["REQ-006"], "scenario_refs": ["SCN-008"], "file": "test-cases/TC-008.json"}
+  ]
+}
