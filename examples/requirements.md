@@ -34,3 +34,6 @@ Orders should be processed quickly.
 
 No measurable time limit, percentile, load, or start/end points are defined.
 
+## ORD-008 - Finalize a submitted order
+
+A customer can finalize an order in `SUBMITTED` state. Successful finalization changes the state to `FINALIZED` and shows a visible confirmation.

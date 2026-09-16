@@ -50,7 +50,7 @@ class RendererTests(unittest.TestCase):
         self.assertIn('href="test-cases-md/TC-001.md"', report)
         self.assertIn('href="test-cases/TC-010.json"', report)
         self.assertIn('href="test-cases-md/TC-010.md"', report)
-        self.assertEqual(10, report.count('class="tc-card"'))
+        self.assertEqual(11, report.count('class="tc-card"'))
         self.assertNotIn("https://", report)
         self.assertNotIn("<script src=", report)
 

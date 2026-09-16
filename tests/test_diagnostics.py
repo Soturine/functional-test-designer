@@ -71,8 +71,8 @@ class DiagnosticsTests(unittest.TestCase):
         self.assertEqual(0, document["scope_proof"]["files_opened_outside_scope"])
         self.assertEqual(0, document["scope_proof"]["source_rereads"])
         self.assertFalse(document["scope_proof"]["scope_violation"])
-        self.assertEqual(10, document["totals"]["test_cases"])
-        self.assertEqual(10, document["totals"]["markdown_files"])
+        self.assertEqual(11, document["totals"]["test_cases"])
+        self.assertEqual(11, document["totals"]["markdown_files"])
         self.assertEqual([], VALIDATOR.validate(self.output))
 
     def test_v12_stage_order_has_audit_deduplication_and_markdown(self) -> None:

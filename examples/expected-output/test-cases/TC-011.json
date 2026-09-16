@@ -1,0 +1,25 @@
+{
+  "schema_version": "1.2",
+  "id": "TC-011",
+  "title": "Finalize a submitted order",
+  "status": "READY",
+  "priority": "HIGH",
+  "type": "FUNCTIONAL",
+  "objective": "Confirm that finalization reaches FINALIZED state and provides the required visible confirmation.",
+  "requirement_refs": ["REQ-008"],
+  "scenario_refs": ["SCN-011"],
+  "coverage_point_refs": ["CP-023", "CP-024"],
+  "source_refs": [
+    {"source": "examples/requirements.md", "reference": "ORD-008"},
+    {"source": "examples/selected-source/order_service.py", "reference": "finalize_order"}
+  ],
+  "preconditions": ["A synthetic order exists in SUBMITTED state."],
+  "test_data": [{"name": "submitted order", "description": "A synthetic order currently shown in SUBMITTED state."}],
+  "steps": [
+    {"step": 1, "action": "Finalize the SUBMITTED order.", "expected_result": "The order state changes to FINALIZED and a visible confirmation is shown.", "needs_clarification": false}
+  ],
+  "postconditions": ["The synthetic order is in FINALIZED state."],
+  "cleanup": ["Remove the synthetic order using an approved test-environment procedure."],
+  "tags": ["order", "finalize", "state-transition", "implementation-gap"],
+  "notes": ["Selected implementation evidence changes the state but does not expose the visible confirmation required by ORD-008."]
+}

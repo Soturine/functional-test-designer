@@ -60,6 +60,16 @@ class ValidatorTests(unittest.TestCase):
         self.assertTrue(any("diverges" in note for note in case["notes"]))
         self.assertEqual(1, len(case["steps"]))
 
+    def test_selected_code_gap_has_one_new_independent_case(self) -> None:
+        index = self.read("test-cases.json")
+        case = self.read("test-cases/TC-011.json")
+        finding = next(item for item in index["findings"] if item["id"] == "FND-002")
+
+        self.assertEqual("COVERAGE_GAP", finding["type"])
+        self.assertEqual(["CP-023", "CP-024"], case["coverage_point_refs"])
+        self.assertIn("FINALIZED", case["steps"][0]["expected_result"])
+        self.assertIn("visible confirmation", case["steps"][0]["expected_result"])
+
     def test_test_data_is_local_to_each_case(self) -> None:
         index = self.read("test-cases.json")
         cases = [self.read(entry["file"]) for entry in index["test_cases"]]
@@ -86,6 +96,7 @@ class ValidatorTests(unittest.TestCase):
         self.assertEqual(3, len(by_requirement["REQ-001"]))
         self.assertEqual(4, len(by_requirement["REQ-004"]))
         self.assertEqual(3, len(by_requirement["REQ-006"]))
+        self.assertEqual(2, len(by_requirement["REQ-008"]))
 
     def test_duplicate_requirement_id_fails(self) -> None:
         index = self.read("test-cases.json")

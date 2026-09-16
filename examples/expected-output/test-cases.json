@@ -47,6 +47,12 @@
       "statement": "Orders should be processed quickly.",
       "status": "NEEDS_CLARIFICATION",
       "source_refs": [{"source": "examples/requirements.md", "reference": "ORD-007"}]
+    },
+    {
+      "id": "REQ-008",
+      "statement": "Finalizing a SUBMITTED order changes it to FINALIZED and shows a visible confirmation.",
+      "status": "TESTABLE",
+      "source_refs": [{"source": "examples/requirements.md", "reference": "ORD-008"}]
     }
   ],
   "findings": [
@@ -58,6 +64,16 @@
       "source_refs": [
         {"source": "examples/requirements.md", "reference": "ORD-003"},
         {"source": "examples/selected-source/order_service.py", "reference": "submit_order"}
+      ]
+    },
+    {
+      "id": "FND-002",
+      "type": "COVERAGE_GAP",
+      "statement": "The selected implementation finalizes state but provides no evidence of the visible confirmation required by the functional authority.",
+      "requirement_refs": ["REQ-008"],
+      "source_refs": [
+        {"source": "examples/requirements.md", "reference": "ORD-008"},
+        {"source": "examples/selected-source/order_service.py", "reference": "finalize_order"}
       ]
     }
   ],
@@ -83,7 +99,9 @@
     {"id": "CP-019", "requirement_ref": "REQ-006", "statement": "Submission does not complete when billing is unavailable.", "source_refs": [{"source": "examples/requirements.md", "reference": "ORD-006"}], "disposition": "TEST_CASE", "target_refs": ["TC-010"]},
     {"id": "CP-020", "requirement_ref": "REQ-006", "statement": "A retry action is available after billing unavailability.", "source_refs": [{"source": "examples/requirements.md", "reference": "ORD-006"}], "disposition": "TEST_CASE", "target_refs": ["TC-010"]},
     {"id": "CP-021", "requirement_ref": "REQ-006", "statement": "The order state and retained data after billing failure are undefined.", "source_refs": [{"source": "examples/requirements.md", "reference": "ORD-006"}], "disposition": "QUESTION", "target_refs": ["Q-002"]},
-    {"id": "CP-022", "requirement_ref": "REQ-007", "statement": "The required processing speed has no measurable target.", "source_refs": [{"source": "examples/requirements.md", "reference": "ORD-007"}], "disposition": "QUESTION", "target_refs": ["Q-003"]}
+    {"id": "CP-022", "requirement_ref": "REQ-007", "statement": "The required processing speed has no measurable target.", "source_refs": [{"source": "examples/requirements.md", "reference": "ORD-007"}], "disposition": "QUESTION", "target_refs": ["Q-003"]},
+    {"id": "CP-023", "requirement_ref": "REQ-008", "statement": "Finalizing a SUBMITTED order changes its state to FINALIZED.", "source_refs": [{"source": "examples/requirements.md", "reference": "ORD-008"}, {"source": "examples/selected-source/order_service.py", "reference": "finalize_order sets FINALIZED"}], "disposition": "TEST_CASE", "target_refs": ["TC-011"]},
+    {"id": "CP-024", "requirement_ref": "REQ-008", "statement": "Successful finalization shows a visible confirmation.", "source_refs": [{"source": "examples/requirements.md", "reference": "ORD-008"}, {"source": "examples/selected-source/order_service.py", "reference": "finalize_order has no confirmation evidence"}], "disposition": "TEST_CASE", "target_refs": ["TC-011"]}
   ],
   "scenarios": [
     {"id": "SCN-001", "title": "Create a draft order", "type": "HAPPY_PATH", "requirement_refs": ["REQ-001"]},
@@ -95,7 +113,8 @@
     {"id": "SCN-007", "title": "Reject edits to a submitted order", "type": "STATE_TRANSITION", "requirement_refs": ["REQ-003"]},
     {"id": "SCN-008", "title": "Deny creation without permission", "type": "PERMISSION", "requirement_refs": ["REQ-004"]},
     {"id": "SCN-009", "title": "Deny editing without permission", "type": "PERMISSION", "requirement_refs": ["REQ-004"]},
-    {"id": "SCN-010", "title": "Retry after billing unavailability", "type": "RECOVERY", "requirement_refs": ["REQ-006"]}
+    {"id": "SCN-010", "title": "Retry after billing unavailability", "type": "RECOVERY", "requirement_refs": ["REQ-006"]},
+    {"id": "SCN-011", "title": "Finalize a submitted order", "type": "STATE_TRANSITION", "requirement_refs": ["REQ-008"]}
   ],
   "test_cases": [
     {"id": "TC-001", "title": "Create a draft order", "status": "READY", "requirement_refs": ["REQ-001"], "scenario_refs": ["SCN-001"], "coverage_point_refs": ["CP-001", "CP-002", "CP-003"], "file": "test-cases/TC-001.json", "markdown_file": "test-cases-md/TC-001.md"},
@@ -107,6 +126,7 @@
     {"id": "TC-007", "title": "Reject edits to a submitted order", "status": "READY", "requirement_refs": ["REQ-003"], "scenario_refs": ["SCN-007"], "coverage_point_refs": ["CP-012", "CP-013"], "file": "test-cases/TC-007.json", "markdown_file": "test-cases-md/TC-007.md"},
     {"id": "TC-008", "title": "Deny order creation without permission", "status": "READY", "requirement_refs": ["REQ-004"], "scenario_refs": ["SCN-008"], "coverage_point_refs": ["CP-014", "CP-015"], "file": "test-cases/TC-008.json", "markdown_file": "test-cases-md/TC-008.md"},
     {"id": "TC-009", "title": "Deny order editing without permission", "status": "READY", "requirement_refs": ["REQ-004"], "scenario_refs": ["SCN-009"], "coverage_point_refs": ["CP-016", "CP-017"], "file": "test-cases/TC-009.json", "markdown_file": "test-cases-md/TC-009.md"},
-    {"id": "TC-010", "title": "Handle billing unavailability during submission", "status": "NEEDS_REVIEW", "requirement_refs": ["REQ-006"], "scenario_refs": ["SCN-010"], "coverage_point_refs": ["CP-019", "CP-020"], "file": "test-cases/TC-010.json", "markdown_file": "test-cases-md/TC-010.md"}
+    {"id": "TC-010", "title": "Handle billing unavailability during submission", "status": "NEEDS_REVIEW", "requirement_refs": ["REQ-006"], "scenario_refs": ["SCN-010"], "coverage_point_refs": ["CP-019", "CP-020"], "file": "test-cases/TC-010.json", "markdown_file": "test-cases-md/TC-010.md"},
+    {"id": "TC-011", "title": "Finalize a submitted order", "status": "READY", "requirement_refs": ["REQ-008"], "scenario_refs": ["SCN-011"], "coverage_point_refs": ["CP-023", "CP-024"], "file": "test-cases/TC-011.json", "markdown_file": "test-cases-md/TC-011.md"}
   ]
 }
