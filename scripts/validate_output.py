@@ -284,6 +284,22 @@ def validate(output_dir: Path) -> list[str]:
         if isinstance(scenario_id, str):
             scenario_requirements[scenario_id] = string_set(refs)
 
+    scenario_targets: Counter[str] = Counter()
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        tc_id = entry.get("id", "test case")
+        refs = string_set(entry.get("scenario_refs", []))
+        if len(refs) != 1:
+            errors.append(f"{tc_id} must reference exactly one independent scenario")
+        scenario_targets.update(refs)
+    for scenario_id in sorted(scenario_ids):
+        target_count = scenario_targets[scenario_id]
+        if target_count == 0:
+            errors.append(f"{scenario_id} is not materialized as a test case")
+        elif target_count > 1:
+            errors.append(f"{scenario_id} is reused by {target_count} test cases; create independent scenarios")
+
     questioned_case_ids: set[str] = set()
     blocking_case_ids: set[str] = set()
     for question in questions:

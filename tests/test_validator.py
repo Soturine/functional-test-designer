@@ -118,6 +118,31 @@ class ValidatorTests(unittest.TestCase):
 
         self.assertTrue(any("duplicate scenario remains after early deduplication" in error for error in errors))
 
+    def test_one_test_case_cannot_hide_multiple_independent_scenarios(self) -> None:
+        index = self.read("test-cases.json")
+        case = self.read("test-cases/TC-001.json")
+        index["test_cases"][0]["scenario_refs"].append("SCN-002")
+        case["scenario_refs"].append("SCN-002")
+        self.write("test-cases.json", index)
+        self.write("test-cases/TC-001.json", case)
+
+        errors = VALIDATOR.validate(self.output)
+
+        self.assertTrue(any("TC-001 must reference exactly one independent scenario" in error for error in errors))
+
+    def test_independent_scenario_cannot_be_reused_by_another_case(self) -> None:
+        index = self.read("test-cases.json")
+        case = self.read("test-cases/TC-002.json")
+        index["test_cases"][1]["scenario_refs"] = ["SCN-001"]
+        case["scenario_refs"] = ["SCN-001"]
+        self.write("test-cases.json", index)
+        self.write("test-cases/TC-002.json", case)
+
+        errors = VALIDATOR.validate(self.output)
+
+        self.assertTrue(any("SCN-001 is reused by 2 test cases" in error for error in errors))
+        self.assertTrue(any("SCN-002 is not materialized" in error for error in errors))
+
     def test_missing_case_file_fails(self) -> None:
         (self.output / "test-cases" / "TC-001.json").unlink()
 

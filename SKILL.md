@@ -57,18 +57,20 @@ Extract actors, rules, permissions, states, inputs, outputs, constraints, accept
 
 Decompose normative behavior into stable `CP-001`, `CP-002`, ... Coverage Points. A Coverage Point controls behavioral coverage; it does not automatically create a Test Case.
 
-After the initial extraction, make a short second pass over the internal evidence map. Confirm that every normative clause, bullet, acceptance criterion, flow step, alternate, exception, postcondition, transition, restriction, observable outcome, explicit side effect, cancellation, reversal, finalization, permission, boundary, message, and state has a Coverage Point.
+After the initial extraction, make a short second pass over each authorized normative passage in the internal evidence map. For every independent clause or observable effect, ask whether a Coverage Point exists. Inspect effects joined by `and`, `or`, `also`, `when`, `after`, `on finalization`, `on cancellation`, and `on reversal`, plus normative verbs such as must, prevents, releases, records, alerts, keeps, removes, and updates. Confirm that every normative clause, bullet, acceptance criterion, flow step, alternate, exception, fallback, postcondition, transition, restriction, observable outcome, explicit side effect, permission, boundary, message, and state has a Coverage Point.
 
 - Merge duplicates that describe the same behavior and retain all relevant `source_refs`.
 - Keep separate points for effects that can fail independently.
+- Expand explicit alternatives separately: finalization, reversal, and cancellation do not cover one another.
 - Route known behavior toward a TC and ambiguous behavior toward a Question.
+- When an event has a partial oracle, preserve known effects as ordinary coverage and ask only about the missing effects.
 - Do not create a second coverage artifact or another CP layer.
 
 Every Coverage Point has exactly one disposition: `TEST_CASE`, `QUESTION`, or an explicitly justified `OUT_OF_SCOPE`. Never use `OUT_OF_SCOPE` to hide a gap.
 
 ### 4. Evaluate Testability and Questions
 
-Check actor, starting state, trigger, normative rule, and observable result. A missing oracle becomes a focused Question. Create a `BLOCKED` case only when useful executable structure remains but the missing decision prevents a correct Pass/Fail result.
+Check actor, starting state, trigger, normative rule, and observable result. A missing oracle becomes a focused Question that asks only for absent information and does not repeat known outcomes. Create a `BLOCKED` case only when useful executable structure remains but the missing decision prevents a correct Pass/Fail result.
 
 ### 5. Apply Test Design Selectively
 
@@ -78,11 +80,13 @@ Use techniques to improve coverage and reduce redundant combinations. Pairwise s
 
 ### 6. Design and Deduplicate Scenarios Early
 
-Create candidate scenarios, then remove semantic duplicates before materializing TCs. Keep separate scenarios when behavior, risk, setup, flow, oracle, or evidence can fail independently. Assign stable `SCN-001`, `SCN-002`, ... IDs only after deduplication.
+Create atomic candidate scenarios from atomic Coverage Points, then remove only genuine semantic duplicates before materializing TCs. Two candidates are duplicates only when behavior, relevant setup, essential action, expected result, oracle, and required evidence are all the same. Keep them separate when any difference changes an independent Pass/Fail result, including actor, permission, input, boundary, state, transition, error, recovery, retry, finalization, reversal, or cancellation. Assign stable `SCN-001`, `SCN-002`, ... IDs only after deduplication. Do not optimize for a lower TC count.
 
 ### 7. Generate Independent Test Cases
 
-Assign stable `TC-001`, `TC-002`, ... IDs. Independent scenario means independent TC. Use multiple steps only for one coherent flow. There are no `subtests` and no `automation_candidate`.
+Assign stable `TC-001`, `TC-002`, ... IDs. Independent scenario means independent TC. Before adding an action as another step, ask: "Can this action be executed and evaluated without the previous steps in this TC?" If yes and it has its own verifiable result, create another TC. Keep multiple steps only when later actions depend on state produced by earlier actions in one sequential flow.
+
+Create another TC when a condition can fail alone, produce its own bug or Pass/Fail, require separate evidence, use different setup, actor, permission, input, boundary, transition, failure, or oracle, or be executed separately in a Test Runner. Never hide independent unauthenticated, invalid-input, not-found, permission, boundary, or failure scenarios as steps of one TC. There are no `subtests` and no `automation_candidate`.
 
 Generate test data lazily with the TC that uses it; do not create a global test-data phase or catalog. Additional selected context may add setup or steps only when that evidence confirms a real executable flow.
 
@@ -122,7 +126,7 @@ The Markdown renderer reads validated JSON and changes no JSON. The HTML rendere
 
 Report selected scope roots, resolved files, files opened outside scope, source rereads, temporary files, requirements, Coverage Points, findings, scenarios, TCs, steps, statuses, Questions, Markdown count, validator result, and HTML result. Files opened outside scope must be zero; any nonzero value is a scope violation.
 
-When diagnostics are explicitly requested, follow [references/diagnostics.md](references/diagnostics.md). Record real observations only and no sensitive content.
+When diagnostics are explicitly requested, follow [references/diagnostics.md](references/diagnostics.md). Begin each stage before its reasoning starts, materialize its result while the timer is active, and end it afterward. Record real observations only and no sensitive content.
 
 ## Completion Check
 

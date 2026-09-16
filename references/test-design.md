@@ -16,7 +16,7 @@ Test Design techniques are reasoning tools, not output multiplication tools. Ana
 
 ## Independence Rule
 
-Create another TC when a condition can fail independently, create an independent bug, require separate evidence, or use different setup or oracle. Use multiple steps in one TC when the steps form one coherent business flow.
+Create another TC when a condition can fail independently, create an independent bug, require separate evidence, or use different setup or oracle. Before adding a step, ask whether it can be executed and evaluated without earlier steps. If it can and owns a verifiable result, it is an independent TC. Use multiple steps only when they form one sequential business flow and later steps depend on state created earlier.
 
 There are no subtests. Steps are actions and observations within the Test Case, not hidden test variations.
 
@@ -37,7 +37,7 @@ Use pairwise to reduce a Cartesian product, not to combine independent results i
 
 ## Coverage and Deduplication
 
-Coverage Points retain every normative behavior even when several points map to one coherent TC. Deduplicate only semantically equivalent cases. Do not merge different permissions, transitions, bounds, recovery paths, or oracles merely to minimize the case count.
+Coverage Points retain every normative behavior even when several points map to one coherent TC. Deduplicate only when behavior, setup, essential action, expected result, oracle, and evidence are all equivalent. Do not merge different permissions, actors, inputs, transitions, bounds, failure modes, recovery paths, or oracles merely to minimize the case count. Deduplication removes duplicates; it does not compress independent Pass/Fail results.
 
 ## Guardrails
 
