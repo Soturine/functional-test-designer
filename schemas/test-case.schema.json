@@ -14,23 +14,22 @@
     "objective",
     "requirement_refs",
     "scenario_refs",
+    "coverage_point_refs",
     "source_refs",
     "preconditions",
     "test_data",
     "steps",
-    "subtests",
     "postconditions",
     "cleanup",
     "tags",
-    "automation_candidate",
     "notes"
   ],
   "properties": {
-    "schema_version": {"const": "1.0"},
+    "schema_version": {"const": "1.1"},
     "id": {"type": "string", "pattern": "^TC-[0-9]{3,}$"},
     "title": {"type": "string", "minLength": 1},
     "status": {"enum": ["READY", "NEEDS_REVIEW", "BLOCKED"]},
-    "priority": {"enum": ["HIGH", "MEDIUM", "LOW"]},
+    "priority": {"enum": ["CRITICAL", "HIGH", "MEDIUM", "LOW"]},
     "type": {"const": "FUNCTIONAL"},
     "objective": {"type": "string", "minLength": 1},
     "requirement_refs": {
@@ -45,6 +44,12 @@
       "uniqueItems": true,
       "items": {"type": "string", "pattern": "^SCN-[0-9]{3,}$"}
     },
+    "coverage_point_refs": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {"type": "string", "pattern": "^CP-[0-9]{3,}$"}
+    },
     "source_refs": {
       "type": "array",
       "minItems": 1,
@@ -52,23 +57,11 @@
       "items": {"$ref": "#/$defs/sourceRef"}
     },
     "preconditions": {"$ref": "#/$defs/stringList"},
-    "test_data": {
-      "type": "array",
-      "items": {"$ref": "#/$defs/testData"}
-    },
-    "steps": {
-      "type": "array",
-      "minItems": 1,
-      "items": {"$ref": "#/$defs/step"}
-    },
-    "subtests": {
-      "type": "array",
-      "items": {"$ref": "#/$defs/subtest"}
-    },
+    "test_data": {"type": "array", "items": {"$ref": "#/$defs/testData"}},
+    "steps": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/step"}},
     "postconditions": {"$ref": "#/$defs/stringList"},
     "cleanup": {"$ref": "#/$defs/stringList"},
     "tags": {"$ref": "#/$defs/uniqueStringList"},
-    "automation_candidate": {"type": "boolean"},
     "notes": {"$ref": "#/$defs/stringList"}
   },
   "allOf": [
@@ -76,25 +69,13 @@
       "if": {"properties": {"status": {"const": "READY"}}, "required": ["status"]},
       "then": {
         "properties": {
-          "steps": {
-            "items": {
-              "properties": {"needs_clarification": {"const": false}}
-            }
-          },
-          "subtests": {
-            "items": {
-              "properties": {"needs_clarification": {"const": false}}
-            }
-          }
+          "steps": {"items": {"properties": {"needs_clarification": {"const": false}}}}
         }
       }
     }
   ],
   "$defs": {
-    "stringList": {
-      "type": "array",
-      "items": {"type": "string", "minLength": 1}
-    },
+    "stringList": {"type": "array", "items": {"type": "string", "minLength": 1}},
     "uniqueStringList": {
       "type": "array",
       "uniqueItems": true,
@@ -125,24 +106,6 @@
       "properties": {
         "step": {"type": "integer", "minimum": 1},
         "action": {"type": "string", "minLength": 1},
-        "expected_result": {"type": ["string", "null"], "minLength": 1},
-        "needs_clarification": {"type": "boolean"}
-      },
-      "allOf": [
-        {
-          "if": {"properties": {"expected_result": {"type": "null"}}, "required": ["expected_result"]},
-          "then": {"properties": {"needs_clarification": {"const": true}}}
-        }
-      ]
-    },
-    "subtest": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["id", "title", "input", "expected_result", "needs_clarification"],
-      "properties": {
-        "id": {"type": "string", "pattern": "^ST-[0-9]{3,}$"},
-        "title": {"type": "string", "minLength": 1},
-        "input": {},
         "expected_result": {"type": ["string", "null"], "minLength": 1},
         "needs_clarification": {"type": "boolean"}
       },

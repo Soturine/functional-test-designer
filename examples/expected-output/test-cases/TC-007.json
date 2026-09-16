@@ -1,32 +1,22 @@
 {
-  "schema_version": "1.0",
+  "schema_version": "1.1",
   "id": "TC-007",
-  "title": "Cancel an order before invoicing",
-  "status": "BLOCKED",
-  "priority": "HIGH",
+  "title": "Reject edits to a submitted order",
+  "status": "READY",
+  "priority": "MEDIUM",
   "type": "FUNCTIONAL",
-  "objective": "Confirm that a customer can cancel an order before invoicing once the observable success outcome is defined.",
-  "requirement_refs": ["REQ-005"],
+  "objective": "Confirm that an edit attempt in SUBMITTED state is rejected without changing order data.",
+  "requirement_refs": ["REQ-003"],
   "scenario_refs": ["SCN-007"],
-  "source_refs": [{"source": "examples/requirements.md", "reference": "ORD-005"}],
-  "preconditions": [
-    "A synthetic customer has an order that has not been invoiced."
-  ],
-  "test_data": [
-    {"name": "pre-invoice order", "description": "A synthetic order that has not been invoiced."}
-  ],
+  "coverage_point_refs": ["CP-012", "CP-013"],
+  "source_refs": [{"source": "examples/requirements.md", "reference": "ORD-003"}],
+  "preconditions": ["A synthetic order exists in SUBMITTED state with a line quantity of 5."],
+  "test_data": [{"name": "attempted edit", "description": "Change the quantity from 5 to 6."}],
   "steps": [
-    {
-      "step": 1,
-      "action": "Request cancellation of the pre-invoice order.",
-      "expected_result": null,
-      "needs_clarification": true
-    }
+    {"step": 1, "action": "Attempt to change the submitted order-line quantity from 5 to 6.", "expected_result": "The edit is rejected and the order-line quantity remains 5.", "needs_clarification": false}
   ],
-  "subtests": [],
-  "postconditions": [],
-  "cleanup": [],
-  "tags": ["order", "cancellation", "clarification-required"],
-  "automation_candidate": false,
-  "notes": ["No message, status, resulting state, HTTP code, or side effect is asserted because ORD-005 does not define one."]
+  "postconditions": ["The order remains unchanged in SUBMITTED state."],
+  "cleanup": ["Remove the synthetic order using an approved test-environment procedure."],
+  "tags": ["order", "edit", "state-transition", "negative"],
+  "notes": []
 }

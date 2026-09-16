@@ -1,9 +1,9 @@
 {
-  "schema_version": "1.0",
+  "schema_version": "1.1",
   "questions": [
     {
       "id": "Q-001",
-      "related_test_cases": ["TC-007"],
+      "related_test_cases": [],
       "requirement_refs": ["REQ-005"],
       "source_refs": [{"source": "examples/requirements.md", "reference": "ORD-005"}],
       "question": "What observable result and final order state confirm a successful cancellation before invoicing?",
@@ -12,7 +12,7 @@
     },
     {
       "id": "Q-002",
-      "related_test_cases": ["TC-008"],
+      "related_test_cases": ["TC-010"],
       "requirement_refs": ["REQ-006"],
       "source_refs": [{"source": "examples/requirements.md", "reference": "ORD-006"}],
       "question": "What order state and retained data are expected after submission fails because billing is unavailable?",

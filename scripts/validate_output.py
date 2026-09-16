@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate functional-test-designer JSON output and cross-file invariants."""
+"""Validate functional-test-designer V1.1 output and cross-file invariants."""
 
 from __future__ import annotations
 
@@ -60,7 +60,11 @@ def validate_schema(instance: Any, schema_name: str, label: str, errors: list[st
 
 
 def duplicate_values(items: list[dict[str, Any]], field: str) -> list[str]:
-    values = [item.get(field) for item in items if isinstance(item, dict) and item.get(field) is not None]
+    values = [
+        item.get(field)
+        for item in items
+        if isinstance(item, dict) and isinstance(item.get(field), str)
+    ]
     return sorted(value for value, count in Counter(values).items() if count > 1)
 
 
@@ -69,11 +73,13 @@ def check_duplicates(items: list[dict[str, Any]], field: str, label: str, errors
         errors.append(f"duplicate {label}: {value}")
 
 
+def string_set(values: Any) -> set[str]:
+    return {value for value in values if isinstance(value, str)} if isinstance(values, list) else set()
+
+
 def check_refs(values: Any, known: set[str], label: str, owner: str, errors: list[str]) -> None:
-    if not isinstance(values, list):
-        return
-    for value in values:
-        if isinstance(value, str) and value not in known:
+    for value in string_set(values):
+        if value not in known:
             errors.append(f"{owner} references unknown {label}: {value}")
 
 
@@ -86,7 +92,7 @@ def check_source_refs(values: Any, sources: set[str], owner: str, errors: list[s
             errors.append(f"{owner} references source absent from index sources: {source}")
 
 
-def safe_case_path(output_dir: Path, relative: str, owner: str, errors: list[str]) -> Path | None:
+def safe_case_path(output_dir: Path, relative: Any, owner: str, errors: list[str]) -> Path | None:
     if not isinstance(relative, str):
         errors.append(f"{owner} file path must be a string")
         return None
@@ -97,6 +103,71 @@ def safe_case_path(output_dir: Path, relative: str, owner: str, errors: list[str
         errors.append(f"{owner} file path escapes output directory: {relative}")
         return None
     return expected
+
+
+def validate_coverage_points(
+    coverage_points: list[dict[str, Any]],
+    requirements: list[dict[str, Any]],
+    requirement_ids: set[str],
+    entries_by_id: dict[str, dict[str, Any]],
+    questions_by_id: dict[str, dict[str, Any]],
+    sources: set[str],
+    errors: list[str],
+) -> dict[str, dict[str, Any]]:
+    coverage_by_id = {
+        item["id"]: item
+        for item in coverage_points
+        if isinstance(item, dict) and isinstance(item.get("id"), str)
+    }
+    check_duplicates(coverage_points, "id", "coverage point ID", errors)
+
+    covered_requirements: set[str] = set()
+    for coverage_point in coverage_points:
+        if not isinstance(coverage_point, dict):
+            continue
+        cp_id = coverage_point.get("id", "coverage point")
+        requirement_ref = coverage_point.get("requirement_ref")
+        disposition = coverage_point.get("disposition")
+        targets = coverage_point.get("target_refs", [])
+        target_refs = string_set(targets)
+
+        if isinstance(requirement_ref, str):
+            covered_requirements.add(requirement_ref)
+            if requirement_ref not in requirement_ids:
+                errors.append(f"{cp_id} references unknown requirement: {requirement_ref}")
+        check_source_refs(coverage_point.get("source_refs", []), sources, cp_id, errors)
+
+        destination_valid = False
+        if disposition == "TEST_CASE":
+            destination_valid = bool(target_refs) and all(target in entries_by_id for target in target_refs)
+            check_refs(targets, set(entries_by_id), "test case", cp_id, errors)
+            for tc_id in target_refs & set(entries_by_id):
+                if cp_id not in string_set(entries_by_id[tc_id].get("coverage_point_refs", [])):
+                    errors.append(f"{cp_id} targets {tc_id}, but {tc_id} does not reference {cp_id}")
+        elif disposition == "QUESTION":
+            destination_valid = bool(target_refs) and all(target in questions_by_id for target in target_refs)
+            check_refs(targets, set(questions_by_id), "question", cp_id, errors)
+            for question_id in target_refs & set(questions_by_id):
+                question_requirements = string_set(questions_by_id[question_id].get("requirement_refs", []))
+                if isinstance(requirement_ref, str) and requirement_ref not in question_requirements:
+                    errors.append(
+                        f"{cp_id} targets {question_id}, but {question_id} does not reference {requirement_ref}"
+                    )
+        elif disposition == "OUT_OF_SCOPE":
+            reason = coverage_point.get("reason")
+            destination_valid = not target_refs and isinstance(reason, str) and bool(reason.strip())
+
+        if not destination_valid:
+            errors.append(f"{cp_id} has no valid destination")
+
+    for requirement in requirements:
+        if not isinstance(requirement, dict) or requirement.get("status") != "TESTABLE":
+            continue
+        req_id = requirement.get("id")
+        if isinstance(req_id, str) and req_id not in covered_requirements:
+            errors.append(f"{req_id} is TESTABLE but has no coverage point")
+
+    return coverage_by_id
 
 
 def validate(output_dir: Path) -> list[str]:
@@ -110,15 +181,16 @@ def validate(output_dir: Path) -> list[str]:
 
     validate_schema(index, "test-case-index.schema.json", str(index_path), errors)
     validate_schema(questions_doc, "questions.schema.json", str(questions_path), errors)
-
     if not isinstance(index, dict) or not isinstance(questions_doc, dict):
         return errors
 
     requirements = index.get("requirements", [])
+    coverage_points = index.get("coverage_points", [])
     scenarios = index.get("scenarios", [])
     entries = index.get("test_cases", [])
     questions = questions_doc.get("questions", [])
-    if not all(isinstance(value, list) for value in (requirements, scenarios, entries, questions)):
+    collections = (requirements, coverage_points, scenarios, entries, questions)
+    if not all(isinstance(value, list) for value in collections):
         return errors
 
     check_duplicates(requirements, "id", "requirement ID", errors)
@@ -137,65 +209,71 @@ def validate(output_dir: Path) -> list[str]:
             errors.append(f"duplicate question text: {text}")
 
     requirement_ids = {
-        item.get("id") for item in requirements if isinstance(item, dict) and isinstance(item.get("id"), str)
+        item["id"]
+        for item in requirements
+        if isinstance(item, dict) and isinstance(item.get("id"), str)
     }
     scenario_ids = {
-        item.get("id") for item in scenarios if isinstance(item, dict) and isinstance(item.get("id"), str)
+        item["id"]
+        for item in scenarios
+        if isinstance(item, dict) and isinstance(item.get("id"), str)
     }
-    entry_by_id = {
-        item.get("id"): item
+    entries_by_id = {
+        item["id"]: item
         for item in entries
         if isinstance(item, dict) and isinstance(item.get("id"), str)
     }
-    raw_sources = index.get("sources", [])
-    sources = {source for source in raw_sources if isinstance(source, str)} if isinstance(raw_sources, list) else set()
+    questions_by_id = {
+        item["id"]: item
+        for item in questions
+        if isinstance(item, dict) and isinstance(item.get("id"), str)
+    }
+    sources = string_set(index.get("sources", []))
 
     for requirement in requirements:
-        if not isinstance(requirement, dict):
-            continue
-        owner = requirement.get("id", "requirement")
-        check_source_refs(requirement.get("source_refs", []), sources, owner, errors)
+        if isinstance(requirement, dict):
+            check_source_refs(
+                requirement.get("source_refs", []), sources, requirement.get("id", "requirement"), errors
+            )
 
-    mapped_requirements: set[str] = set()
     scenario_requirements: dict[str, set[str]] = {}
     for scenario in scenarios:
         if not isinstance(scenario, dict):
             continue
-        owner = scenario.get("id", "scenario")
+        scenario_id = scenario.get("id", "scenario")
         refs = scenario.get("requirement_refs", [])
-        check_refs(refs, requirement_ids, "requirement", owner, errors)
-        if isinstance(refs, list):
-            known_refs = {ref for ref in refs if isinstance(ref, str)}
-            mapped_requirements.update(known_refs)
-            if isinstance(scenario.get("id"), str):
-                scenario_requirements[scenario["id"]] = known_refs
+        check_refs(refs, requirement_ids, "requirement", scenario_id, errors)
+        if isinstance(scenario_id, str):
+            scenario_requirements[scenario_id] = string_set(refs)
 
-    questioned_requirements: set[str] = set()
     questioned_case_ids: set[str] = set()
     blocking_case_ids: set[str] = set()
     for question in questions:
         if not isinstance(question, dict):
             continue
-        owner = question.get("id", "question")
+        question_id = question.get("id", "question")
         requirement_refs = question.get("requirement_refs", [])
         tc_refs = question.get("related_test_cases", [])
-        check_refs(requirement_refs, requirement_ids, "requirement", owner, errors)
-        check_refs(tc_refs, set(entry_by_id), "test case", owner, errors)
-        check_source_refs(question.get("source_refs", []), sources, owner, errors)
-        if isinstance(requirement_refs, list):
-            questioned_requirements.update(ref for ref in requirement_refs if isinstance(ref, str))
-        if isinstance(tc_refs, list):
-            questioned_case_ids.update(ref for ref in tc_refs if isinstance(ref, str))
+        check_refs(requirement_refs, requirement_ids, "requirement", question_id, errors)
+        check_refs(tc_refs, set(entries_by_id), "test case", question_id, errors)
+        check_source_refs(question.get("source_refs", []), sources, question_id, errors)
+        questioned_case_ids.update(string_set(tc_refs))
         if question.get("blocking"):
-            for tc_id in tc_refs if isinstance(tc_refs, list) else []:
-                if isinstance(tc_id, str):
-                    blocking_case_ids.add(tc_id)
-                entry = entry_by_id.get(tc_id)
-                if entry and entry.get("status") != "BLOCKED":
-                    errors.append(f"{owner} is blocking but {tc_id} status is not BLOCKED")
+            blocking_case_ids.update(string_set(tc_refs))
+            for tc_id in string_set(tc_refs) & set(entries_by_id):
+                if entries_by_id[tc_id].get("status") != "BLOCKED":
+                    errors.append(f"{question_id} is blocking but {tc_id} status is not BLOCKED")
 
-    for req_id in sorted(requirement_ids - mapped_requirements - questioned_requirements):
-        errors.append(f"{req_id} has neither a scenario nor a clarification question")
+    coverage_by_id = validate_coverage_points(
+        coverage_points,
+        requirements,
+        requirement_ids,
+        entries_by_id,
+        questions_by_id,
+        sources,
+        errors,
+    )
+    coverage_ids = set(coverage_by_id)
 
     indexed_files: set[Path] = set()
     for entry in entries:
@@ -219,41 +297,46 @@ def validate(output_dir: Path) -> list[str]:
             continue
         if case.get("id") != tc_id:
             errors.append(f"{tc_id} index ID does not match file ID {case.get('id')!r}")
-        for field in ("title", "status", "requirement_refs", "scenario_refs"):
+        compared_fields = ("title", "status", "requirement_refs", "scenario_refs", "coverage_point_refs")
+        for field in compared_fields:
             if case.get(field) != entry.get(field):
                 errors.append(f"{tc_id} field {field!r} differs between index and case file")
 
-        check_refs(case.get("requirement_refs", []), requirement_ids, "requirement", tc_id, errors)
-        check_refs(case.get("scenario_refs", []), scenario_ids, "scenario", tc_id, errors)
+        case_requirement_refs = string_set(case.get("requirement_refs", []))
+        case_scenario_refs = string_set(case.get("scenario_refs", []))
+        case_coverage_refs = string_set(case.get("coverage_point_refs", []))
+        check_refs(case_requirement_refs, requirement_ids, "requirement", tc_id, errors)
+        check_refs(case_scenario_refs, scenario_ids, "scenario", tc_id, errors)
+        check_refs(case_coverage_refs, coverage_ids, "coverage point", tc_id, errors)
         check_source_refs(case.get("source_refs", []), sources, tc_id, errors)
-        raw_case_requirement_refs = case.get("requirement_refs", [])
-        case_requirement_refs = (
-            {ref for ref in raw_case_requirement_refs if isinstance(ref, str)}
-            if isinstance(raw_case_requirement_refs, list)
-            else set()
-        )
+
         scenario_requirement_refs: set[str] = set()
-        raw_case_scenario_refs = case.get("scenario_refs", [])
-        for scenario_id in raw_case_scenario_refs if isinstance(raw_case_scenario_refs, list) else []:
-            if isinstance(scenario_id, str):
-                scenario_requirement_refs.update(scenario_requirements.get(scenario_id, set()))
+        for scenario_id in case_scenario_refs:
+            scenario_requirement_refs.update(scenario_requirements.get(scenario_id, set()))
         for req_id in sorted(case_requirement_refs - scenario_requirement_refs):
             errors.append(f"{tc_id} requirement {req_id} is not covered by its referenced scenarios")
-        step_numbers = [step.get("step") for step in case.get("steps", []) if isinstance(step, dict)]
+
+        for cp_id in case_coverage_refs & coverage_ids:
+            coverage_point = coverage_by_id[cp_id]
+            if coverage_point.get("disposition") != "TEST_CASE" or tc_id not in string_set(
+                coverage_point.get("target_refs", [])
+            ):
+                errors.append(f"{tc_id} references {cp_id}, but {cp_id} does not target {tc_id}")
+            cp_requirement = coverage_point.get("requirement_ref")
+            if isinstance(cp_requirement, str) and cp_requirement not in case_requirement_refs:
+                errors.append(f"{tc_id} references {cp_id} without requirement {cp_requirement}")
+
+        steps = case.get("steps", [])
+        step_numbers = [step.get("step") for step in steps if isinstance(step, dict)] if isinstance(steps, list) else []
         if step_numbers != list(range(1, len(step_numbers) + 1)):
             errors.append(f"{tc_id} step numbers must be ordered consecutively from 1")
-        check_duplicates(case.get("subtests", []), "id", f"subtest ID in {tc_id}", errors)
-        pending_items = []
-        for field in ("steps", "subtests"):
-            values = case.get(field, [])
-            if isinstance(values, list):
-                pending_items.extend(
-                    item
-                    for item in values
-                    if isinstance(item, dict) and item.get("needs_clarification") is True
-                )
-        if pending_items and tc_id not in questioned_case_ids:
-            errors.append(f"{tc_id} has clarification-pending items but no related question")
+        pending_steps = [
+            step
+            for step in steps
+            if isinstance(step, dict) and step.get("needs_clarification") is True
+        ] if isinstance(steps, list) else []
+        if pending_steps and tc_id not in questioned_case_ids:
+            errors.append(f"{tc_id} has clarification-pending steps but no related question")
         if case.get("status") == "BLOCKED" and tc_id not in blocking_case_ids:
             errors.append(f"{tc_id} is BLOCKED but has no related blocking question")
 

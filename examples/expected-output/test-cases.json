@@ -1,9 +1,7 @@
 {
-  "schema_version": "1.0",
+  "schema_version": "1.1",
   "generated_at": "2026-09-16T12:00:00Z",
-  "sources": [
-    "examples/requirements.md"
-  ],
+  "sources": ["examples/requirements.md"],
   "requirements": [
     {
       "id": "REQ-001",
@@ -48,24 +46,52 @@
       "source_refs": [{"source": "examples/requirements.md", "reference": "ORD-007"}]
     }
   ],
+  "coverage_points": [
+    {"id": "CP-001", "requirement_ref": "REQ-001", "statement": "An authorized signed-in customer can create an order.", "source_refs": [{"source": "examples/requirements.md", "reference": "ORD-001"}], "disposition": "TEST_CASE", "target_refs": ["TC-001"]},
+    {"id": "CP-002", "requirement_ref": "REQ-001", "statement": "Successful order creation provides a visible order reference.", "source_refs": [{"source": "examples/requirements.md", "reference": "ORD-001"}], "disposition": "TEST_CASE", "target_refs": ["TC-001"]},
+    {"id": "CP-003", "requirement_ref": "REQ-001", "statement": "A created order is shown in DRAFT state.", "source_refs": [{"source": "examples/requirements.md", "reference": "ORD-001"}], "disposition": "TEST_CASE", "target_refs": ["TC-001"]},
+    {"id": "CP-004", "requirement_ref": "REQ-002", "statement": "The minimum quantity 1 is accepted.", "source_refs": [{"source": "examples/requirements.md", "reference": "ORD-002"}], "disposition": "TEST_CASE", "target_refs": ["TC-002"]},
+    {"id": "CP-005", "requirement_ref": "REQ-002", "statement": "The maximum quantity 10 is accepted.", "source_refs": [{"source": "examples/requirements.md", "reference": "ORD-002"}], "disposition": "TEST_CASE", "target_refs": ["TC-003"]},
+    {"id": "CP-006", "requirement_ref": "REQ-002", "statement": "A quantity below the minimum is rejected.", "source_refs": [{"source": "examples/requirements.md", "reference": "ORD-002"}], "disposition": "TEST_CASE", "target_refs": ["TC-004"]},
+    {"id": "CP-007", "requirement_ref": "REQ-002", "statement": "After a below-minimum rejection, the existing quantity remains unchanged.", "source_refs": [{"source": "examples/requirements.md", "reference": "ORD-002"}], "disposition": "TEST_CASE", "target_refs": ["TC-004"]},
+    {"id": "CP-008", "requirement_ref": "REQ-002", "statement": "A quantity above the maximum is rejected.", "source_refs": [{"source": "examples/requirements.md", "reference": "ORD-002"}], "disposition": "TEST_CASE", "target_refs": ["TC-005"]},
+    {"id": "CP-009", "requirement_ref": "REQ-002", "statement": "After an above-maximum rejection, the existing quantity remains unchanged.", "source_refs": [{"source": "examples/requirements.md", "reference": "ORD-002"}], "disposition": "TEST_CASE", "target_refs": ["TC-005"]},
+    {"id": "CP-010", "requirement_ref": "REQ-003", "statement": "A DRAFT order can be submitted.", "source_refs": [{"source": "examples/requirements.md", "reference": "ORD-003"}], "disposition": "TEST_CASE", "target_refs": ["TC-006"]},
+    {"id": "CP-011", "requirement_ref": "REQ-003", "statement": "Successful submission changes the order state to SUBMITTED.", "source_refs": [{"source": "examples/requirements.md", "reference": "ORD-003"}], "disposition": "TEST_CASE", "target_refs": ["TC-006"]},
+    {"id": "CP-012", "requirement_ref": "REQ-003", "statement": "An edit to a SUBMITTED order is rejected.", "source_refs": [{"source": "examples/requirements.md", "reference": "ORD-003"}], "disposition": "TEST_CASE", "target_refs": ["TC-007"]},
+    {"id": "CP-013", "requirement_ref": "REQ-003", "statement": "A rejected edit leaves submitted order data unchanged.", "source_refs": [{"source": "examples/requirements.md", "reference": "ORD-003"}], "disposition": "TEST_CASE", "target_refs": ["TC-007"]},
+    {"id": "CP-014", "requirement_ref": "REQ-004", "statement": "Order creation without ORDER_EDIT is denied.", "source_refs": [{"source": "examples/requirements.md", "reference": "ORD-004"}], "disposition": "TEST_CASE", "target_refs": ["TC-008"]},
+    {"id": "CP-015", "requirement_ref": "REQ-004", "statement": "A denied create attempt creates no order data.", "source_refs": [{"source": "examples/requirements.md", "reference": "ORD-004"}], "disposition": "TEST_CASE", "target_refs": ["TC-008"]},
+    {"id": "CP-016", "requirement_ref": "REQ-004", "statement": "Order editing without ORDER_EDIT is denied.", "source_refs": [{"source": "examples/requirements.md", "reference": "ORD-004"}], "disposition": "TEST_CASE", "target_refs": ["TC-009"]},
+    {"id": "CP-017", "requirement_ref": "REQ-004", "statement": "A denied edit attempt leaves order data unchanged.", "source_refs": [{"source": "examples/requirements.md", "reference": "ORD-004"}], "disposition": "TEST_CASE", "target_refs": ["TC-009"]},
+    {"id": "CP-018", "requirement_ref": "REQ-005", "statement": "A customer can cancel an order before invoicing, but the observable success result is undefined.", "source_refs": [{"source": "examples/requirements.md", "reference": "ORD-005"}], "disposition": "QUESTION", "target_refs": ["Q-001"]},
+    {"id": "CP-019", "requirement_ref": "REQ-006", "statement": "Submission does not complete when billing is unavailable.", "source_refs": [{"source": "examples/requirements.md", "reference": "ORD-006"}], "disposition": "TEST_CASE", "target_refs": ["TC-010"]},
+    {"id": "CP-020", "requirement_ref": "REQ-006", "statement": "A retry action is available after billing unavailability.", "source_refs": [{"source": "examples/requirements.md", "reference": "ORD-006"}], "disposition": "TEST_CASE", "target_refs": ["TC-010"]},
+    {"id": "CP-021", "requirement_ref": "REQ-006", "statement": "The order state and retained data after billing failure are undefined.", "source_refs": [{"source": "examples/requirements.md", "reference": "ORD-006"}], "disposition": "QUESTION", "target_refs": ["Q-002"]},
+    {"id": "CP-022", "requirement_ref": "REQ-007", "statement": "The required processing speed has no measurable target.", "source_refs": [{"source": "examples/requirements.md", "reference": "ORD-007"}], "disposition": "QUESTION", "target_refs": ["Q-003"]}
+  ],
   "scenarios": [
     {"id": "SCN-001", "title": "Create a draft order", "type": "HAPPY_PATH", "requirement_refs": ["REQ-001"]},
-    {"id": "SCN-002", "title": "Accept valid quantity boundaries", "type": "BOUNDARY", "requirement_refs": ["REQ-002"]},
-    {"id": "SCN-003", "title": "Reject invalid quantity boundaries", "type": "BOUNDARY", "requirement_refs": ["REQ-002"]},
-    {"id": "SCN-004", "title": "Submit a draft order", "type": "STATE_TRANSITION", "requirement_refs": ["REQ-003"]},
-    {"id": "SCN-005", "title": "Reject edits to a submitted order", "type": "STATE_TRANSITION", "requirement_refs": ["REQ-003"]},
-    {"id": "SCN-006", "title": "Deny order changes without permission", "type": "PERMISSION", "requirement_refs": ["REQ-004"]},
-    {"id": "SCN-007", "title": "Cancel before invoicing", "type": "HAPPY_PATH", "requirement_refs": ["REQ-005"]},
-    {"id": "SCN-008", "title": "Retry after billing unavailability", "type": "RECOVERY", "requirement_refs": ["REQ-006"]}
+    {"id": "SCN-002", "title": "Accept minimum quantity", "type": "BOUNDARY", "requirement_refs": ["REQ-002"]},
+    {"id": "SCN-003", "title": "Accept maximum quantity", "type": "BOUNDARY", "requirement_refs": ["REQ-002"]},
+    {"id": "SCN-004", "title": "Reject below-minimum quantity", "type": "BOUNDARY", "requirement_refs": ["REQ-002"]},
+    {"id": "SCN-005", "title": "Reject above-maximum quantity", "type": "BOUNDARY", "requirement_refs": ["REQ-002"]},
+    {"id": "SCN-006", "title": "Submit a draft order", "type": "STATE_TRANSITION", "requirement_refs": ["REQ-003"]},
+    {"id": "SCN-007", "title": "Reject edits to a submitted order", "type": "STATE_TRANSITION", "requirement_refs": ["REQ-003"]},
+    {"id": "SCN-008", "title": "Deny creation without permission", "type": "PERMISSION", "requirement_refs": ["REQ-004"]},
+    {"id": "SCN-009", "title": "Deny editing without permission", "type": "PERMISSION", "requirement_refs": ["REQ-004"]},
+    {"id": "SCN-010", "title": "Retry after billing unavailability", "type": "RECOVERY", "requirement_refs": ["REQ-006"]}
   ],
   "test_cases": [
-    {"id": "TC-001", "title": "Create a draft order", "status": "READY", "requirement_refs": ["REQ-001"], "scenario_refs": ["SCN-001"], "file": "test-cases/TC-001.json"},
-    {"id": "TC-002", "title": "Accept valid quantity boundaries", "status": "READY", "requirement_refs": ["REQ-002"], "scenario_refs": ["SCN-002"], "file": "test-cases/TC-002.json"},
-    {"id": "TC-003", "title": "Reject invalid quantity boundaries", "status": "READY", "requirement_refs": ["REQ-002"], "scenario_refs": ["SCN-003"], "file": "test-cases/TC-003.json"},
-    {"id": "TC-004", "title": "Submit a draft order", "status": "READY", "requirement_refs": ["REQ-003"], "scenario_refs": ["SCN-004"], "file": "test-cases/TC-004.json"},
-    {"id": "TC-005", "title": "Reject edits to a submitted order", "status": "READY", "requirement_refs": ["REQ-003"], "scenario_refs": ["SCN-005"], "file": "test-cases/TC-005.json"},
-    {"id": "TC-006", "title": "Deny order operations without permission", "status": "READY", "requirement_refs": ["REQ-004"], "scenario_refs": ["SCN-006"], "file": "test-cases/TC-006.json"},
-    {"id": "TC-007", "title": "Cancel an order before invoicing", "status": "BLOCKED", "requirement_refs": ["REQ-005"], "scenario_refs": ["SCN-007"], "file": "test-cases/TC-007.json"},
-    {"id": "TC-008", "title": "Handle billing unavailability during submission", "status": "NEEDS_REVIEW", "requirement_refs": ["REQ-006"], "scenario_refs": ["SCN-008"], "file": "test-cases/TC-008.json"}
+    {"id": "TC-001", "title": "Create a draft order", "status": "READY", "requirement_refs": ["REQ-001"], "scenario_refs": ["SCN-001"], "coverage_point_refs": ["CP-001", "CP-002", "CP-003"], "file": "test-cases/TC-001.json"},
+    {"id": "TC-002", "title": "Accept the minimum quantity", "status": "READY", "requirement_refs": ["REQ-002"], "scenario_refs": ["SCN-002"], "coverage_point_refs": ["CP-004"], "file": "test-cases/TC-002.json"},
+    {"id": "TC-003", "title": "Accept the maximum quantity", "status": "READY", "requirement_refs": ["REQ-002"], "scenario_refs": ["SCN-003"], "coverage_point_refs": ["CP-005"], "file": "test-cases/TC-003.json"},
+    {"id": "TC-004", "title": "Reject a quantity below the minimum", "status": "READY", "requirement_refs": ["REQ-002"], "scenario_refs": ["SCN-004"], "coverage_point_refs": ["CP-006", "CP-007"], "file": "test-cases/TC-004.json"},
+    {"id": "TC-005", "title": "Reject a quantity above the maximum", "status": "READY", "requirement_refs": ["REQ-002"], "scenario_refs": ["SCN-005"], "coverage_point_refs": ["CP-008", "CP-009"], "file": "test-cases/TC-005.json"},
+    {"id": "TC-006", "title": "Submit a draft order", "status": "READY", "requirement_refs": ["REQ-003"], "scenario_refs": ["SCN-006"], "coverage_point_refs": ["CP-010", "CP-011"], "file": "test-cases/TC-006.json"},
+    {"id": "TC-007", "title": "Reject edits to a submitted order", "status": "READY", "requirement_refs": ["REQ-003"], "scenario_refs": ["SCN-007"], "coverage_point_refs": ["CP-012", "CP-013"], "file": "test-cases/TC-007.json"},
+    {"id": "TC-008", "title": "Deny order creation without permission", "status": "READY", "requirement_refs": ["REQ-004"], "scenario_refs": ["SCN-008"], "coverage_point_refs": ["CP-014", "CP-015"], "file": "test-cases/TC-008.json"},
+    {"id": "TC-009", "title": "Deny order editing without permission", "status": "READY", "requirement_refs": ["REQ-004"], "scenario_refs": ["SCN-009"], "coverage_point_refs": ["CP-016", "CP-017"], "file": "test-cases/TC-009.json"},
+    {"id": "TC-010", "title": "Handle billing unavailability during submission", "status": "NEEDS_REVIEW", "requirement_refs": ["REQ-006"], "scenario_refs": ["SCN-010"], "coverage_point_refs": ["CP-019", "CP-020"], "file": "test-cases/TC-010.json"}
   ]
 }

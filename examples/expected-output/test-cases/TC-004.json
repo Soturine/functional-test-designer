@@ -1,30 +1,22 @@
 {
-  "schema_version": "1.0",
+  "schema_version": "1.1",
   "id": "TC-004",
-  "title": "Submit a draft order",
+  "title": "Reject a quantity below the minimum",
   "status": "READY",
-  "priority": "HIGH",
+  "priority": "MEDIUM",
   "type": "FUNCTIONAL",
-  "objective": "Confirm the valid transition from DRAFT to SUBMITTED.",
-  "requirement_refs": ["REQ-003"],
+  "objective": "Confirm that a quantity immediately below the permitted range is rejected without changing the existing quantity.",
+  "requirement_refs": ["REQ-002"],
   "scenario_refs": ["SCN-004"],
-  "source_refs": [{"source": "examples/requirements.md", "reference": "ORD-003"}],
-  "preconditions": ["A synthetic order exists in DRAFT state."],
-  "test_data": [
-    {"name": "draft order", "description": "A synthetic order currently shown in DRAFT state."}
-  ],
+  "coverage_point_refs": ["CP-006", "CP-007"],
+  "source_refs": [{"source": "examples/requirements.md", "reference": "ORD-002"}],
+  "preconditions": ["A synthetic DRAFT order line has an existing quantity of 5."],
+  "test_data": [{"name": "quantity", "description": "Below-minimum integer quantity: 0."}],
   "steps": [
-    {
-      "step": 1,
-      "action": "Submit the DRAFT order.",
-      "expected_result": "The order state changes to SUBMITTED.",
-      "needs_clarification": false
-    }
+    {"step": 1, "action": "Set the order-line quantity to 0 and submit the change.", "expected_result": "The value is rejected and the existing quantity remains 5.", "needs_clarification": false}
   ],
-  "subtests": [],
-  "postconditions": ["The synthetic order is in SUBMITTED state."],
-  "cleanup": ["Remove the synthetic order using an approved test-environment procedure."],
-  "tags": ["order", "submit", "state-transition"],
-  "automation_candidate": true,
-  "notes": []
+  "postconditions": ["The order-line quantity remains 5."],
+  "cleanup": ["Remove the synthetic order."],
+  "tags": ["order", "quantity", "boundary", "negative"],
+  "notes": ["No rejection message is asserted because ORD-002 does not specify one."]
 }

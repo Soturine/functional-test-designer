@@ -1,34 +1,22 @@
 {
-  "schema_version": "1.0",
+  "schema_version": "1.1",
   "id": "TC-008",
-  "title": "Handle billing unavailability during submission",
-  "status": "NEEDS_REVIEW",
-  "priority": "HIGH",
+  "title": "Deny order creation without permission",
+  "status": "READY",
+  "priority": "CRITICAL",
   "type": "FUNCTIONAL",
-  "objective": "Confirm the defined failure and retry behavior when billing is unavailable, while exposing the undefined post-failure state.",
-  "requirement_refs": ["REQ-006"],
+  "objective": "Confirm that order creation is denied without ORDER_EDIT and creates no order data.",
+  "requirement_refs": ["REQ-004"],
   "scenario_refs": ["SCN-008"],
-  "source_refs": [{"source": "examples/requirements.md", "reference": "ORD-006"}],
-  "preconditions": [
-    "A synthetic order exists in DRAFT state.",
-    "The billing service is unavailable in the test environment."
-  ],
-  "test_data": [
-    {"name": "draft order", "description": "A synthetic DRAFT order eligible for submission."},
-    {"name": "dependency state", "description": "Billing service unavailable through an approved test-environment control."}
-  ],
+  "coverage_point_refs": ["CP-014", "CP-015"],
+  "source_refs": [{"source": "examples/requirements.md", "reference": "ORD-004"}],
+  "preconditions": ["A synthetic customer is signed in without ORDER_EDIT permission."],
+  "test_data": [{"name": "order", "description": "Synthetic create-order data."}],
   "steps": [
-    {
-      "step": 1,
-      "action": "Submit the DRAFT order while the billing service is unavailable.",
-      "expected_result": "Submission does not complete and a retry action is available; the resulting order state and retained data require clarification.",
-      "needs_clarification": true
-    }
+    {"step": 1, "action": "Attempt to create an order using the synthetic order data.", "expected_result": "The operation is denied and no order data is created.", "needs_clarification": false}
   ],
-  "subtests": [],
-  "postconditions": [],
-  "cleanup": ["Restore the billing service test control and remove the synthetic order after recording its observed state."],
-  "tags": ["order", "billing", "recovery", "clarification-required"],
-  "automation_candidate": false,
-  "notes": ["The known failure and retry behavior is testable, but ORD-006 does not define the final order state or partial-data handling."]
+  "postconditions": ["No order was created by the denied attempt."],
+  "cleanup": [],
+  "tags": ["order", "permission", "creation", "negative"],
+  "notes": []
 }

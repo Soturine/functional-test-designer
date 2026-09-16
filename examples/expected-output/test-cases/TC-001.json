@@ -1,5 +1,5 @@
 {
-  "schema_version": "1.0",
+  "schema_version": "1.1",
   "id": "TC-001",
   "title": "Create a draft order",
   "status": "READY",
@@ -8,14 +8,10 @@
   "objective": "Confirm that an authorized customer can create an order with a visible reference in DRAFT state.",
   "requirement_refs": ["REQ-001"],
   "scenario_refs": ["SCN-001"],
+  "coverage_point_refs": ["CP-001", "CP-002", "CP-003"],
   "source_refs": [{"source": "examples/requirements.md", "reference": "ORD-001"}],
-  "preconditions": [
-    "A synthetic customer is signed in.",
-    "The customer has ORDER_EDIT permission."
-  ],
-  "test_data": [
-    {"name": "order", "description": "Synthetic order data accepted by the available order entry point."}
-  ],
+  "preconditions": ["A synthetic customer is signed in with ORDER_EDIT permission."],
+  "test_data": [{"name": "order", "description": "Synthetic order data accepted by the available order entry point."}],
   "steps": [
     {
       "step": 1,
@@ -30,10 +26,8 @@
       "needs_clarification": false
     }
   ],
-  "subtests": [],
   "postconditions": ["A synthetic order exists in DRAFT state."],
   "cleanup": ["Remove the synthetic order using an approved test-environment procedure."],
   "tags": ["order", "creation", "happy-path"],
-  "automation_candidate": true,
   "notes": []
 }

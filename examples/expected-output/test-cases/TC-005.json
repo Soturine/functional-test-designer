@@ -1,33 +1,22 @@
 {
-  "schema_version": "1.0",
+  "schema_version": "1.1",
   "id": "TC-005",
-  "title": "Reject edits to a submitted order",
+  "title": "Reject a quantity above the maximum",
   "status": "READY",
-  "priority": "HIGH",
+  "priority": "MEDIUM",
   "type": "FUNCTIONAL",
-  "objective": "Confirm that an invalid edit attempt in SUBMITTED state is rejected without changing order data.",
-  "requirement_refs": ["REQ-003"],
+  "objective": "Confirm that a quantity immediately above the permitted range is rejected without changing the existing quantity.",
+  "requirement_refs": ["REQ-002"],
   "scenario_refs": ["SCN-005"],
-  "source_refs": [{"source": "examples/requirements.md", "reference": "ORD-003"}],
-  "preconditions": [
-    "A synthetic order exists in SUBMITTED state.",
-    "The current order-line quantity is 5."
-  ],
-  "test_data": [
-    {"name": "attempted edit", "description": "Change the existing quantity from 5 to 6."}
-  ],
+  "coverage_point_refs": ["CP-008", "CP-009"],
+  "source_refs": [{"source": "examples/requirements.md", "reference": "ORD-002"}],
+  "preconditions": ["A synthetic DRAFT order line has an existing quantity of 5."],
+  "test_data": [{"name": "quantity", "description": "Above-maximum integer quantity: 11."}],
   "steps": [
-    {
-      "step": 1,
-      "action": "Attempt to change the submitted order-line quantity from 5 to 6.",
-      "expected_result": "The edit is rejected and the order-line quantity remains 5.",
-      "needs_clarification": false
-    }
+    {"step": 1, "action": "Set the order-line quantity to 11 and submit the change.", "expected_result": "The value is rejected and the existing quantity remains 5.", "needs_clarification": false}
   ],
-  "subtests": [],
-  "postconditions": ["The order remains unchanged in SUBMITTED state."],
-  "cleanup": ["Remove the synthetic order using an approved test-environment procedure."],
-  "tags": ["order", "edit", "invalid-transition"],
-  "automation_candidate": true,
-  "notes": []
+  "postconditions": ["The order-line quantity remains 5."],
+  "cleanup": ["Remove the synthetic order."],
+  "tags": ["order", "quantity", "boundary", "negative"],
+  "notes": ["No rejection message is asserted because ORD-002 does not specify one."]
 }

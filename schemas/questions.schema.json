@@ -6,11 +6,8 @@
   "additionalProperties": false,
   "required": ["schema_version", "questions"],
   "properties": {
-    "schema_version": {"const": "1.0"},
-    "questions": {
-      "type": "array",
-      "items": {"$ref": "#/$defs/question"}
-    }
+    "schema_version": {"const": "1.1"},
+    "questions": {"type": "array", "items": {"$ref": "#/$defs/question"}}
   },
   "$defs": {
     "sourceRef": {
