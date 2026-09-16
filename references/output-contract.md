@@ -1,27 +1,28 @@
-# Output Contract 1.0
+# Output Contract 1.1
 
-Write UTF-8 JSON with two-space indentation. All paths are relative to the output directory and use `/` separators. Use the exact `schema_version` value `1.0`.
+Write UTF-8 JSON with two-space indentation. Paths are relative to the output directory and use `/` separators. Use the exact `schema_version` value `1.1`.
 
-## Directory Layout
+## Files
 
 ```text
 output/
 |-- test-cases.json
 |-- questions.json
+|-- report.html
 `-- test-cases/
     |-- TC-001.json
     `-- TC-XXX.json
 ```
 
-Do not write temporary analysis, source copies, or confidential data into `output/`.
+`report.html` is derived presentation, not source data. Do not write analysis notes, source copies, diagnostics, or confidential data into `output/`.
 
-## Index: `test-cases.json`
+## Index
 
-The index is the compact traceability catalog and file manifest.
+`test-cases.json` contains requirements, Coverage Points, scenarios, and the TC file manifest:
 
 ```json
 {
-  "schema_version": "1.0",
+  "schema_version": "1.1",
   "generated_at": "2026-09-16T12:00:00Z",
   "sources": ["docs/requirements.md"],
   "requirements": [
@@ -29,132 +30,120 @@ The index is the compact traceability catalog and file manifest.
       "id": "REQ-001",
       "statement": "A customer can cancel an order before invoicing.",
       "status": "NEEDS_CLARIFICATION",
-      "source_refs": [
-        {"source": "docs/requirements.md", "reference": "Cancellation"}
-      ]
+      "source_refs": [{"source": "docs/requirements.md", "reference": "Cancellation"}]
     }
   ],
-  "scenarios": [
+  "coverage_points": [
     {
-      "id": "SCN-001",
-      "title": "Cancel an order before invoicing",
-      "type": "HAPPY_PATH",
-      "requirement_refs": ["REQ-001"]
+      "id": "CP-001",
+      "requirement_ref": "REQ-001",
+      "statement": "The observable result of cancellation must be defined.",
+      "source_refs": [{"source": "docs/requirements.md", "reference": "Cancellation"}],
+      "disposition": "QUESTION",
+      "target_refs": ["Q-001"]
     }
   ],
-  "test_cases": [
-    {
-      "id": "TC-001",
-      "title": "Cancel an order before invoicing",
-      "status": "BLOCKED",
-      "requirement_refs": ["REQ-001"],
-      "scenario_refs": ["SCN-001"],
-      "file": "test-cases/TC-001.json"
-    }
-  ]
+  "scenarios": [],
+  "test_cases": []
 }
 ```
 
-Requirement status is `TESTABLE` or `NEEDS_CLARIFICATION`. Scenario type is one of `HAPPY_PATH`, `NEGATIVE`, `BOUNDARY`, `PERMISSION`, `STATE_TRANSITION`, `RECOVERY`, or `EXPLORATORY`.
+Requirement status is `TESTABLE` or `NEEDS_CLARIFICATION`. Scenario type is `HAPPY_PATH`, `NEGATIVE`, `BOUNDARY`, `PERMISSION`, `STATE_TRANSITION`, `RECOVERY`, or `EXPLORATORY`.
 
-## Individual Test Case
+## Coverage Point Dispositions
 
-Each index entry has one file named after its ID. Keep steps reusable across subtests; put only the varying input and expected result in each subtest.
+Each Coverage Point represents one normative behavior and has exactly one disposition:
+
+- `TEST_CASE`: `target_refs` contains one or more `TC-XXX` IDs.
+- `QUESTION`: `target_refs` contains one or more `Q-XXX` IDs.
+- `OUT_OF_SCOPE`: `target_refs` is empty and `reason` explains the user's explicit exclusion.
+
+Several Coverage Points may target the same TC when they are observations in one coherent flow. One Coverage Point may target several TCs when separate execution contexts are necessary.
+
+## Test Case Entry
+
+Every index entry includes `coverage_point_refs` and points to one file:
 
 ```json
 {
-  "schema_version": "1.0",
   "id": "TC-001",
-  "title": "Submit quantities within the permitted range",
+  "title": "Reject a quantity below the minimum",
   "status": "READY",
-  "priority": "HIGH",
-  "type": "FUNCTIONAL",
-  "objective": "Confirm that documented valid boundary quantities are accepted.",
   "requirement_refs": ["REQ-002"],
   "scenario_refs": ["SCN-002"],
-  "source_refs": [
-    {"source": "docs/requirements.md", "reference": "AC-2"}
-  ],
-  "preconditions": ["The tester is signed in as an authorized customer."],
-  "test_data": [
-    {"name": "order", "description": "A synthetic order eligible for quantity changes."}
-  ],
+  "coverage_point_refs": ["CP-002", "CP-003"],
+  "file": "test-cases/TC-001.json"
+}
+```
+
+## Individual Test Case
+
+```json
+{
+  "schema_version": "1.1",
+  "id": "TC-001",
+  "title": "Reject a quantity below the minimum",
+  "status": "READY",
+  "priority": "MEDIUM",
+  "type": "FUNCTIONAL",
+  "objective": "Confirm that quantity 0 is rejected without changing the existing quantity.",
+  "requirement_refs": ["REQ-002"],
+  "scenario_refs": ["SCN-002"],
+  "coverage_point_refs": ["CP-002", "CP-003"],
+  "source_refs": [{"source": "docs/requirements.md", "reference": "Quantity"}],
+  "preconditions": ["A DRAFT order line has quantity 5."],
+  "test_data": [{"name": "quantity", "description": "Below-minimum value: 0."}],
   "steps": [
     {
       "step": 1,
-      "action": "Open the quantity editor for the synthetic order.",
-      "expected_result": "The quantity control is available.",
-      "needs_clarification": false
-    },
-    {
-      "step": 2,
-      "action": "Enter the quantity specified by the current subtest and submit the change.",
-      "expected_result": "The submitted quantity is accepted.",
+      "action": "Set the quantity to 0 and submit the change.",
+      "expected_result": "The value is rejected and the quantity remains 5.",
       "needs_clarification": false
     }
   ],
-  "subtests": [
-    {
-      "id": "ST-001",
-      "title": "Minimum valid quantity",
-      "input": 1,
-      "expected_result": "The submitted quantity is accepted.",
-      "needs_clarification": false
-    },
-    {
-      "id": "ST-002",
-      "title": "Maximum valid quantity",
-      "input": 10,
-      "expected_result": "The submitted quantity is accepted.",
-      "needs_clarification": false
-    }
-  ],
-  "postconditions": ["The order retains the last accepted quantity."],
-  "cleanup": ["Restore or remove the synthetic order."],
-  "tags": ["order", "boundary", "valid-partition"],
-  "automation_candidate": true,
+  "postconditions": ["The quantity remains 5."],
+  "cleanup": ["Remove the synthetic order."],
+  "tags": ["quantity", "boundary"],
   "notes": []
 }
 ```
 
-Use `READY`, `NEEDS_REVIEW`, or `BLOCKED` for status. A `null` expected result always requires `needs_clarification: true`. A non-null expected result must be supported by the source; `needs_clarification` may still be true when only part of the observation is known.
+Use `READY`, `NEEDS_REVIEW`, or `BLOCKED` for status and `CRITICAL`, `HIGH`, `MEDIUM`, or `LOW` for priority. There is no `subtests` or `automation_candidate` field in V1.1.
 
-Use a separate test case instead of a subtest when setup, action sequence, permission, state transition, risk, or oracle changes materially.
+Every step owns its Action and Expected Result. A `null` expected result requires `needs_clarification: true` and a related Question.
 
-## Questions: `questions.json`
+## Questions
 
 ```json
 {
-  "schema_version": "1.0",
+  "schema_version": "1.1",
   "questions": [
     {
       "id": "Q-001",
-      "related_test_cases": ["TC-001"],
+      "related_test_cases": [],
       "requirement_refs": ["REQ-001"],
-      "source_refs": [
-        {"source": "docs/requirements.md", "reference": "Cancellation"}
-      ],
-      "question": "What observable final state confirms that the order was cancelled?",
-      "reason": "The source permits cancellation but does not define the resulting state or another observable outcome.",
+      "source_refs": [{"source": "docs/requirements.md", "reference": "Cancellation"}],
+      "question": "What observable result confirms successful cancellation?",
+      "reason": "The source permits cancellation but defines no observable outcome.",
       "blocking": true
     }
   ]
 }
 ```
 
-Questions must resolve a specific missing decision. Link a question to every affected test case; use an empty `related_test_cases` array only when the gap prevented creation of any case.
+Use an empty `related_test_cases` array when the missing oracle prevents creation of a meaningful case.
 
 ## Consistency Invariants
 
-- IDs are unique within their collection and match their prefixes.
-- Every test-case `requirement_refs` value exists in the index requirement catalog.
-- Every test-case `scenario_refs` value exists in the index scenario catalog.
-- Every scenario references existing requirements.
-- Index metadata and individual case metadata agree.
-- Every indexed file exists, and no unindexed `TC-*.json` file is present.
-- Step numbers start at 1, increase by 1, and are unique.
-- Every question reference resolves to an indexed entity.
-- Blocking questions linked to a test case require that case to be `BLOCKED`.
-- A `READY` case has no step or subtest needing clarification.
+- IDs are unique and use their declared prefixes.
+- Every testable requirement has at least one Coverage Point.
+- Every Coverage Point references an existing requirement and source.
+- Every Coverage Point has a valid `TEST_CASE`, `QUESTION`, or explicit `OUT_OF_SCOPE` destination.
+- TC and Coverage Point links agree in both directions.
+- Every TC maps to existing scenarios and requirements, and index metadata matches its file.
+- Every indexed file exists; unindexed TC JSON files are invalid.
+- Step numbers start at 1 and increase consecutively.
+- Blocking Questions linked to a TC require that TC to be `BLOCKED`.
+- A `READY` case has no clarification-pending step.
 
-The schemas enforce document shape. `scripts/validate_output.py` additionally enforces uniqueness, paths, referential integrity, file presence, and cross-file status rules.
+The schemas validate document shape. `scripts/validate_output.py` enforces uniqueness, paths, file presence, referential integrity, and cross-file rules.

@@ -1,32 +1,46 @@
 # Contextual Test Design
 
-Use a technique only when it reveals meaningful coverage. Techniques shape reasoning; they do not dictate the number of output test cases.
+Read this reference only when ranges, states, interacting conditions, or many combinations justify a formal technique. Techniques improve scenario selection; they do not create extra output structures or supply missing expected results.
 
 ## Selection Guide
 
-| Signal in the source | Technique | Lean output rule |
+| Source signal | Technique | Output rule |
 | --- | --- | --- |
-| Numeric, length, date, or count limits | Boundary Value Analysis (BVA) and Equivalence Partitioning (EP) | Cover representative valid/invalid partitions and relevant edges as subtests when the flow and oracle are shared. |
-| Several conditions determine one outcome | Decision table | Collapse equivalent rules; create separate cases only for distinct outcomes or risks. |
-| Status or workflow controls valid actions | State transition | Cover important valid and invalid transitions; avoid repeating the same transition for cosmetic data changes. |
-| Many independent parameters | Pairwise | Generate a minimal pair-covering set, then remove rows that add no unique behavioral coverage. |
-| Poorly understood or high-risk area | Risk-based exploratory scenarios | Add focused charters or questions; do not invent deterministic expected results. |
+| Numeric, length, date, or count limit | Boundary Value Analysis and Equivalence Partitioning | Select meaningful valid and invalid representatives; give independently reportable boundaries separate TCs. |
+| Several conditions determine an outcome | Decision table | Collapse equivalent rules; retain separate TCs for distinct outcomes or evidence. |
+| State or workflow controls valid actions | State transition | Cover important valid and invalid transitions as independent cases where they have their own Pass/Fail. |
+| Many independent parameters | Pairwise | Select a smaller pair-covering combination set; each selected execution may become an independent TC. |
+| Poorly understood or high-risk behavior | Risk-based grilling | Create focused scenarios or Questions without inventing deterministic oracles. |
 
-## Consolidation Examples
+## Independence Rule
 
-A documented valid range of 18 through 65 may be analyzed with `17, 18, 19, 64, 65, 66`. It does not require six test cases. A lean result may be:
+Create another TC when a condition can fail independently, create an independent bug, require separate evidence, or use different setup or oracle. Use multiple steps in one TC when the steps form one coherent business flow.
 
-- one valid-values case with subtests for 18 and 65;
-- one invalid-values case with subtests for 17 and 66.
+There are no subtests. Steps are actions and observations within the Test Case, not hidden test variations.
 
-Omit 19 and 64 when they prove no behavior beyond the same valid partition. Add them only when a distinct risk or rule justifies them.
+## BVA and EP
 
-For pairwise, treat each generated row as a candidate data variation. Group rows under one case when the setup, action, and oracle are the same. Split only when a row exercises a distinct permission, workflow, failure, or expected behavior.
+For an inclusive range 1 through 10, analysis may consider `0, 1, 2, 9, 10, 11`. Do not emit all six automatically. Select values that add meaningful coverage. A reasonable result can be four independent cases:
+
+- accept minimum 1;
+- accept maximum 10;
+- reject below-minimum 0;
+- reject above-maximum 11.
+
+Omit 2 and 9 when they prove no behavior beyond the same valid partition. Keep the four chosen cases independent because each boundary has its own execution evidence and Pass/Fail.
+
+## Pairwise
+
+Use pairwise to reduce a Cartesian product, not to combine independent results into one case. Each selected row can become its own TC when it represents one independent execution. Remove a row only when it adds no unique coverage or risk.
+
+## Coverage and Deduplication
+
+Coverage Points retain every normative behavior even when several points map to one coherent TC. Deduplicate only semantically equivalent cases. Do not merge different permissions, transitions, bounds, recovery paths, or oracles merely to minimize the case count.
 
 ## Guardrails
 
-- A technique may suggest a question or scenario, but never supplies a missing oracle.
-- Do not mechanically apply every technique to every feature.
+- A technique may suggest a scenario or Question, never a missing oracle.
+- Do not apply every technique mechanically.
 - Do not claim exhaustive coverage from pairwise or representative partitions.
-- Preserve explicit source examples when they carry business meaning, even if another value shares the same partition.
+- Preserve explicit source examples when they carry business meaning.
 

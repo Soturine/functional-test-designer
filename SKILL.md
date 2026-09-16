@@ -1,107 +1,137 @@
 ---
 name: functional-test-designer
-description: Converts requirements, PRDs, user stories, acceptance criteria, and specifications into traceable, executable manual functional test cases and validated JSON. Use when source documents must be analyzed for testability, gaps, test data, and risk-based coverage before manual execution or a future test-management adapter. Do not use to automate tests, report bugs, or verify an implementation against requirements.
+description: Converts requirement documents into traceable Coverage Points, independent executable manual test cases, validated JSON, and an offline HTML report. Use for greenfield functional test design when requirements are the only functional authority. Do not use backlog, source code, implementations, existing tests, or project history as generation sources.
 ---
 
 # Functional Test Designer
 
-Create a compact, source-grounded manual test pack from one or more requirement documents. Produce the JSON artifacts described in [references/output-contract.md](references/output-contract.md), then run the validator. Do not require another skill or the source repository.
+Operate only in `GREENFIELD_REQUIREMENTS_ONLY` mode. Turn user-designated requirement documents into source-grounded manual test cases using the V1.1 contract in [references/output-contract.md](references/output-contract.md). Validate the JSON and render a friendly offline report.
 
-## Non-Negotiable Rules
+## Authority and Scope
 
-- Treat the source as authoritative. A question, hypothesis, scenario, or risk is not a requirement or an oracle.
+- Treat the requirement document as the only functional authority.
+- Do not inspect or use backlog items, source code, APIs, databases, implementations, commits, issues, existing test cases, test plans, execution history, or automation as input.
+- Do not use observed implementation behavior to fill a requirement gap or expected result.
+- Preserve: requirement != hypothesis; question != requirement; scenario != requirement; risk != expected result; implementation != contract.
 - Never invent messages, status codes, internal states, fields, side effects, permissions, or recovery behavior.
-- When an essential expected result is unsupported, set it to `null`, mark `needs_clarification: true`, create a precise question, and assign `BLOCKED` when the missing oracle prevents execution.
-- Use `NEEDS_REVIEW` when a case remains useful but a material detail needs human confirmation. Use `READY` only when the case is executable as written.
-- Test-design techniques are reasoning tools, not output multiplication tools. Consolidate redundant coverage and use subtests for small variations of the same behavior.
-- Keep separate cases when they represent distinct behavior, risk, setup, permission, state transition, or recovery flow.
-- Use synthetic, non-sensitive test data by default.
+- Use only synthetic, non-sensitive test data.
+
+If a necessary oracle is absent, route the behavior to a Question. Create a `BLOCKED` case only when useful executable structure remains but the missing oracle prevents a correct Pass/Fail decision.
+
+## Optional Diagnostic Mode
+
+When the user requests `Diagnostic: true`, read [references/diagnostics.md](references/diagnostics.md) before reading the source. Start the timer immediately and record real wall-clock time for the macro stages. Do not estimate missing timings or record requirement text, names, payloads, credentials, or other sensitive content.
 
 ## Workflow
 
-### 1. Read and Bound the Sources
+### 1. Read Requirement Sources
 
-Locate the user-designated requirement sources and read only relevant files. Record each source path. Identify the requested feature scope and explicit exclusions. Do not build format-specific parsers when the host can already read the document.
+Locate and read only the requirement documents designated by the user. Record source paths, original identifiers, explicit scope, and explicit exclusions. Do not build parsers when the host can read the format.
 
 ### 2. Normalize Requirements
 
-Extract functional rules, actors, permissions, constraints, states, inputs, outputs, and acceptance criteria.
+Extract actors, rules, permissions, states, inputs, outputs, constraints, and acceptance behavior.
 
-- Preserve original identifiers in `source_refs`.
-- Assign stable local `REQ-001`, `REQ-002`, ... identifiers in source order.
-- Split a compound statement only when its parts can be tested independently.
-- Do not silently rewrite or strengthen the source.
-- Record unsupported or contradictory behavior as questions, not inferred facts.
+- Assign stable local `REQ-001`, `REQ-002`, ... IDs in source order.
+- Preserve original identifiers and locations in `source_refs`.
+- Split compound requirements only where their behaviors can be evaluated independently.
+- Mark unsupported or contradictory behavior `NEEDS_CLARIFICATION`; do not strengthen the source.
 
-### 3. Evaluate Testability and Ask Useful Questions
+### 3. Extract Coverage Points
 
-For each requirement, determine whether actor, starting state, trigger, rule, and observable result are supported. Probe only relevant gaps, such as:
+Decompose every normative behavior into a stable `CP-001`, `CP-002`, ... Coverage Point. A Coverage Point controls behavioral coverage; it is not automatically a Test Case.
 
-- empty, null, minimum, maximum, and off-by-one inputs;
-- permissions and calls made in the wrong state or order;
-- repetition, duplicate submission, concurrency, and conflicting updates;
-- unavailable dependencies, timeout, partial failure, retry, and recovery;
-- undefined final state or behavior after failure.
+Route every Coverage Point to exactly one disposition:
 
-Do not ask what the source already answers. Deduplicate questions by the decision they resolve and link each question to affected requirements and test cases.
+- `TEST_CASE`: one or more independent TCs cover the behavior.
+- `QUESTION`: the behavior lacks a sufficient oracle and points to one or more Questions.
+- `OUT_OF_SCOPE`: the user explicitly excluded the behavior; include a specific reason and no target.
 
-### 4. Design Lean Coverage
+Never use `OUT_OF_SCOPE` to hide a gap. No Coverage Point may disappear or remain without a valid destination.
 
-Read [references/test-design.md](references/test-design.md) when the feature contains ranges, partitions, interacting conditions, workflows, or many independent combinations. Select only techniques that add coverage.
+### 4. Evaluate Testability and Ask Questions
 
-Create stable `SCN-001`, `SCN-002`, ... scenarios and map them to local requirement IDs. Cover positive, negative, permission, state, boundary, and recovery behavior according to actual risk and source support.
+Check actor, starting state, trigger, normative rule, and observable result. Probe only relevant gaps such as bounds, null/empty input, permissions, invalid order/state, repetition, concurrency, unavailable dependencies, partial failure, retry, and recovery.
 
-Before creating test cases:
+Questions must resolve a specific decision, remain source-grounded, avoid duplication, and link to affected requirements and cases.
 
-1. Merge scenarios that prove the same behavior with the same setup and oracle.
-2. Convert small data variations into flat `subtests` when action and expected behavior are shared.
-3. Remove combinations already represented by an equivalent partition or pairwise row.
-4. Keep separate cases for materially different behaviors or risks.
+### 5. Select Test Design Only When Useful
 
-Prefer a few strong cases over many nearly identical cases.
+Read [references/test-design.md](references/test-design.md) only when the requirements contain ranges, partitions, states, multiple interacting conditions, many combinations, or another concrete need for a design technique. Otherwise continue without loading it.
 
-### 5. Design Test Data
+Use techniques to choose better scenarios and remove redundant combinations. They must not invent oracles, create extra structures, or hide independent behaviors.
 
-For each case, specify only data that affects execution or coverage: representative valid values, boundary and invalid values, roles, initial states, and required setup. Derive values from documented constraints. If a constraint is unknown, describe the needed characteristic without fabricating a precise value.
+### 6. Create Scenarios and Independent Test Cases
 
-### 6. Write Executable Manual Cases
+Assign stable `SCN-001`, `SCN-002`, ... scenario IDs and `TC-001`, `TC-002`, ... case IDs.
 
-Assign local `TC-001`, `TC-002`, ... identifiers. Each case must have one clear objective and trace to requirements and scenarios.
+Create a separate TC when a condition:
 
-- Write each step as one concrete user or tester action.
-- Pair every action with an observable, source-supported expected result.
-- Use verbs such as access, enter, select, submit, query, and observe.
-- Put setup in `preconditions`, not hidden in steps.
-- Use `subtests` only for shallow variations; do not create nested variation trees.
-- Do not use vague fillers such as "verify it works" or invent text merely to make a field non-null.
+- needs its own Pass/Fail result;
+- can fail or produce a bug independently;
+- requires independent evidence;
+- has different setup, action sequence, risk, or oracle.
 
-### 7. Write and Validate Output
+Use multiple steps in one TC when they form one coherent flow. There are no subtests in V1.1. Do not compress independent boundaries, permissions, or failure modes into one case merely to reduce volume.
 
-Read [references/output-contract.md](references/output-contract.md) and write:
+### 7. Write Test Data, Priority, and Steps
+
+Specify only data that affects execution: representative values, roles, states, boundaries, and required setup. Derive exact values from documented constraints.
+
+Choose priority from source evidence or this fallback:
+
+- `CRITICAL`: central flow, integrity, critical security, or central blocker.
+- `HIGH`: important mandatory business rule.
+- `MEDIUM`: alternative flow, important validation, or insufficient priority evidence.
+- `LOW`: non-blocking edge or performance concern.
+
+For every step:
+
+- write one concrete, executable action;
+- write its corresponding observable, source-supported expected result;
+- use `expected_result: null` and `needs_clarification: true` when unsupported;
+- create a related Question for every clarification-pending step.
+
+Do not use vague actions such as "verify it works". Do not create one giant expected result after several actions.
+
+### 8. Deduplicate Without Hiding Behavior
+
+Remove true duplicates and combinations that add no coverage. Keep separate cases for independently reportable behavior. Several Coverage Points may map to one TC when they are observations in the same coherent execution flow.
+
+### 9. Write, Validate, and Render
+
+Read [references/output-contract.md](references/output-contract.md), then write the V1.1 JSON. Treat schemas as validator internals: do not read them before generation unless validation fails and the error is insufficient.
 
 ```text
 output/
 |-- test-cases.json
 |-- questions.json
+|-- report.html
 `-- test-cases/
     `-- TC-XXX.json
 ```
 
-Use paths relative to the output directory. Generate valid JSON, then run:
+Run in this order:
 
 ```bash
 python scripts/validate_output.py output
+python scripts/render_report.py output
 ```
 
-Fix every validation error before reporting completion. Summarize source coverage, case counts by status, unresolved blocking questions, and the output path without duplicating the JSON in prose.
+Fix all validation errors before rendering or reporting completion. The renderer must never change JSON or repair content.
+
+### 10. Summarize
+
+Report counts for requirements, Coverage Points, scenarios, Test Cases, steps, statuses, and questions; state validator and HTML results. In diagnostic mode, finish the metrics file and include only real timing in a compact `Stage | Time | Work | Result` table.
 
 ## Completion Check
 
-- Every test case maps to at least one requirement and scenario.
-- Every index entry maps to exactly one present case file with the same ID.
-- Questions are specific, non-redundant, and source-grounded.
-- Test data and steps are executable by a human tester.
-- Unsupported expected results remain visibly unresolved.
-- Test-design coverage has been consolidated rather than mechanically expanded.
-- All JSON passes schema and cross-file validation.
+- Requirements were the only generation source.
+- Every testable behavior has a Coverage Point with a valid destination.
+- Every TC traces through Coverage Points, scenarios, and requirements.
+- Each independently reportable behavior has its own TC.
+- Every step has Action and Expected Result; unsupported results remain visible.
+- No generated JSON contains `subtests` or `automation_candidate`.
+- JSON validation passes before the offline HTML is rendered.
+- Diagnostic metrics, when requested, remain outside the TC output and contain no sensitive content.
 
