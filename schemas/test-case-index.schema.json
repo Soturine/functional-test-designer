@@ -1,0 +1,124 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.local/functional-test-designer/test-case-index.schema.json",
+  "title": "Functional test case index",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "generated_at",
+    "sources",
+    "requirements",
+    "scenarios",
+    "test_cases"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "generated_at": {"type": "string", "format": "date-time"},
+    "sources": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {"type": "string", "minLength": 1}
+    },
+    "requirements": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/requirement"}
+    },
+    "scenarios": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/scenario"}
+    },
+    "test_cases": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/testCaseEntry"}
+    }
+  },
+  "$defs": {
+    "sourceRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source", "reference"],
+      "properties": {
+        "source": {"type": "string", "minLength": 1},
+        "reference": {"type": "string", "minLength": 1}
+      }
+    },
+    "requirement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "statement", "status", "source_refs"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^REQ-[0-9]{3,}$"},
+        "statement": {"type": "string", "minLength": 1},
+        "status": {"enum": ["TESTABLE", "NEEDS_CLARIFICATION"]},
+        "source_refs": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/sourceRef"}
+        }
+      }
+    },
+    "scenario": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "title", "type", "requirement_refs"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^SCN-[0-9]{3,}$"},
+        "title": {"type": "string", "minLength": 1},
+        "type": {
+          "enum": [
+            "HAPPY_PATH",
+            "NEGATIVE",
+            "BOUNDARY",
+            "PERMISSION",
+            "STATE_TRANSITION",
+            "RECOVERY",
+            "EXPLORATORY"
+          ]
+        },
+        "requirement_refs": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"type": "string", "pattern": "^REQ-[0-9]{3,}$"}
+        }
+      }
+    },
+    "testCaseEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "title",
+        "status",
+        "requirement_refs",
+        "scenario_refs",
+        "file"
+      ],
+      "properties": {
+        "id": {"type": "string", "pattern": "^TC-[0-9]{3,}$"},
+        "title": {"type": "string", "minLength": 1},
+        "status": {"enum": ["READY", "NEEDS_REVIEW", "BLOCKED"]},
+        "requirement_refs": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"type": "string", "pattern": "^REQ-[0-9]{3,}$"}
+        },
+        "scenario_refs": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"type": "string", "pattern": "^SCN-[0-9]{3,}$"}
+        },
+        "file": {
+          "type": "string",
+          "pattern": "^test-cases/TC-[0-9]{3,}\\.json$"
+        }
+      }
+    }
+  }
+}

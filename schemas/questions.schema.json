@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.local/functional-test-designer/questions.schema.json",
+  "title": "Functional test design questions",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "questions"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "questions": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/question"}
+    }
+  },
+  "$defs": {
+    "sourceRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source", "reference"],
+      "properties": {
+        "source": {"type": "string", "minLength": 1},
+        "reference": {"type": "string", "minLength": 1}
+      }
+    },
+    "question": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "related_test_cases",
+        "requirement_refs",
+        "source_refs",
+        "question",
+        "reason",
+        "blocking"
+      ],
+      "properties": {
+        "id": {"type": "string", "pattern": "^Q-[0-9]{3,}$"},
+        "related_test_cases": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"type": "string", "pattern": "^TC-[0-9]{3,}$"}
+        },
+        "requirement_refs": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"type": "string", "pattern": "^REQ-[0-9]{3,}$"}
+        },
+        "source_refs": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/sourceRef"}
+        },
+        "question": {"type": "string", "minLength": 1},
+        "reason": {"type": "string", "minLength": 1},
+        "blocking": {"type": "boolean"}
+      }
+    }
+  }
+}
