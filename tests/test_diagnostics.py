@@ -3,7 +3,9 @@ from __future__ import annotations
 import importlib.util
 import shutil
 import tempfile
+import time
 import unittest
+from datetime import timedelta
 from pathlib import Path
 
 
@@ -81,6 +83,55 @@ class DiagnosticsTests(unittest.TestCase):
         self.assertIn("early_deduplication", DIAGNOSTICS.STAGE_NAMES)
         self.assertIn("markdown_render", DIAGNOSTICS.STAGE_NAMES)
         self.assertNotIn("test_data_design", DIAGNOSTICS.STAGE_NAMES)
+
+    def test_stage_timer_wraps_work_between_begin_and_end(self) -> None:
+        DIAGNOSTICS.start_run(self.metrics)
+        DIAGNOSTICS.begin_stage(self.metrics, "scope_resolution")
+        time.sleep(0.01)
+        document = DIAGNOSTICS.end_stage(
+            self.metrics,
+            "scope_resolution",
+            ["Performed synthetic work while the stage timer was active."],
+        )
+
+        self.assertGreaterEqual(document["stages"][0]["elapsed_seconds"], 0.005)
+
+    def test_high_unattributed_time_adds_warning_without_failing(self) -> None:
+        document = DIAGNOSTICS.start_run(self.metrics)
+        started = DIAGNOSTICS.parse_timestamp(document["run"]["started_at"])
+        document["run"]["started_at"] = DIAGNOSTICS.timestamp(started - timedelta(seconds=2))
+        DIAGNOSTICS.write_document(self.metrics, document)
+        for name in DIAGNOSTICS.STAGE_NAMES:
+            DIAGNOSTICS.skip_stage(self.metrics, name, ["Not needed for warning test."])
+
+        document = DIAGNOSTICS.finish_run(self.metrics)
+
+        self.assertGreater(document["run"]["unattributed_percent"], 20)
+        self.assertEqual("HIGH_UNATTRIBUTED_TIME", document["warnings"][0]["code"])
+
+    def test_deduplication_metrics_are_preserved_when_observed(self) -> None:
+        DIAGNOSTICS.start_run(self.metrics)
+        DIAGNOSTICS.begin_stage(self.metrics, "early_deduplication")
+        DIAGNOSTICS.end_stage(
+            self.metrics,
+            "early_deduplication",
+            ["Removed one exact semantic duplicate."],
+            {
+                "scenario_candidates": 4,
+                "scenarios_after_dedup": 3,
+                "independent_scenarios_preserved": 3,
+                "semantic_duplicates_removed": 1,
+            },
+        )
+        for name in DIAGNOSTICS.STAGE_NAMES:
+            if name != "early_deduplication":
+                DIAGNOSTICS.skip_stage(self.metrics, name, ["Not needed for metric test."])
+
+        document = DIAGNOSTICS.finish_run(self.metrics)
+
+        self.assertEqual(4, document["totals"]["scenario_candidates"])
+        self.assertEqual(3, document["totals"]["independent_scenarios_preserved"])
+        self.assertEqual(1, document["totals"]["semantic_duplicates_removed"])
 
     def test_finish_requires_every_stage_to_be_addressed(self) -> None:
         DIAGNOSTICS.start_run(self.metrics)

@@ -112,6 +112,7 @@ def start_run(path: Path) -> dict[str, Any]:
         ],
         "totals": {},
         "scope_proof": {},
+        "warnings": [],
         "observed_bottlenecks": [],
         "optimization_candidates": [],
     }
@@ -257,6 +258,14 @@ def finish_run(
     unattributed = round(max(0.0, total_elapsed - known_stage_time), 6)
     run["unattributed_seconds"] = unattributed
     run["unattributed_percent"] = round(100 * unattributed / total_elapsed, 2) if total_elapsed else 0.0
+    if run["unattributed_percent"] > 20:
+        document["warnings"].append(
+            {
+                "code": "HIGH_UNATTRIBUTED_TIME",
+                "message": "More than 20% of elapsed time was outside measured stages; start timers before stage reasoning.",
+                "unattributed_percent": run["unattributed_percent"],
+            }
+        )
     document["scope_proof"] = {
         key: observed.get(key, [] if key in {"selected_scope_roots", "resolved_scope_paths"} else 0)
         for key in SCOPE_PROOF_METRICS

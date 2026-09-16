@@ -10,7 +10,7 @@ Start before resolving scope:
 python scripts/diagnostics.py start diagnostics/run-metrics.json
 ```
 
-Time actual work with `begin` and `end`, or use `skip` when a stage is genuinely unnecessary:
+Time actual work with `begin` and `end`, or use `skip` when a stage is genuinely unnecessary. `begin` must happen before analysis or reasoning for that stage; materialize the result while the timer is active, then call `end`. Do not reason first and time only persistence:
 
 ```bash
 python scripts/diagnostics.py begin diagnostics/run-metrics.json scope_resolution
@@ -56,6 +56,8 @@ Record these when naturally observable:
 - `temporary_files_created`
 - `scenario_candidates`
 - `scenarios_after_dedup`
+- `independent_scenarios_preserved`
+- `semantic_duplicates_removed`
 - `test_cases_generated`
 - `steps_generated`
 - `validator_runs`
@@ -72,6 +74,8 @@ Address every stage, then run:
 python scripts/diagnostics.py finish diagnostics/run-metrics.json --output output
 ```
 
-The helper derives artifact totals, the slowest measured stage, `unattributed_seconds`, and `unattributed_percent`. It also emits `scope_proof` with roots, resolved paths, opened/out-of-scope/skipped files, reads, rereads, and temporary-file counts. `files_opened_outside_scope` is expected to be zero; any nonzero value sets `scope_violation: true`.
+The helper derives artifact totals, the slowest measured stage, `unattributed_seconds`, and `unattributed_percent`. More than 20% unattributed time adds a non-blocking `HIGH_UNATTRIBUTED_TIME` warning; it does not fail the run. A large interval between stages that contains useful reasoning belongs inside the relevant stage timer.
+
+It also emits `scope_proof` with roots, resolved paths, opened/out-of-scope/skipped files, reads, rereads, and temporary-file counts. `files_opened_outside_scope` is expected to be zero; any nonzero value sets `scope_violation: true`. Record source rereads honestly and add a short note when tooling or encoding forced one.
 
 Add at most three observed optimization candidates with repeated `--candidate` arguments. Do not commit real run metrics; only synthetic diagnostics tests belong in the repository.
