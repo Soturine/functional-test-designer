@@ -180,6 +180,45 @@ def validate_coverage_points(
     return coverage_by_id
 
 
+def validate_normative_clauses(
+    clauses: list[dict[str, Any]],
+    requirement_ids: set[str],
+    coverage_ids: set[str],
+    questions_by_id: dict[str, dict[str, Any]],
+    finding_ids: set[str],
+    sources: set[str],
+    errors: list[str],
+) -> set[str]:
+    check_duplicates(clauses, "id", "normative clause ID", errors)
+    clause_ids = {
+        item["id"] for item in clauses if isinstance(item, dict) and isinstance(item.get("id"), str)
+    }
+    destinations = {
+        "COVERAGE_POINT": coverage_ids,
+        "QUESTION": set(questions_by_id),
+        "FINDING": finding_ids,
+    }
+    for clause in clauses:
+        if not isinstance(clause, dict):
+            continue
+        clause_id = clause.get("id", "normative clause")
+        requirement_ref = clause.get("requirement_ref")
+        if isinstance(requirement_ref, str) and requirement_ref not in requirement_ids:
+            errors.append(f"{clause_id} references unknown requirement: {requirement_ref}")
+        check_source_refs(clause.get("source_refs", []), sources, clause_id, errors)
+        destination_type = clause.get("destination_type")
+        destination_id = clause.get("destination_id")
+        if destination_type in destinations:
+            if destination_id not in destinations[destination_type]:
+                errors.append(f"{clause_id} has no valid {destination_type.lower()} destination")
+        elif destination_type in {"OUT_OF_SCOPE", "NOT_TESTABLE"}:
+            if destination_id is not None or not str(clause.get("reason", "")).strip():
+                errors.append(f"{clause_id} requires a reason and no destination ID")
+        else:
+            errors.append(f"{clause_id} has no valid destination")
+    return clause_ids
+
+
 def validate(output_dir: Path) -> list[str]:
     errors: list[str] = []
     index_path = output_dir / "test-cases.json"
@@ -197,10 +236,11 @@ def validate(output_dir: Path) -> list[str]:
     requirements = index.get("requirements", [])
     findings = index.get("findings", [])
     coverage_points = index.get("coverage_points", [])
+    normative_clauses = index.get("normative_clauses", [])
     scenarios = index.get("scenarios", [])
     entries = index.get("test_cases", [])
     questions = questions_doc.get("questions", [])
-    collections = (requirements, findings, coverage_points, scenarios, entries, questions)
+    collections = (requirements, findings, normative_clauses, coverage_points, scenarios, entries, questions)
     if not all(isinstance(value, list) for value in collections):
         return errors
 
@@ -328,6 +368,22 @@ def validate(output_dir: Path) -> list[str]:
         errors,
     )
     coverage_ids = set(coverage_by_id)
+    clause_ids = validate_normative_clauses(
+        normative_clauses,
+        requirement_ids,
+        coverage_ids,
+        questions_by_id,
+        {item["id"] for item in findings if isinstance(item, dict) and isinstance(item.get("id"), str)},
+        sources,
+        errors,
+    )
+    for coverage_point in coverage_points:
+        if not isinstance(coverage_point, dict):
+            continue
+        cp_id = coverage_point.get("id", "coverage point")
+        for clause_id in string_set(coverage_point.get("clause_refs", [])):
+            if clause_id not in clause_ids:
+                errors.append(f"{cp_id} references unknown normative clause: {clause_id}")
 
     indexed_files: set[Path] = set()
     for entry in entries:

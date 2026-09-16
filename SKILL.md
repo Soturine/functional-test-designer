@@ -7,6 +7,19 @@ description: Designs traceable functional manual tests from only the sources exp
 
 Operate only on sources explicitly selected by the user. Selected paths are the complete content-analysis boundary: a selected directory is recursive only inside itself, and a selected file authorizes only that file. Produce source-grounded Coverage Points, independent manual Test Cases, validated JSON, per-case Markdown, and an offline HTML report using [references/output-contract.md](references/output-contract.md).
 
+## Roots and Artifact Destination
+
+Keep four roots distinct:
+
+- `skill_root` locates this skill's instructions, scripts, schemas, references, tests, and examples.
+- `source_root` contains the selected sources and is input only.
+- `workspace_root` is the trusted working directory for the run, when one is safely known.
+- `artifact_root` is the exact destination explicitly supplied by the user.
+
+Before the first write, resolve and validate the destination with `scripts/resolve_artifacts.py`. Prefer the exact explicit `artifact_root`, otherwise a trusted `workspace_root`; if neither is available, ask where to write. Never infer the destination from the current working directory, never use `skill_root` as a fallback, and never use `source_root` unless the user explicitly selected it as the artifact destination. Treat the supplied path as the final artifact root: do not append `functional-test-designer` or create a sibling directory named after the skill.
+
+Write only `artifact_root/output` and, when requested, `artifact_root/diagnostics`. Pass those resolved paths to every script rather than relying on their CLI defaults. Record `artifact_root`, `output_path`, `diagnostics_path`, and `artifact_root_source` (`explicit_user_path`, `workspace`, or `prompted`) in diagnostics.
+
 ## Scope Boundary
 
 Resolve natural-language selections into exact files, directories, or explicit globs before reading content.
@@ -39,23 +52,24 @@ When selected sources disagree, record a finding with traceability and keep the 
 
 ## Workflow
 
-### 1. Resolve Scope and Read Sources Once
+### 1. Resolve Scope and Read Sources Selectively
 
-Resolve the user's selected roots, list the exact files in scope, and read only those files. Build a compact internal evidence map during the initial read so later stages do not repeatedly reopen sources. Track rereads when diagnostics are requested.
+Resolve the user's selected roots and inventory paths/metadata before opening content. Use the read plan from `scripts/resolve_scope.py`: prioritize relevant textual requirements, functional documentation, code, configuration, and tests; keep common binaries metadata-only by default. Open images only when they contain essential behavior absent from text and vision is available. Read CSS only for relevant visual behavior and migrations only for relevant constraints, states, schema changes, or compatibility. Treat semantically equivalent bilingual documents as one normalized claim with both source refs. Read in bounded batches and build a compact evidence map so later stages do not repeatedly reopen sources. Track reads and rereads when diagnostics are requested.
 
-### 2. Normalize Evidence
+### 2. Extract Clauses, Then Normalize Evidence
 
-Extract actors, rules, permissions, states, inputs, outputs, constraints, acceptance behavior, and existing coverage evidence.
+Extract atomic normative clauses before summarizing them into logical Requirements. A clause is one observable or verifiable claim. Preserve every clause's source ref even when several clauses belong to one `REQ-XXX`.
 
 - Assign stable `REQ-001`, `REQ-002`, ... IDs in source order.
 - Preserve original identifiers and locations in `source_refs`.
 - Separate normative authority from implementation and test evidence.
-- Split compound requirements only where behaviors can fail independently.
+- Split independent verbs, outcomes joined by `and`, alternatives joined by `or`, filter dimensions, permissions, timing limits, boundaries, states, transitions, search, detail, and export behavior. `alerts and records` is two clauses; `finalize, reverse, or cancel releases the link` is three clauses.
+- Equivalent translations become one clause with all source refs; a real difference becomes a finding.
 - Mark unsupported or contradictory behavior `NEEDS_CLARIFICATION`; do not strengthen a source.
 
 ### 3. Extract and Audit Coverage Points
 
-Decompose normative behavior into stable `CP-001`, `CP-002`, ... Coverage Points. A Coverage Point controls behavioral coverage; it does not automatically create a Test Case.
+Map each clause to a stable, atomic `CP-001`, `CP-002`, ... Coverage Point or another explicit destination. A Coverage Point represents one observable behavior or one specific outcome; if two parts could fail independently, split them. A Coverage Point controls behavioral coverage; it does not automatically create a Test Case.
 
 After the initial extraction, make a short second pass over each authorized normative passage in the internal evidence map. For every independent clause or observable effect, ask whether a Coverage Point exists. Inspect effects joined by `and`, `or`, `also`, `when`, `after`, `on finalization`, `on cancellation`, and `on reversal`, plus normative verbs such as must, prevents, releases, records, alerts, keeps, removes, and updates. Confirm that every normative clause, bullet, acceptance criterion, flow step, alternate, exception, fallback, postcondition, transition, restriction, observable outcome, explicit side effect, permission, boundary, message, and state has a Coverage Point.
 
@@ -66,7 +80,7 @@ After the initial extraction, make a short second pass over each authorized norm
 - When an event has a partial oracle, preserve known effects as ordinary coverage and ask only about the missing effects.
 - Do not create a second coverage artifact or another CP layer.
 
-Every Coverage Point has exactly one disposition: `TEST_CASE`, `QUESTION`, or an explicitly justified `OUT_OF_SCOPE`. Never use `OUT_OF_SCOPE` to hide a gap.
+Every clause has exactly one destination: Coverage Point, Question, explicitly justified Out of Scope/Not Testable, or an appropriate conflict Finding. Every Coverage Point has exactly one disposition: `TEST_CASE`, `QUESTION`, or an explicitly justified `OUT_OF_SCOPE`. `unmapped_normative_clauses` is zero only after this clause-level audit; the existence of any CP for a Requirement proves nothing about its other clauses. Never use `OUT_OF_SCOPE` to hide a gap.
 
 ### 4. Evaluate Testability and Questions
 
@@ -90,6 +104,8 @@ Create another TC when a condition can fail alone, produce its own bug or Pass/F
 
 Generate test data lazily with the TC that uses it; do not create a global test-data phase or catalog. Additional selected context may add setup or steps only when that evidence confirms a real executable flow.
 
+When a selected legacy QA asset contains `subtest`, `sub-test`, `subteste`, `subcaso`, or nested conditions, classify every item. Convert it to an independent TC when it has its own setup, input, oracle, evidence, bug, or Pass/Fail and does not depend on preceding state. Convert it to an ordered step only when it is part of one sequential flow and depends on state produced earlier. Account for every input subtest; never emit a `subtests` field.
+
 For every step:
 
 - write one concrete action;
@@ -99,7 +115,7 @@ For every step:
 
 ### 8. Write, Validate, and Render
 
-Write final contract artifacts directly. Do not create per-run generator scripts or temporary source copies. Read schemas only if a validator failure is unclear.
+Finish semantic generation for all TCs in memory before writing. The `json_write` stage performs deterministic serialization only: aggregate JSON, individual JSON, byte/file counts. Do not reopen sources, call external reasoning, or regenerate each TC during this stage. Write final contract artifacts directly; do not create per-run generator scripts or temporary source copies. Read schemas only if a validator failure is unclear.
 
 ```text
 output/
@@ -115,9 +131,9 @@ output/
 Run in this order:
 
 ```bash
-python scripts/validate_output.py output
-python scripts/render_markdown.py output
-python scripts/render_report.py output
+python scripts/validate_output.py <artifact_root>/output
+python scripts/render_markdown.py <artifact_root>/output
+python scripts/render_report.py <artifact_root>/output
 ```
 
 The Markdown renderer reads validated JSON and changes no JSON. The HTML renderer reads each corresponding Markdown Mermaid block and displays that same linear flow. Fix all errors before completion.
@@ -133,6 +149,7 @@ When diagnostics are explicitly requested, follow [references/diagnostics.md](re
 - Only explicitly selected source content was analyzed.
 - Functional authority and other evidence roles remained distinct.
 - The internal Coverage Extraction Audit found no unmapped normative clause.
+- Every materialized normative clause has exactly one explicit destination.
 - Known and ambiguous parts were split between TCs and Questions.
 - Scenario candidates were deduplicated before TC generation.
 - Test design improved coverage without inflating output.

@@ -266,6 +266,37 @@ class ValidatorTests(unittest.TestCase):
 
         self.assertTrue(any("TC-001 markdown_file must be test-cases-md/TC-001.md" in error for error in errors))
 
+    def test_materialized_normative_clause_requires_exact_coverage_destination(self) -> None:
+        index = self.read("test-cases.json")
+        index["normative_clauses"] = [
+            {
+                "id": "CLAUSE-001",
+                "requirement_ref": "REQ-001",
+                "normalized_claim": "The created order has a visible reference.",
+                "authority": "FUNCTIONAL_AUTHORITY",
+                "source_refs": [{"source": "examples/requirements.md", "reference": "ORD-001"}],
+                "destination_type": "COVERAGE_POINT",
+                "destination_id": "CP-001",
+            }
+        ]
+        self.write("test-cases.json", index)
+
+        self.assertEqual([], VALIDATOR.validate(self.output))
+
+        index["normative_clauses"][0]["destination_id"] = "CP-999"
+        self.write("test-cases.json", index)
+        errors = VALIDATOR.validate(self.output)
+        self.assertTrue(any("CLAUSE-001 has no valid coverage_point destination" in error for error in errors))
+
+    def test_unmapped_materialized_clause_fails_even_when_requirement_has_coverage(self) -> None:
+        index = self.read("test-cases.json")
+        index["normative_clauses"][0]["destination_id"] = None
+        self.write("test-cases.json", index)
+
+        errors = VALIDATOR.validate(self.output)
+
+        self.assertTrue(any("CLAUSE-001 has no valid coverage_point destination" in error for error in errors))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -9,6 +9,7 @@
     "generated_at",
     "sources",
     "requirements",
+    "normative_clauses",
     "findings",
     "coverage_points",
     "scenarios",
@@ -27,6 +28,10 @@
       "type": "array",
       "minItems": 1,
       "items": {"$ref": "#/$defs/requirement"}
+    },
+    "normative_clauses": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/normativeClause"}
     },
     "findings": {
       "type": "array",
@@ -89,6 +94,26 @@
         }
       }
     },
+    "normativeClause": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "requirement_ref", "normalized_claim", "authority", "source_refs", "destination_type", "destination_id"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^CLAUSE-[0-9]{3,}$"},
+        "requirement_ref": {"type": "string", "pattern": "^REQ-[0-9]{3,}$"},
+        "normalized_claim": {"type": "string", "minLength": 1},
+        "authority": {"const": "FUNCTIONAL_AUTHORITY"},
+        "source_refs": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/sourceRef"}
+        },
+        "destination_type": {"enum": ["COVERAGE_POINT", "QUESTION", "OUT_OF_SCOPE", "NOT_TESTABLE", "FINDING"]},
+        "destination_id": {"type": ["string", "null"]},
+        "reason": {"type": "string", "minLength": 1}
+      }
+    },
     "finding": {
       "type": "object",
       "additionalProperties": false,
@@ -120,6 +145,12 @@
         "id": {"type": "string", "pattern": "^CP-[0-9]{3,}$"},
         "requirement_ref": {"type": "string", "pattern": "^REQ-[0-9]{3,}$"},
         "statement": {"type": "string", "minLength": 1},
+        "clause_refs": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"type": "string", "pattern": "^CLAUSE-[0-9]{3,}$"}
+        },
         "source_refs": {
           "type": "array",
           "minItems": 1,

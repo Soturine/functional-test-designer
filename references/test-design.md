@@ -18,7 +18,7 @@ Test Design techniques are reasoning tools, not output multiplication tools. Ana
 
 Create another TC when a condition can fail independently, create an independent bug, require separate evidence, or use different setup or oracle. Before adding a step, ask whether it can be executed and evaluated without earlier steps. If it can and owns a verifiable result, it is an independent TC. Use multiple steps only when they form one sequential business flow and later steps depend on state created earlier.
 
-There are no subtests. Steps are actions and observations within the Test Case, not hidden test variations.
+There are no subtests in output. For a legacy QA input, first classify every named subtest: independently executable/reportable variants become separate TCs, while state-dependent actions in one sequential business flow become steps. Steps are actions and observations within the Test Case, not hidden test variations.
 
 ## BVA and EP
 

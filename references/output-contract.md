@@ -19,7 +19,7 @@ Write JSON directly, validate it, render Markdown, then render HTML. Markdown an
 
 ## Index
 
-`test-cases.json` contains selected sources and their roles, normalized requirements, findings, Coverage Points, deduplicated scenarios, and the TC manifest:
+`test-cases.json` contains selected sources and their roles, normalized requirements, atomic normative clauses, findings, Coverage Points, deduplicated scenarios, and the TC manifest. Clause materialization is required.
 
 ```json
 {
@@ -35,6 +35,17 @@ Write JSON directly, validate it, render Markdown, then render HTML. Markdown an
       "statement": "Submitting a draft order changes it to SUBMITTED.",
       "status": "TESTABLE",
       "source_refs": [{"source": "docs/requirements.md", "reference": "Submit order"}]
+    }
+  ],
+  "normative_clauses": [
+    {
+      "id": "CLAUSE-001",
+      "requirement_ref": "REQ-001",
+      "normalized_claim": "Submitting a draft order changes it to SUBMITTED.",
+      "authority": "FUNCTIONAL_AUTHORITY",
+      "source_refs": [{"source": "docs/requirements.md", "reference": "Submit order"}],
+      "destination_type": "COVERAGE_POINT",
+      "destination_id": "CP-001"
     }
   ],
   "findings": [
@@ -68,6 +79,8 @@ Each Coverage Point represents one independently meaningful behavior and has one
 - `OUT_OF_SCOPE`: `target_refs` is empty and `reason` records the user's explicit exclusion.
 
 Several Coverage Points may target one TC when they are observations in the same coherent flow. The internal Coverage Extraction Audit adds missing points to this same catalog; it creates no second artifact or layer.
+
+Each clause records `source_refs`, `normalized_claim`, `authority`, `destination_type`, and `destination_id`. A CP may also record `clause_refs` for bidirectional traceability. Each clause mapped to a CP names exactly that CP as its destination. Clauses sent directly to a Question or Finding reference that destination; `OUT_OF_SCOPE` and `NOT_TESTABLE` use a null destination plus a reason.
 
 ## Test Case Entry
 
@@ -116,8 +129,10 @@ For N indexed cases there must be exactly N JSON files, N Markdown files, and N 
 - Every source reference points to a declared selected source.
 - Finding references point to existing requirements and selected sources.
 - Every testable requirement has at least one Coverage Point.
+- Every materialized normative clause has exactly one valid destination; Requirement-level coverage is not a proxy.
 - Every Coverage Point has a valid destination and bidirectional TC links agree.
 - Every TC maps to existing scenarios, requirements, and Coverage Points.
+- Every scenario maps to exactly one TC and every TC has exactly one primary scenario.
 - Index metadata and individual case metadata agree.
 - Every indexed JSON exists; unindexed TC JSON is invalid.
 - JSON and Markdown paths match the TC ID.

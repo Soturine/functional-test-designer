@@ -80,6 +80,8 @@ A skill pode analisar, quando explicitamente selecionados, requisitos, especific
 
 ## Saída
 
+Os artefatos são salvos no destino exato informado pelo usuário ou, na ausência dele, em um workspace confiável. A pasta da skill e o projeto analisado nunca são usados automaticamente como destino, e nenhuma pasta extra chamada `functional-test-designer` é acrescentada ao caminho escolhido.
+
 ```text
 output/
 |-- test-cases.json
@@ -117,6 +119,8 @@ O JSON continua sendo a fonte de verdade. Markdown e HTML apenas apresentam o me
 
 Quando `Diagnostic: true` é usado, métricas separadas são escritas em `diagnostics/`, com tempos, contagens, escopo analisado, releituras e overhead, sem copiar o conteúdo das fontes.
 
+Subtests encontrados em artefatos legados são normalizados: condições independentes viram TCs e ações sequenciais dependentes viram steps. O output final nunca contém `subtests`.
+
 ## Validar e renderizar
 
 ```bash
@@ -144,6 +148,7 @@ SKILL.md                       Workflow da Agent Skill
 references/                    Contrato, test design e diagnóstico
 schemas/                       JSON Schema Draft 2020-12
 scripts/resolve_scope.py       Resolução do escopo selecionado
+scripts/resolve_artifacts.py   Resolução segura do destino dos artefatos
 scripts/validate_output.py     Validação JSON e cross-file
 scripts/render_markdown.py     Markdown determinístico por TC
 scripts/render_report.py       Relatório HTML offline
