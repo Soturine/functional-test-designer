@@ -82,21 +82,126 @@ def render_steps(steps: list[dict[str, Any]]) -> str:
     )
 
 
-def render_flow(source: str) -> str:
-    node_pattern = re.compile(r'^\s+([AE][0-9]+)\["(.*)"\]$')
-    nodes = []
+def parse_mermaid_flow(source: str) -> list[tuple[str, str]]:
+    terminal_pattern = re.compile(r"^\s+(S|F)\(\[(.*)\]\)$")
+    node_pattern = re.compile(r'^\s+([ARC][0-9]+)\["(.*)"\]$')
+    nodes: dict[str, str] = {}
+    chains: list[list[str]] = []
     for line in source.splitlines():
-        match = node_pattern.match(line)
-        if match:
-            kind = "action" if match.group(1).startswith("A") else "expected"
-            nodes.append(f'<div class="flow-node flow-{kind}">{esc(match.group(2))}</div>')
-    if not nodes:
-        raise ValueError("Mermaid flow contains no supported action/result nodes")
-    visual = '<div class="flow-connector" aria-hidden="true">&darr;</div>'.join(nodes)
+        terminal = terminal_pattern.match(line)
+        node = node_pattern.match(line)
+        if terminal:
+            nodes[terminal.group(1)] = terminal.group(2)
+        elif node:
+            nodes[node.group(1)] = node.group(2)
+        elif line.strip().startswith("S -->"):
+            chains.append([part.strip() for part in line.strip().split("-->")])
+    if len(chains) != 1 or chains[0][0] != "S" or chains[0][-1] != "F":
+        raise ValueError("Mermaid flow must contain one Start-to-End chain")
+    if any(node_id not in nodes for node_id in chains[0]):
+        raise ValueError("Mermaid flow chain references an unknown node")
+    return [(node_id, nodes[node_id]) for node_id in chains[0]]
+
+
+def render_mermaid_svg(source: str, flow_id: str) -> str:
+    nodes = parse_mermaid_flow(source)
+    canvas_width = 720
+    regular_width = 600
+    terminal_width = 160
+    gap = 34
+    y = 24
+    layout: list[dict[str, Any]] = []
+    for node_id, label in nodes:
+        lines = label.split("<br/>")
+        terminal = node_id in {"S", "F"}
+        height = 50 if terminal else max(72, 30 + 20 * len(lines))
+        width = terminal_width if terminal else regular_width
+        layout.append(
+            {
+                "id": node_id,
+                "lines": lines,
+                "x": (canvas_width - width) / 2,
+                "y": y,
+                "width": width,
+                "height": height,
+            }
+        )
+        y += height + gap
+    canvas_height = y - gap + 24
+    marker_id = "arrow-" + re.sub(r"[^a-zA-Z0-9_-]", "-", flow_id)
+    connectors = []
+    for previous, current in zip(layout, layout[1:]):
+        x = canvas_width / 2
+        connectors.append(
+            f'<line x1="{x:g}" y1="{previous["y"] + previous["height"]:g}" '
+            f'x2="{x:g}" y2="{current["y"] - 7:g}" stroke="#64748b" stroke-width="1.5" '
+            f'marker-end="url(#{marker_id})" />'
+        )
+
+    shapes = []
+    palette = {
+        "terminal": ("#f8fafc", "#475569", "#0f172a"),
+        "action": ("#eff6ff", "#2563eb", "#0f172a"),
+        "expected": ("#f0fdf4", "#16a34a", "#14532d"),
+        "clarification": ("#fff7ed", "#ea580c", "#7c2d12"),
+    }
+    for item in layout:
+        node_id = item["id"]
+        kind = (
+            "terminal"
+            if node_id in {"S", "F"}
+            else "action"
+            if node_id.startswith("A")
+            else "clarification"
+            if node_id.startswith("C")
+            else "expected"
+        )
+        fill, stroke, color = palette[kind]
+        dash = ' stroke-dasharray="4 3"' if kind == "clarification" else ""
+        radius = item["height"] / 2 if kind == "terminal" else 8
+        line_count = len(item["lines"])
+        first_y = item["y"] + item["height"] / 2 - (line_count - 1) * 10
+        tspans = []
+        for position, line in enumerate(item["lines"]):
+            css_class = ' class="node-label-title"' if position == 0 and line_count > 1 else ""
+            dy = "0" if position == 0 else "20"
+            tspans.append(
+                f'<tspan x="{canvas_width / 2:g}" dy="{dy}"{css_class}>{esc(line)}</tspan>'
+            )
+        shapes.append(
+            f'<g class="mermaid-node mermaid-{kind}" data-node-id="{esc(node_id)}">'
+            f'<rect x="{item["x"]:g}" y="{item["y"]:g}" width="{item["width"]:g}" '
+            f'height="{item["height"]:g}" rx="{radius:g}" fill="{fill}" stroke="{stroke}" '
+            f'stroke-width="1.5"{dash} />'
+            f'<text x="{canvas_width / 2:g}" y="{first_y:g}" text-anchor="middle" '
+            f'fill="{color}" font-family="system-ui, sans-serif" font-size="14">'
+            + "".join(tspans)
+            + "</text></g>"
+        )
     return (
-        f'<div class="test-flow" role="img" aria-label="Fluxo linear do teste">{visual}</div>'
-        f'<pre class="mermaid-source" hidden>{esc(source)}</pre>'
+        f'<svg class="mermaid-svg" viewBox="0 0 {canvas_width} {canvas_height:g}" '
+        'role="img" aria-label="Fluxo linear do teste" xmlns="http://www.w3.org/2000/svg">'
+        f'<defs><marker id="{marker_id}" viewBox="0 0 10 10" refX="8" refY="5" '
+        'markerWidth="7" markerHeight="7" orient="auto-start-reverse">'
+        '<path d="M 0 0 L 10 5 L 0 10 z" fill="#64748b" /></marker></defs>'
+        + "".join(connectors)
+        + "".join(shapes)
+        + "</svg>"
     )
+
+
+def render_flow(source: str, flow_id: str) -> tuple[str, bool]:
+    try:
+        visual = render_mermaid_svg(source, flow_id)
+        body = f'<div class="mermaid-container" id="{esc(flow_id)}">{visual}</div>'
+        expandable = True
+    except ValueError:
+        body = (
+            '<div class="flow-error" role="status">N&atilde;o foi poss&iacute;vel renderizar este fluxo. '
+            'Consulte a tabela de passos ou o Markdown.</div>'
+        )
+        expandable = False
+    return body + f'<pre class="mermaid-source" hidden>{esc(source)}</pre>', expandable
 
 
 def render_case(case: dict[str, Any], entry: dict[str, Any], mermaid: str) -> str:
@@ -114,6 +219,14 @@ def render_case(case: dict[str, Any], entry: dict[str, Any], mermaid: str) -> st
         f'<a href="{esc(entry["file"])}">JSON</a>'
         f'<a href="{esc(entry["markdown_file"])}">Markdown</a>'
     )
+    flow_id = f"flow-{case['id']}"
+    flow, expandable = render_flow(mermaid, flow_id)
+    expand_button = (
+        f'<button type="button" class="expand-flow" data-flow-target="{esc(flow_id)}" '
+        f'aria-label="Ampliar fluxo do {esc(case["id"])}">Ampliar fluxo</button>'
+        if expandable
+        else ""
+    )
     return f"""
 <details class="tc-card" data-status="{esc(status)}" data-priority="{esc(priority)}" data-search="{esc(search_text)}">
   <summary>
@@ -127,7 +240,7 @@ def render_case(case: dict[str, Any], entry: dict[str, Any], mermaid: str) -> st
       <section><h3>Dados</h3>{render_data(case.get('test_data', []))}</section>
     </div>
     <section><h3>Passos</h3>{render_steps(case['steps'])}</section>
-    <section><h3>Fluxo do Teste</h3>{render_flow(mermaid)}</section>
+    <section class="flow-section"><div class="flow-heading"><h3>Fluxo do Teste</h3>{expand_button}</div>{flow}</section>
     <section><h3>Artefatos</h3><div class="artifact-links">{artifacts}</div></section>
     <details class="technical"><summary>Detalhes t&eacute;cnicos</summary><p>{technical}</p></details>
   </div>
@@ -238,7 +351,8 @@ def render_report(output_dir: Path, destination: Path | None = None) -> Path:
 <style>
 :root {{ --ink:#202427; --muted:#667078; --line:#d9dfe2; --surface:#fff; --soft:#f4f6f5; --accent:#087f5b; --warning:#9a6700; --danger:#b42318; }}
 * {{ box-sizing:border-box; }}
-body {{ margin:0; color:var(--ink); background:var(--soft); font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif; letter-spacing:0; }}
+body {{ margin:0; overflow-x:hidden; color:var(--ink); background:var(--soft); font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif; letter-spacing:0; }}
+body.modal-open {{ overflow:hidden; }}
 a {{ color:inherit; }}
 .shell {{ width:min(1180px,calc(100% - 32px)); margin:0 auto; }}
 header {{ background:#fff; border-bottom:1px solid var(--line); padding:28px 0 18px; }}
@@ -275,11 +389,21 @@ table {{ width:100%; border-collapse:collapse; background:#fff; }}
 th,td {{ border:1px solid var(--line); padding:10px; text-align:left; vertical-align:top; }}
 th {{ background:#f0f3f2; font-size:13px; }}
 .step-number {{ width:48px; text-align:center; font-weight:700; }}
-.test-flow {{ display:flex; flex-direction:column; align-items:stretch; width:min(680px,100%); margin:10px 0 18px; }}
-.flow-node {{ border:1px solid var(--line); padding:10px 12px; background:#fff; }}
-.flow-action {{ border-left:4px solid var(--accent); font-weight:650; }}
-.flow-expected {{ background:#f0f3f2; }}
-.flow-connector {{ align-self:center; color:var(--muted); font-size:20px; line-height:24px; }}
+.flow-section {{ margin-top:18px; border:1px solid var(--line); border-radius:6px; background:#fbfcfc; padding:14px; }}
+.flow-heading {{ display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:10px; }}
+.flow-heading h3 {{ margin:0; }}
+.expand-flow,.modal-close {{ min-height:36px; border:1px solid #aeb7bc; border-radius:4px; background:#fff; color:var(--ink); padding:7px 10px; font:inherit; font-weight:650; cursor:pointer; }}
+.expand-flow:hover,.expand-flow:focus-visible,.modal-close:hover,.modal-close:focus-visible {{ border-color:var(--accent); color:var(--accent); outline:2px solid transparent; }}
+.mermaid-container {{ width:100%; overflow-x:auto; padding:8px; background:#fff; border:1px solid #e5e9eb; border-radius:4px; }}
+.mermaid-svg {{ display:block; width:100%; min-width:560px; max-width:760px; height:auto; margin:0 auto; }}
+.node-label-title {{ font-weight:700; }}
+.flow-error {{ padding:12px; border-left:4px solid var(--warning); background:#fff6dd; color:#684b00; }}
+.flow-modal {{ position:fixed; inset:0; z-index:1000; display:grid; place-items:center; padding:20px; background:rgba(20,29,34,.72); }}
+.flow-modal-panel {{ display:flex; flex-direction:column; width:min(1040px,100%); max-height:calc(100vh - 40px); border-radius:6px; background:#fff; box-shadow:0 18px 55px rgba(0,0,0,.28); }}
+.flow-modal-header {{ display:flex; align-items:center; justify-content:space-between; gap:16px; padding:14px 16px; border-bottom:1px solid var(--line); }}
+.flow-modal-header h2 {{ margin:0; font-size:18px; }}
+.flow-modal-canvas {{ overflow:auto; padding:20px; }}
+.flow-modal-canvas .mermaid-svg {{ min-width:720px; max-width:900px; }}
 .artifact-links {{ display:flex; gap:10px; flex-wrap:wrap; }}
 .artifact-links a {{ border:1px solid #aeb7bc; border-radius:4px; padding:7px 10px; text-decoration:none; font-weight:650; }}
 .artifact-links a:hover {{ border-color:var(--accent); color:var(--accent); }}
@@ -294,7 +418,7 @@ th {{ background:#f0f3f2; font-size:13px; }}
 .coverage-marker {{ flex:0 0 22px; color:var(--accent)!important; font-size:18px; font-weight:800; }}
 .needs-answer {{ color:var(--danger); font-weight:700; }}
 [hidden] {{ display:none!important; }}
-@media (max-width:720px) {{ .shell {{ width:min(100% - 20px,1180px); }} .filters,.two-column {{ grid-template-columns:1fr; }} .tc-card>summary,.question-title {{ align-items:flex-start; flex-direction:column; }} .badges {{ justify-content:flex-start; }} }}
+@media (max-width:720px) {{ .shell {{ width:min(100% - 20px,1180px); }} .filters,.two-column {{ grid-template-columns:1fr; }} .tc-card>summary,.question-title {{ align-items:flex-start; flex-direction:column; }} .badges {{ justify-content:flex-start; }} .flow-section {{ padding:10px; }} .flow-heading {{ align-items:flex-start; flex-direction:column; }} .flow-modal {{ padding:8px; }} .flow-modal-panel {{ max-height:calc(100vh - 16px); }} .flow-modal-canvas {{ padding:10px; }} }}
 </style>
 </head>
 <body>
@@ -315,10 +439,20 @@ th {{ background:#f0f3f2; font-size:13px; }}
 <section id="perguntas"><h2>Perguntas</h2>{question_html or '<p class="empty">Nenhuma pergunta pendente.</p>'}</section>
 <section id="cobertura"><h2>Cobertura</h2>{coverage_html}</section>
 </main>
+<div id="flow-modal" class="flow-modal" role="dialog" aria-modal="true" aria-labelledby="flow-modal-title" hidden>
+  <div class="flow-modal-panel">
+    <div class="flow-modal-header"><h2 id="flow-modal-title">Fluxo do Teste</h2><button type="button" class="modal-close" aria-label="Fechar fluxo ampliado">Fechar</button></div>
+    <div id="flow-modal-canvas" class="flow-modal-canvas"></div>
+  </div>
+</div>
 <script>
 const search=document.getElementById('search');const statusFilter=document.getElementById('status-filter');const priorityFilter=document.getElementById('priority-filter');const cards=[...document.querySelectorAll('.tc-card')];const noResults=document.getElementById('no-results');
 function applyFilters(){{const term=search.value.trim().toLocaleLowerCase();let visible=0;cards.forEach(card=>{{const show=(!term||card.dataset.search.includes(term))&&(!statusFilter.value||card.dataset.status===statusFilter.value)&&(!priorityFilter.value||card.dataset.priority===priorityFilter.value);card.hidden=!show;if(show)visible+=1;}});noResults.hidden=visible!==0;}}
 [search,statusFilter,priorityFilter].forEach(control=>control.addEventListener(control===search?'input':'change',applyFilters));
+const flowModal=document.getElementById('flow-modal');const flowCanvas=document.getElementById('flow-modal-canvas');const flowClose=flowModal.querySelector('.modal-close');let flowTrigger=null;
+function closeFlowModal(){{if(flowModal.hidden)return;flowModal.hidden=true;flowCanvas.replaceChildren();document.body.classList.remove('modal-open');if(flowTrigger)flowTrigger.focus();}}
+document.querySelectorAll('.expand-flow').forEach(button=>button.addEventListener('click',()=>{{const source=document.getElementById(button.dataset.flowTarget);const svg=source&&source.querySelector('svg');if(!svg)return;flowTrigger=button;flowCanvas.replaceChildren(svg.cloneNode(true));flowModal.hidden=false;document.body.classList.add('modal-open');flowClose.focus();}}));
+flowClose.addEventListener('click',closeFlowModal);flowModal.addEventListener('click',event=>{{if(event.target===flowModal)closeFlowModal();}});document.addEventListener('keydown',event=>{{if(event.key==='Escape')closeFlowModal();}});
 </script>
 </body>
 </html>

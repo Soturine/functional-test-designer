@@ -104,7 +104,9 @@ Use `READY`, `NEEDS_REVIEW`, or `BLOCKED` for status and `CRITICAL`, `HIGH`, `ME
 
 ## HTML
 
-`report.html` is offline and has Summary, Test Cases, Questions, and Coverage navigation. Each TC card shows objective, preconditions, test data, steps, the visual flow extracted from that TC's Markdown, links to the exact JSON and Markdown artifacts, and technical traceability. It does not load a CDN or show raw JSON by default.
+`report.html` is offline and has Summary, Test Cases, Questions, and Coverage navigation. Each TC card shows objective, preconditions, test data, steps, the visual flow extracted from that TC's Markdown, links to the exact JSON and Markdown artifacts, and technical traceability. The renderer converts the verified Mermaid source into deterministic inline SVG; it does not bundle or claim to use Mermaid.js. It loads no CDN and shows no raw JSON by default.
+
+The flow section follows the steps, remains locally scrollable on narrow screens, and offers an accessible `Ampliar fluxo` modal that closes by button, overlay, or `Esc`. A local rendering failure leaves the steps and Markdown link available.
 
 For N indexed cases there must be exactly N JSON files, N Markdown files, and N HTML cards, all aligned by TC ID and step content.
 

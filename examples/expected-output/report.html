@@ -7,7 +7,8 @@
 <style>
 :root { --ink:#202427; --muted:#667078; --line:#d9dfe2; --surface:#fff; --soft:#f4f6f5; --accent:#087f5b; --warning:#9a6700; --danger:#b42318; }
 * { box-sizing:border-box; }
-body { margin:0; color:var(--ink); background:var(--soft); font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif; letter-spacing:0; }
+body { margin:0; overflow-x:hidden; color:var(--ink); background:var(--soft); font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif; letter-spacing:0; }
+body.modal-open { overflow:hidden; }
 a { color:inherit; }
 .shell { width:min(1180px,calc(100% - 32px)); margin:0 auto; }
 header { background:#fff; border-bottom:1px solid var(--line); padding:28px 0 18px; }
@@ -44,11 +45,21 @@ table { width:100%; border-collapse:collapse; background:#fff; }
 th,td { border:1px solid var(--line); padding:10px; text-align:left; vertical-align:top; }
 th { background:#f0f3f2; font-size:13px; }
 .step-number { width:48px; text-align:center; font-weight:700; }
-.test-flow { display:flex; flex-direction:column; align-items:stretch; width:min(680px,100%); margin:10px 0 18px; }
-.flow-node { border:1px solid var(--line); padding:10px 12px; background:#fff; }
-.flow-action { border-left:4px solid var(--accent); font-weight:650; }
-.flow-expected { background:#f0f3f2; }
-.flow-connector { align-self:center; color:var(--muted); font-size:20px; line-height:24px; }
+.flow-section { margin-top:18px; border:1px solid var(--line); border-radius:6px; background:#fbfcfc; padding:14px; }
+.flow-heading { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:10px; }
+.flow-heading h3 { margin:0; }
+.expand-flow,.modal-close { min-height:36px; border:1px solid #aeb7bc; border-radius:4px; background:#fff; color:var(--ink); padding:7px 10px; font:inherit; font-weight:650; cursor:pointer; }
+.expand-flow:hover,.expand-flow:focus-visible,.modal-close:hover,.modal-close:focus-visible { border-color:var(--accent); color:var(--accent); outline:2px solid transparent; }
+.mermaid-container { width:100%; overflow-x:auto; padding:8px; background:#fff; border:1px solid #e5e9eb; border-radius:4px; }
+.mermaid-svg { display:block; width:100%; min-width:560px; max-width:760px; height:auto; margin:0 auto; }
+.node-label-title { font-weight:700; }
+.flow-error { padding:12px; border-left:4px solid var(--warning); background:#fff6dd; color:#684b00; }
+.flow-modal { position:fixed; inset:0; z-index:1000; display:grid; place-items:center; padding:20px; background:rgba(20,29,34,.72); }
+.flow-modal-panel { display:flex; flex-direction:column; width:min(1040px,100%); max-height:calc(100vh - 40px); border-radius:6px; background:#fff; box-shadow:0 18px 55px rgba(0,0,0,.28); }
+.flow-modal-header { display:flex; align-items:center; justify-content:space-between; gap:16px; padding:14px 16px; border-bottom:1px solid var(--line); }
+.flow-modal-header h2 { margin:0; font-size:18px; }
+.flow-modal-canvas { overflow:auto; padding:20px; }
+.flow-modal-canvas .mermaid-svg { min-width:720px; max-width:900px; }
 .artifact-links { display:flex; gap:10px; flex-wrap:wrap; }
 .artifact-links a { border:1px solid #aeb7bc; border-radius:4px; padding:7px 10px; text-decoration:none; font-weight:650; }
 .artifact-links a:hover { border-color:var(--accent); color:var(--accent); }
@@ -63,7 +74,7 @@ th { background:#f0f3f2; font-size:13px; }
 .coverage-marker { flex:0 0 22px; color:var(--accent)!important; font-size:18px; font-weight:800; }
 .needs-answer { color:var(--danger); font-weight:700; }
 [hidden] { display:none!important; }
-@media (max-width:720px) { .shell { width:min(100% - 20px,1180px); } .filters,.two-column { grid-template-columns:1fr; } .tc-card>summary,.question-title { align-items:flex-start; flex-direction:column; } .badges { justify-content:flex-start; } }
+@media (max-width:720px) { .shell { width:min(100% - 20px,1180px); } .filters,.two-column { grid-template-columns:1fr; } .tc-card>summary,.question-title { align-items:flex-start; flex-direction:column; } .badges { justify-content:flex-start; } .flow-section { padding:10px; } .flow-heading { align-items:flex-start; flex-direction:column; } .flow-modal { padding:8px; } .flow-modal-panel { max-height:calc(100vh - 16px); } .flow-modal-canvas { padding:10px; } }
 </style>
 </head>
 <body>
@@ -93,14 +104,24 @@ th { background:#f0f3f2; font-size:13px; }
       <section><h3>Dados</h3><ul><li><strong>order</strong>: Synthetic order data accepted by the available order entry point.</li></ul></section>
     </div>
     <section><h3>Passos</h3><div class="table-wrap"><table class="steps"><thead><tr><th scope="col">#</th><th scope="col">A&ccedil;&atilde;o</th><th scope="col">Resultado esperado</th></tr></thead><tbody><tr><td class="step-number">1</td><td>Submit a create-order request using the synthetic order data.</td><td>An order is created and a visible order reference is provided.</td></tr><tr><td class="step-number">2</td><td>Observe the state shown for the created order.</td><td>The order state is DRAFT.</td></tr></tbody></table></div></section>
-    <section><h3>Fluxo do Teste</h3><div class="test-flow" role="img" aria-label="Fluxo linear do teste"><div class="flow-node flow-action">1. Submit a create-order request using the synthetic order data.</div><div class="flow-connector" aria-hidden="true">&darr;</div><div class="flow-node flow-expected">Expected: An order is created and a visible order reference is provided.</div><div class="flow-connector" aria-hidden="true">&darr;</div><div class="flow-node flow-action">2. Observe the state shown for the created order.</div><div class="flow-connector" aria-hidden="true">&darr;</div><div class="flow-node flow-expected">Expected: The order state is DRAFT.</div></div><pre class="mermaid-source" hidden>flowchart TD
-    A1[&quot;1. Submit a create-order request using the synthetic order data.&quot;]
-    E1[&quot;Expected: An order is created and a visible order reference is provided.&quot;]
-    A1 --&gt; E1
-    A2[&quot;2. Observe the state shown for the created order.&quot;]
-    E2[&quot;Expected: The order state is DRAFT.&quot;]
-    E1 --&gt; A2
-    A2 --&gt; E2</pre></section>
+    <section class="flow-section"><div class="flow-heading"><h3>Fluxo do Teste</h3><button type="button" class="expand-flow" data-flow-target="flow-TC-001" aria-label="Ampliar fluxo do TC-001">Ampliar fluxo</button></div><div class="mermaid-container" id="flow-TC-001"><svg class="mermaid-svg" viewBox="0 0 720 642" role="img" aria-label="Fluxo linear do teste" xmlns="http://www.w3.org/2000/svg"><defs><marker id="arrow-flow-TC-001" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#64748b" /></marker></defs><line x1="360" y1="74" x2="360" y2="101" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow-flow-TC-001)" /><line x1="360" y1="198" x2="360" y2="225" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow-flow-TC-001)" /><line x1="360" y1="322" x2="360" y2="349" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow-flow-TC-001)" /><line x1="360" y1="428" x2="360" y2="455" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow-flow-TC-001)" /><line x1="360" y1="534" x2="360" y2="561" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow-flow-TC-001)" /><g class="mermaid-node mermaid-terminal" data-node-id="S"><rect x="280" y="24" width="160" height="50" rx="25" fill="#f8fafc" stroke="#475569" stroke-width="1.5" /><text x="360" y="49" text-anchor="middle" fill="#0f172a" font-family="system-ui, sans-serif" font-size="14"><tspan x="360" dy="0">Start</tspan></text></g><g class="mermaid-node mermaid-action" data-node-id="A1"><rect x="60" y="108" width="600" height="90" rx="8" fill="#eff6ff" stroke="#2563eb" stroke-width="1.5" /><text x="360" y="133" text-anchor="middle" fill="#0f172a" font-family="system-ui, sans-serif" font-size="14"><tspan x="360" dy="0" class="node-label-title">1 - Action</tspan><tspan x="360" dy="20">Submit a create-order request using the synthetic order</tspan><tspan x="360" dy="20">data.</tspan></text></g><g class="mermaid-node mermaid-expected" data-node-id="R1"><rect x="60" y="232" width="600" height="90" rx="8" fill="#f0fdf4" stroke="#16a34a" stroke-width="1.5" /><text x="360" y="257" text-anchor="middle" fill="#14532d" font-family="system-ui, sans-serif" font-size="14"><tspan x="360" dy="0" class="node-label-title">Expected result</tspan><tspan x="360" dy="20">An order is created and a visible order reference is</tspan><tspan x="360" dy="20">provided.</tspan></text></g><g class="mermaid-node mermaid-action" data-node-id="A2"><rect x="60" y="356" width="600" height="72" rx="8" fill="#eff6ff" stroke="#2563eb" stroke-width="1.5" /><text x="360" y="382" text-anchor="middle" fill="#0f172a" font-family="system-ui, sans-serif" font-size="14"><tspan x="360" dy="0" class="node-label-title">2 - Action</tspan><tspan x="360" dy="20">Observe the state shown for the created order.</tspan></text></g><g class="mermaid-node mermaid-expected" data-node-id="R2"><rect x="60" y="462" width="600" height="72" rx="8" fill="#f0fdf4" stroke="#16a34a" stroke-width="1.5" /><text x="360" y="488" text-anchor="middle" fill="#14532d" font-family="system-ui, sans-serif" font-size="14"><tspan x="360" dy="0" class="node-label-title">Expected result</tspan><tspan x="360" dy="20">The order state is DRAFT.</tspan></text></g><g class="mermaid-node mermaid-terminal" data-node-id="F"><rect x="280" y="568" width="160" height="50" rx="25" fill="#f8fafc" stroke="#475569" stroke-width="1.5" /><text x="360" y="593" text-anchor="middle" fill="#0f172a" font-family="system-ui, sans-serif" font-size="14"><tspan x="360" dy="0">End</tspan></text></g></svg></div><pre class="mermaid-source" hidden>flowchart TD
+    S([Start])
+    A1[&quot;1 - Action&lt;br/&gt;Submit a create-order request using the synthetic order&lt;br/&gt;data.&quot;]
+    R1[&quot;Expected result&lt;br/&gt;An order is created and a visible order reference is&lt;br/&gt;provided.&quot;]
+    A2[&quot;2 - Action&lt;br/&gt;Observe the state shown for the created order.&quot;]
+    R2[&quot;Expected result&lt;br/&gt;The order state is DRAFT.&quot;]
+    F([End])
+
+    S --&gt; A1 --&gt; R1 --&gt; A2 --&gt; R2 --&gt; F
+
+    classDef startEnd fill:#f8fafc,stroke:#475569,stroke-width:1.5px,color:#0f172a;
+    classDef action fill:#eff6ff,stroke:#2563eb,stroke-width:1.5px,color:#0f172a;
+    classDef expected fill:#f0fdf4,stroke:#16a34a,stroke-width:1.5px,color:#14532d;
+    classDef clarification fill:#fff7ed,stroke:#ea580c,stroke-width:1.5px,color:#7c2d12,stroke-dasharray:4 3;
+
+    class S,F startEnd;
+    class A1,A2 action;
+    class R1,R2 expected;</pre></section>
     <section><h3>Artefatos</h3><div class="artifact-links"><a href="test-cases/TC-001.json">JSON</a><a href="test-cases-md/TC-001.md">Markdown</a></div></section>
     <details class="technical"><summary>Detalhes t&eacute;cnicos</summary><p>Requisitos: REQ-001 | Cen&aacute;rios: SCN-001 | Coverage Points: CP-001, CP-002, CP-003</p></details>
   </div>
@@ -117,10 +138,22 @@ th { background:#f0f3f2; font-size:13px; }
       <section><h3>Dados</h3><ul><li><strong>quantity</strong>: Minimum valid integer quantity: 1.</li></ul></section>
     </div>
     <section><h3>Passos</h3><div class="table-wrap"><table class="steps"><thead><tr><th scope="col">#</th><th scope="col">A&ccedil;&atilde;o</th><th scope="col">Resultado esperado</th></tr></thead><tbody><tr><td class="step-number">1</td><td>Set the order-line quantity to 1 and submit the change.</td><td>The quantity 1 is accepted.</td></tr></tbody></table></div></section>
-    <section><h3>Fluxo do Teste</h3><div class="test-flow" role="img" aria-label="Fluxo linear do teste"><div class="flow-node flow-action">1. Set the order-line quantity to 1 and submit the change.</div><div class="flow-connector" aria-hidden="true">&darr;</div><div class="flow-node flow-expected">Expected: The quantity 1 is accepted.</div></div><pre class="mermaid-source" hidden>flowchart TD
-    A1[&quot;1. Set the order-line quantity to 1 and submit the change.&quot;]
-    E1[&quot;Expected: The quantity 1 is accepted.&quot;]
-    A1 --&gt; E1</pre></section>
+    <section class="flow-section"><div class="flow-heading"><h3>Fluxo do Teste</h3><button type="button" class="expand-flow" data-flow-target="flow-TC-002" aria-label="Ampliar fluxo do TC-002">Ampliar fluxo</button></div><div class="mermaid-container" id="flow-TC-002"><svg class="mermaid-svg" viewBox="0 0 720 394" role="img" aria-label="Fluxo linear do teste" xmlns="http://www.w3.org/2000/svg"><defs><marker id="arrow-flow-TC-002" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#64748b" /></marker></defs><line x1="360" y1="74" x2="360" y2="101" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow-flow-TC-002)" /><line x1="360" y1="180" x2="360" y2="207" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow-flow-TC-002)" /><line x1="360" y1="286" x2="360" y2="313" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow-flow-TC-002)" /><g class="mermaid-node mermaid-terminal" data-node-id="S"><rect x="280" y="24" width="160" height="50" rx="25" fill="#f8fafc" stroke="#475569" stroke-width="1.5" /><text x="360" y="49" text-anchor="middle" fill="#0f172a" font-family="system-ui, sans-serif" font-size="14"><tspan x="360" dy="0">Start</tspan></text></g><g class="mermaid-node mermaid-action" data-node-id="A1"><rect x="60" y="108" width="600" height="72" rx="8" fill="#eff6ff" stroke="#2563eb" stroke-width="1.5" /><text x="360" y="134" text-anchor="middle" fill="#0f172a" font-family="system-ui, sans-serif" font-size="14"><tspan x="360" dy="0" class="node-label-title">1 - Action</tspan><tspan x="360" dy="20">Set the order-line quantity to 1 and submit the change.</tspan></text></g><g class="mermaid-node mermaid-expected" data-node-id="R1"><rect x="60" y="214" width="600" height="72" rx="8" fill="#f0fdf4" stroke="#16a34a" stroke-width="1.5" /><text x="360" y="240" text-anchor="middle" fill="#14532d" font-family="system-ui, sans-serif" font-size="14"><tspan x="360" dy="0" class="node-label-title">Expected result</tspan><tspan x="360" dy="20">The quantity 1 is accepted.</tspan></text></g><g class="mermaid-node mermaid-terminal" data-node-id="F"><rect x="280" y="320" width="160" height="50" rx="25" fill="#f8fafc" stroke="#475569" stroke-width="1.5" /><text x="360" y="345" text-anchor="middle" fill="#0f172a" font-family="system-ui, sans-serif" font-size="14"><tspan x="360" dy="0">End</tspan></text></g></svg></div><pre class="mermaid-source" hidden>flowchart TD
+    S([Start])
+    A1[&quot;1 - Action&lt;br/&gt;Set the order-line quantity to 1 and submit the change.&quot;]
+    R1[&quot;Expected result&lt;br/&gt;The quantity 1 is accepted.&quot;]
+    F([End])
+
+    S --&gt; A1 --&gt; R1 --&gt; F
+
+    classDef startEnd fill:#f8fafc,stroke:#475569,stroke-width:1.5px,color:#0f172a;
+    classDef action fill:#eff6ff,stroke:#2563eb,stroke-width:1.5px,color:#0f172a;
+    classDef expected fill:#f0fdf4,stroke:#16a34a,stroke-width:1.5px,color:#14532d;
+    classDef clarification fill:#fff7ed,stroke:#ea580c,stroke-width:1.5px,color:#7c2d12,stroke-dasharray:4 3;
+
+    class S,F startEnd;
+    class A1 action;
+    class R1 expected;</pre></section>
     <section><h3>Artefatos</h3><div class="artifact-links"><a href="test-cases/TC-002.json">JSON</a><a href="test-cases-md/TC-002.md">Markdown</a></div></section>
     <details class="technical"><summary>Detalhes t&eacute;cnicos</summary><p>Requisitos: REQ-002 | Cen&aacute;rios: SCN-002 | Coverage Points: CP-004</p></details>
   </div>
@@ -137,10 +170,22 @@ th { background:#f0f3f2; font-size:13px; }
       <section><h3>Dados</h3><ul><li><strong>quantity</strong>: Maximum valid integer quantity: 10.</li></ul></section>
     </div>
     <section><h3>Passos</h3><div class="table-wrap"><table class="steps"><thead><tr><th scope="col">#</th><th scope="col">A&ccedil;&atilde;o</th><th scope="col">Resultado esperado</th></tr></thead><tbody><tr><td class="step-number">1</td><td>Set the order-line quantity to 10 and submit the change.</td><td>The quantity 10 is accepted.</td></tr></tbody></table></div></section>
-    <section><h3>Fluxo do Teste</h3><div class="test-flow" role="img" aria-label="Fluxo linear do teste"><div class="flow-node flow-action">1. Set the order-line quantity to 10 and submit the change.</div><div class="flow-connector" aria-hidden="true">&darr;</div><div class="flow-node flow-expected">Expected: The quantity 10 is accepted.</div></div><pre class="mermaid-source" hidden>flowchart TD
-    A1[&quot;1. Set the order-line quantity to 10 and submit the change.&quot;]
-    E1[&quot;Expected: The quantity 10 is accepted.&quot;]
-    A1 --&gt; E1</pre></section>
+    <section class="flow-section"><div class="flow-heading"><h3>Fluxo do Teste</h3><button type="button" class="expand-flow" data-flow-target="flow-TC-003" aria-label="Ampliar fluxo do TC-003">Ampliar fluxo</button></div><div class="mermaid-container" id="flow-TC-003"><svg class="mermaid-svg" viewBox="0 0 720 394" role="img" aria-label="Fluxo linear do teste" xmlns="http://www.w3.org/2000/svg"><defs><marker id="arrow-flow-TC-003" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#64748b" /></marker></defs><line x1="360" y1="74" x2="360" y2="101" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow-flow-TC-003)" /><line x1="360" y1="180" x2="360" y2="207" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow-flow-TC-003)" /><line x1="360" y1="286" x2="360" y2="313" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow-flow-TC-003)" /><g class="mermaid-node mermaid-terminal" data-node-id="S"><rect x="280" y="24" width="160" height="50" rx="25" fill="#f8fafc" stroke="#475569" stroke-width="1.5" /><text x="360" y="49" text-anchor="middle" fill="#0f172a" font-family="system-ui, sans-serif" font-size="14"><tspan x="360" dy="0">Start</tspan></text></g><g class="mermaid-node mermaid-action" data-node-id="A1"><rect x="60" y="108" width="600" height="72" rx="8" fill="#eff6ff" stroke="#2563eb" stroke-width="1.5" /><text x="360" y="134" text-anchor="middle" fill="#0f172a" font-family="system-ui, sans-serif" font-size="14"><tspan x="360" dy="0" class="node-label-title">1 - Action</tspan><tspan x="360" dy="20">Set the order-line quantity to 10 and submit the change.</tspan></text></g><g class="mermaid-node mermaid-expected" data-node-id="R1"><rect x="60" y="214" width="600" height="72" rx="8" fill="#f0fdf4" stroke="#16a34a" stroke-width="1.5" /><text x="360" y="240" text-anchor="middle" fill="#14532d" font-family="system-ui, sans-serif" font-size="14"><tspan x="360" dy="0" class="node-label-title">Expected result</tspan><tspan x="360" dy="20">The quantity 10 is accepted.</tspan></text></g><g class="mermaid-node mermaid-terminal" data-node-id="F"><rect x="280" y="320" width="160" height="50" rx="25" fill="#f8fafc" stroke="#475569" stroke-width="1.5" /><text x="360" y="345" text-anchor="middle" fill="#0f172a" font-family="system-ui, sans-serif" font-size="14"><tspan x="360" dy="0">End</tspan></text></g></svg></div><pre class="mermaid-source" hidden>flowchart TD
+    S([Start])
+    A1[&quot;1 - Action&lt;br/&gt;Set the order-line quantity to 10 and submit the change.&quot;]
+    R1[&quot;Expected result&lt;br/&gt;The quantity 10 is accepted.&quot;]
+    F([End])
+
+    S --&gt; A1 --&gt; R1 --&gt; F
+
+    classDef startEnd fill:#f8fafc,stroke:#475569,stroke-width:1.5px,color:#0f172a;
+    classDef action fill:#eff6ff,stroke:#2563eb,stroke-width:1.5px,color:#0f172a;
+    classDef expected fill:#f0fdf4,stroke:#16a34a,stroke-width:1.5px,color:#14532d;
+    classDef clarification fill:#fff7ed,stroke:#ea580c,stroke-width:1.5px,color:#7c2d12,stroke-dasharray:4 3;
+
+    class S,F startEnd;
+    class A1 action;
+    class R1 expected;</pre></section>
     <section><h3>Artefatos</h3><div class="artifact-links"><a href="test-cases/TC-003.json">JSON</a><a href="test-cases-md/TC-003.md">Markdown</a></div></section>
     <details class="technical"><summary>Detalhes t&eacute;cnicos</summary><p>Requisitos: REQ-002 | Cen&aacute;rios: SCN-003 | Coverage Points: CP-005</p></details>
   </div>
@@ -157,10 +202,22 @@ th { background:#f0f3f2; font-size:13px; }
       <section><h3>Dados</h3><ul><li><strong>quantity</strong>: Below-minimum integer quantity: 0.</li></ul></section>
     </div>
     <section><h3>Passos</h3><div class="table-wrap"><table class="steps"><thead><tr><th scope="col">#</th><th scope="col">A&ccedil;&atilde;o</th><th scope="col">Resultado esperado</th></tr></thead><tbody><tr><td class="step-number">1</td><td>Set the order-line quantity to 0 and submit the change.</td><td>The value is rejected and the existing quantity remains 5.</td></tr></tbody></table></div></section>
-    <section><h3>Fluxo do Teste</h3><div class="test-flow" role="img" aria-label="Fluxo linear do teste"><div class="flow-node flow-action">1. Set the order-line quantity to 0 and submit the change.</div><div class="flow-connector" aria-hidden="true">&darr;</div><div class="flow-node flow-expected">Expected: The value is rejected and the existing quantity remains 5.</div></div><pre class="mermaid-source" hidden>flowchart TD
-    A1[&quot;1. Set the order-line quantity to 0 and submit the change.&quot;]
-    E1[&quot;Expected: The value is rejected and the existing quantity remains 5.&quot;]
-    A1 --&gt; E1</pre></section>
+    <section class="flow-section"><div class="flow-heading"><h3>Fluxo do Teste</h3><button type="button" class="expand-flow" data-flow-target="flow-TC-004" aria-label="Ampliar fluxo do TC-004">Ampliar fluxo</button></div><div class="mermaid-container" id="flow-TC-004"><svg class="mermaid-svg" viewBox="0 0 720 394" role="img" aria-label="Fluxo linear do teste" xmlns="http://www.w3.org/2000/svg"><defs><marker id="arrow-flow-TC-004" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#64748b" /></marker></defs><line x1="360" y1="74" x2="360" y2="101" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow-flow-TC-004)" /><line x1="360" y1="180" x2="360" y2="207" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow-flow-TC-004)" /><line x1="360" y1="286" x2="360" y2="313" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow-flow-TC-004)" /><g class="mermaid-node mermaid-terminal" data-node-id="S"><rect x="280" y="24" width="160" height="50" rx="25" fill="#f8fafc" stroke="#475569" stroke-width="1.5" /><text x="360" y="49" text-anchor="middle" fill="#0f172a" font-family="system-ui, sans-serif" font-size="14"><tspan x="360" dy="0">Start</tspan></text></g><g class="mermaid-node mermaid-action" data-node-id="A1"><rect x="60" y="108" width="600" height="72" rx="8" fill="#eff6ff" stroke="#2563eb" stroke-width="1.5" /><text x="360" y="134" text-anchor="middle" fill="#0f172a" font-family="system-ui, sans-serif" font-size="14"><tspan x="360" dy="0" class="node-label-title">1 - Action</tspan><tspan x="360" dy="20">Set the order-line quantity to 0 and submit the change.</tspan></text></g><g class="mermaid-node mermaid-expected" data-node-id="R1"><rect x="60" y="214" width="600" height="72" rx="8" fill="#f0fdf4" stroke="#16a34a" stroke-width="1.5" /><text x="360" y="240" text-anchor="middle" fill="#14532d" font-family="system-ui, sans-serif" font-size="14"><tspan x="360" dy="0" class="node-label-title">Expected result</tspan><tspan x="360" dy="20">The value is rejected and the existing quantity remains 5.</tspan></text></g><g class="mermaid-node mermaid-terminal" data-node-id="F"><rect x="280" y="320" width="160" height="50" rx="25" fill="#f8fafc" stroke="#475569" stroke-width="1.5" /><text x="360" y="345" text-anchor="middle" fill="#0f172a" font-family="system-ui, sans-serif" font-size="14"><tspan x="360" dy="0">End</tspan></text></g></svg></div><pre class="mermaid-source" hidden>flowchart TD
+    S([Start])
+    A1[&quot;1 - Action&lt;br/&gt;Set the order-line quantity to 0 and submit the change.&quot;]
+    R1[&quot;Expected result&lt;br/&gt;The value is rejected and the existing quantity remains 5.&quot;]
+    F([End])
+
+    S --&gt; A1 --&gt; R1 --&gt; F
+
+    classDef startEnd fill:#f8fafc,stroke:#475569,stroke-width:1.5px,color:#0f172a;
+    classDef action fill:#eff6ff,stroke:#2563eb,stroke-width:1.5px,color:#0f172a;
+    classDef expected fill:#f0fdf4,stroke:#16a34a,stroke-width:1.5px,color:#14532d;
+    classDef clarification fill:#fff7ed,stroke:#ea580c,stroke-width:1.5px,color:#7c2d12,stroke-dasharray:4 3;
+
+    class S,F startEnd;
+    class A1 action;
+    class R1 expected;</pre></section>
     <section><h3>Artefatos</h3><div class="artifact-links"><a href="test-cases/TC-004.json">JSON</a><a href="test-cases-md/TC-004.md">Markdown</a></div></section>
     <details class="technical"><summary>Detalhes t&eacute;cnicos</summary><p>Requisitos: REQ-002 | Cen&aacute;rios: SCN-004 | Coverage Points: CP-006, CP-007</p></details>
   </div>
@@ -177,10 +234,22 @@ th { background:#f0f3f2; font-size:13px; }
       <section><h3>Dados</h3><ul><li><strong>quantity</strong>: Above-maximum integer quantity: 11.</li></ul></section>
     </div>
     <section><h3>Passos</h3><div class="table-wrap"><table class="steps"><thead><tr><th scope="col">#</th><th scope="col">A&ccedil;&atilde;o</th><th scope="col">Resultado esperado</th></tr></thead><tbody><tr><td class="step-number">1</td><td>Set the order-line quantity to 11 and submit the change.</td><td>The value is rejected and the existing quantity remains 5.</td></tr></tbody></table></div></section>
-    <section><h3>Fluxo do Teste</h3><div class="test-flow" role="img" aria-label="Fluxo linear do teste"><div class="flow-node flow-action">1. Set the order-line quantity to 11 and submit the change.</div><div class="flow-connector" aria-hidden="true">&darr;</div><div class="flow-node flow-expected">Expected: The value is rejected and the existing quantity remains 5.</div></div><pre class="mermaid-source" hidden>flowchart TD
-    A1[&quot;1. Set the order-line quantity to 11 and submit the change.&quot;]
-    E1[&quot;Expected: The value is rejected and the existing quantity remains 5.&quot;]
-    A1 --&gt; E1</pre></section>
+    <section class="flow-section"><div class="flow-heading"><h3>Fluxo do Teste</h3><button type="button" class="expand-flow" data-flow-target="flow-TC-005" aria-label="Ampliar fluxo do TC-005">Ampliar fluxo</button></div><div class="mermaid-container" id="flow-TC-005"><svg class="mermaid-svg" viewBox="0 0 720 394" role="img" aria-label="Fluxo linear do teste" xmlns="http://www.w3.org/2000/svg"><defs><marker id="arrow-flow-TC-005" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#64748b" /></marker></defs><line x1="360" y1="74" x2="360" y2="101" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow-flow-TC-005)" /><line x1="360" y1="180" x2="360" y2="207" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow-flow-TC-005)" /><line x1="360" y1="286" x2="360" y2="313" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow-flow-TC-005)" /><g class="mermaid-node mermaid-terminal" data-node-id="S"><rect x="280" y="24" width="160" height="50" rx="25" fill="#f8fafc" stroke="#475569" stroke-width="1.5" /><text x="360" y="49" text-anchor="middle" fill="#0f172a" font-family="system-ui, sans-serif" font-size="14"><tspan x="360" dy="0">Start</tspan></text></g><g class="mermaid-node mermaid-action" data-node-id="A1"><rect x="60" y="108" width="600" height="72" rx="8" fill="#eff6ff" stroke="#2563eb" stroke-width="1.5" /><text x="360" y="134" text-anchor="middle" fill="#0f172a" font-family="system-ui, sans-serif" font-size="14"><tspan x="360" dy="0" class="node-label-title">1 - Action</tspan><tspan x="360" dy="20">Set the order-line quantity to 11 and submit the change.</tspan></text></g><g class="mermaid-node mermaid-expected" data-node-id="R1"><rect x="60" y="214" width="600" height="72" rx="8" fill="#f0fdf4" stroke="#16a34a" stroke-width="1.5" /><text x="360" y="240" text-anchor="middle" fill="#14532d" font-family="system-ui, sans-serif" font-size="14"><tspan x="360" dy="0" class="node-label-title">Expected result</tspan><tspan x="360" dy="20">The value is rejected and the existing quantity remains 5.</tspan></text></g><g class="mermaid-node mermaid-terminal" data-node-id="F"><rect x="280" y="320" width="160" height="50" rx="25" fill="#f8fafc" stroke="#475569" stroke-width="1.5" /><text x="360" y="345" text-anchor="middle" fill="#0f172a" font-family="system-ui, sans-serif" font-size="14"><tspan x="360" dy="0">End</tspan></text></g></svg></div><pre class="mermaid-source" hidden>flowchart TD
+    S([Start])
+    A1[&quot;1 - Action&lt;br/&gt;Set the order-line quantity to 11 and submit the change.&quot;]
+    R1[&quot;Expected result&lt;br/&gt;The value is rejected and the existing quantity remains 5.&quot;]
+    F([End])
+
+    S --&gt; A1 --&gt; R1 --&gt; F
+
+    classDef startEnd fill:#f8fafc,stroke:#475569,stroke-width:1.5px,color:#0f172a;
+    classDef action fill:#eff6ff,stroke:#2563eb,stroke-width:1.5px,color:#0f172a;
+    classDef expected fill:#f0fdf4,stroke:#16a34a,stroke-width:1.5px,color:#14532d;
+    classDef clarification fill:#fff7ed,stroke:#ea580c,stroke-width:1.5px,color:#7c2d12,stroke-dasharray:4 3;
+
+    class S,F startEnd;
+    class A1 action;
+    class R1 expected;</pre></section>
     <section><h3>Artefatos</h3><div class="artifact-links"><a href="test-cases/TC-005.json">JSON</a><a href="test-cases-md/TC-005.md">Markdown</a></div></section>
     <details class="technical"><summary>Detalhes t&eacute;cnicos</summary><p>Requisitos: REQ-002 | Cen&aacute;rios: SCN-005 | Coverage Points: CP-008, CP-009</p></details>
   </div>
@@ -197,10 +266,22 @@ th { background:#f0f3f2; font-size:13px; }
       <section><h3>Dados</h3><ul><li><strong>draft order</strong>: A synthetic order currently shown in DRAFT state.</li></ul></section>
     </div>
     <section><h3>Passos</h3><div class="table-wrap"><table class="steps"><thead><tr><th scope="col">#</th><th scope="col">A&ccedil;&atilde;o</th><th scope="col">Resultado esperado</th></tr></thead><tbody><tr><td class="step-number">1</td><td>Submit the DRAFT order.</td><td>The order is submitted and its state changes to SUBMITTED.</td></tr></tbody></table></div></section>
-    <section><h3>Fluxo do Teste</h3><div class="test-flow" role="img" aria-label="Fluxo linear do teste"><div class="flow-node flow-action">1. Submit the DRAFT order.</div><div class="flow-connector" aria-hidden="true">&darr;</div><div class="flow-node flow-expected">Expected: The order is submitted and its state changes to SUBMITTED.</div></div><pre class="mermaid-source" hidden>flowchart TD
-    A1[&quot;1. Submit the DRAFT order.&quot;]
-    E1[&quot;Expected: The order is submitted and its state changes to SUBMITTED.&quot;]
-    A1 --&gt; E1</pre></section>
+    <section class="flow-section"><div class="flow-heading"><h3>Fluxo do Teste</h3><button type="button" class="expand-flow" data-flow-target="flow-TC-006" aria-label="Ampliar fluxo do TC-006">Ampliar fluxo</button></div><div class="mermaid-container" id="flow-TC-006"><svg class="mermaid-svg" viewBox="0 0 720 394" role="img" aria-label="Fluxo linear do teste" xmlns="http://www.w3.org/2000/svg"><defs><marker id="arrow-flow-TC-006" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#64748b" /></marker></defs><line x1="360" y1="74" x2="360" y2="101" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow-flow-TC-006)" /><line x1="360" y1="180" x2="360" y2="207" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow-flow-TC-006)" /><line x1="360" y1="286" x2="360" y2="313" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow-flow-TC-006)" /><g class="mermaid-node mermaid-terminal" data-node-id="S"><rect x="280" y="24" width="160" height="50" rx="25" fill="#f8fafc" stroke="#475569" stroke-width="1.5" /><text x="360" y="49" text-anchor="middle" fill="#0f172a" font-family="system-ui, sans-serif" font-size="14"><tspan x="360" dy="0">Start</tspan></text></g><g class="mermaid-node mermaid-action" data-node-id="A1"><rect x="60" y="108" width="600" height="72" rx="8" fill="#eff6ff" stroke="#2563eb" stroke-width="1.5" /><text x="360" y="134" text-anchor="middle" fill="#0f172a" font-family="system-ui, sans-serif" font-size="14"><tspan x="360" dy="0" class="node-label-title">1 - Action</tspan><tspan x="360" dy="20">Submit the DRAFT order.</tspan></text></g><g class="mermaid-node mermaid-expected" data-node-id="R1"><rect x="60" y="214" width="600" height="72" rx="8" fill="#f0fdf4" stroke="#16a34a" stroke-width="1.5" /><text x="360" y="240" text-anchor="middle" fill="#14532d" font-family="system-ui, sans-serif" font-size="14"><tspan x="360" dy="0" class="node-label-title">Expected result</tspan><tspan x="360" dy="20">The order is submitted and its state changes to SUBMITTED.</tspan></text></g><g class="mermaid-node mermaid-terminal" data-node-id="F"><rect x="280" y="320" width="160" height="50" rx="25" fill="#f8fafc" stroke="#475569" stroke-width="1.5" /><text x="360" y="345" text-anchor="middle" fill="#0f172a" font-family="system-ui, sans-serif" font-size="14"><tspan x="360" dy="0">End</tspan></text></g></svg></div><pre class="mermaid-source" hidden>flowchart TD
+    S([Start])
+    A1[&quot;1 - Action&lt;br/&gt;Submit the DRAFT order.&quot;]
+    R1[&quot;Expected result&lt;br/&gt;The order is submitted and its state changes to SUBMITTED.&quot;]
+    F([End])
+
+    S --&gt; A1 --&gt; R1 --&gt; F
+
+    classDef startEnd fill:#f8fafc,stroke:#475569,stroke-width:1.5px,color:#0f172a;
+    classDef action fill:#eff6ff,stroke:#2563eb,stroke-width:1.5px,color:#0f172a;
+    classDef expected fill:#f0fdf4,stroke:#16a34a,stroke-width:1.5px,color:#14532d;
+    classDef clarification fill:#fff7ed,stroke:#ea580c,stroke-width:1.5px,color:#7c2d12,stroke-dasharray:4 3;
+
+    class S,F startEnd;
+    class A1 action;
+    class R1 expected;</pre></section>
     <section><h3>Artefatos</h3><div class="artifact-links"><a href="test-cases/TC-006.json">JSON</a><a href="test-cases-md/TC-006.md">Markdown</a></div></section>
     <details class="technical"><summary>Detalhes t&eacute;cnicos</summary><p>Requisitos: REQ-003 | Cen&aacute;rios: SCN-006 | Coverage Points: CP-010, CP-011</p></details>
   </div>
@@ -217,10 +298,22 @@ th { background:#f0f3f2; font-size:13px; }
       <section><h3>Dados</h3><ul><li><strong>attempted edit</strong>: Change the quantity from 5 to 6.</li></ul></section>
     </div>
     <section><h3>Passos</h3><div class="table-wrap"><table class="steps"><thead><tr><th scope="col">#</th><th scope="col">A&ccedil;&atilde;o</th><th scope="col">Resultado esperado</th></tr></thead><tbody><tr><td class="step-number">1</td><td>Attempt to change the submitted order-line quantity from 5 to 6.</td><td>The edit is rejected and the order-line quantity remains 5.</td></tr></tbody></table></div></section>
-    <section><h3>Fluxo do Teste</h3><div class="test-flow" role="img" aria-label="Fluxo linear do teste"><div class="flow-node flow-action">1. Attempt to change the submitted order-line quantity from 5 to 6.</div><div class="flow-connector" aria-hidden="true">&darr;</div><div class="flow-node flow-expected">Expected: The edit is rejected and the order-line quantity remains 5.</div></div><pre class="mermaid-source" hidden>flowchart TD
-    A1[&quot;1. Attempt to change the submitted order-line quantity from 5 to 6.&quot;]
-    E1[&quot;Expected: The edit is rejected and the order-line quantity remains 5.&quot;]
-    A1 --&gt; E1</pre></section>
+    <section class="flow-section"><div class="flow-heading"><h3>Fluxo do Teste</h3><button type="button" class="expand-flow" data-flow-target="flow-TC-007" aria-label="Ampliar fluxo do TC-007">Ampliar fluxo</button></div><div class="mermaid-container" id="flow-TC-007"><svg class="mermaid-svg" viewBox="0 0 720 412" role="img" aria-label="Fluxo linear do teste" xmlns="http://www.w3.org/2000/svg"><defs><marker id="arrow-flow-TC-007" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#64748b" /></marker></defs><line x1="360" y1="74" x2="360" y2="101" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow-flow-TC-007)" /><line x1="360" y1="198" x2="360" y2="225" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow-flow-TC-007)" /><line x1="360" y1="304" x2="360" y2="331" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow-flow-TC-007)" /><g class="mermaid-node mermaid-terminal" data-node-id="S"><rect x="280" y="24" width="160" height="50" rx="25" fill="#f8fafc" stroke="#475569" stroke-width="1.5" /><text x="360" y="49" text-anchor="middle" fill="#0f172a" font-family="system-ui, sans-serif" font-size="14"><tspan x="360" dy="0">Start</tspan></text></g><g class="mermaid-node mermaid-action" data-node-id="A1"><rect x="60" y="108" width="600" height="90" rx="8" fill="#eff6ff" stroke="#2563eb" stroke-width="1.5" /><text x="360" y="133" text-anchor="middle" fill="#0f172a" font-family="system-ui, sans-serif" font-size="14"><tspan x="360" dy="0" class="node-label-title">1 - Action</tspan><tspan x="360" dy="20">Attempt to change the submitted order-line quantity from 5</tspan><tspan x="360" dy="20">to 6.</tspan></text></g><g class="mermaid-node mermaid-expected" data-node-id="R1"><rect x="60" y="232" width="600" height="72" rx="8" fill="#f0fdf4" stroke="#16a34a" stroke-width="1.5" /><text x="360" y="258" text-anchor="middle" fill="#14532d" font-family="system-ui, sans-serif" font-size="14"><tspan x="360" dy="0" class="node-label-title">Expected result</tspan><tspan x="360" dy="20">The edit is rejected and the order-line quantity remains 5.</tspan></text></g><g class="mermaid-node mermaid-terminal" data-node-id="F"><rect x="280" y="338" width="160" height="50" rx="25" fill="#f8fafc" stroke="#475569" stroke-width="1.5" /><text x="360" y="363" text-anchor="middle" fill="#0f172a" font-family="system-ui, sans-serif" font-size="14"><tspan x="360" dy="0">End</tspan></text></g></svg></div><pre class="mermaid-source" hidden>flowchart TD
+    S([Start])
+    A1[&quot;1 - Action&lt;br/&gt;Attempt to change the submitted order-line quantity from 5&lt;br/&gt;to 6.&quot;]
+    R1[&quot;Expected result&lt;br/&gt;The edit is rejected and the order-line quantity remains 5.&quot;]
+    F([End])
+
+    S --&gt; A1 --&gt; R1 --&gt; F
+
+    classDef startEnd fill:#f8fafc,stroke:#475569,stroke-width:1.5px,color:#0f172a;
+    classDef action fill:#eff6ff,stroke:#2563eb,stroke-width:1.5px,color:#0f172a;
+    classDef expected fill:#f0fdf4,stroke:#16a34a,stroke-width:1.5px,color:#14532d;
+    classDef clarification fill:#fff7ed,stroke:#ea580c,stroke-width:1.5px,color:#7c2d12,stroke-dasharray:4 3;
+
+    class S,F startEnd;
+    class A1 action;
+    class R1 expected;</pre></section>
     <section><h3>Artefatos</h3><div class="artifact-links"><a href="test-cases/TC-007.json">JSON</a><a href="test-cases-md/TC-007.md">Markdown</a></div></section>
     <details class="technical"><summary>Detalhes t&eacute;cnicos</summary><p>Requisitos: REQ-003 | Cen&aacute;rios: SCN-007 | Coverage Points: CP-012, CP-013</p></details>
   </div>
@@ -237,10 +330,22 @@ th { background:#f0f3f2; font-size:13px; }
       <section><h3>Dados</h3><ul><li><strong>order</strong>: Synthetic create-order data.</li></ul></section>
     </div>
     <section><h3>Passos</h3><div class="table-wrap"><table class="steps"><thead><tr><th scope="col">#</th><th scope="col">A&ccedil;&atilde;o</th><th scope="col">Resultado esperado</th></tr></thead><tbody><tr><td class="step-number">1</td><td>Attempt to create an order using the synthetic order data.</td><td>The operation is denied and no order data is created.</td></tr></tbody></table></div></section>
-    <section><h3>Fluxo do Teste</h3><div class="test-flow" role="img" aria-label="Fluxo linear do teste"><div class="flow-node flow-action">1. Attempt to create an order using the synthetic order data.</div><div class="flow-connector" aria-hidden="true">&darr;</div><div class="flow-node flow-expected">Expected: The operation is denied and no order data is created.</div></div><pre class="mermaid-source" hidden>flowchart TD
-    A1[&quot;1. Attempt to create an order using the synthetic order data.&quot;]
-    E1[&quot;Expected: The operation is denied and no order data is created.&quot;]
-    A1 --&gt; E1</pre></section>
+    <section class="flow-section"><div class="flow-heading"><h3>Fluxo do Teste</h3><button type="button" class="expand-flow" data-flow-target="flow-TC-008" aria-label="Ampliar fluxo do TC-008">Ampliar fluxo</button></div><div class="mermaid-container" id="flow-TC-008"><svg class="mermaid-svg" viewBox="0 0 720 394" role="img" aria-label="Fluxo linear do teste" xmlns="http://www.w3.org/2000/svg"><defs><marker id="arrow-flow-TC-008" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#64748b" /></marker></defs><line x1="360" y1="74" x2="360" y2="101" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow-flow-TC-008)" /><line x1="360" y1="180" x2="360" y2="207" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow-flow-TC-008)" /><line x1="360" y1="286" x2="360" y2="313" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow-flow-TC-008)" /><g class="mermaid-node mermaid-terminal" data-node-id="S"><rect x="280" y="24" width="160" height="50" rx="25" fill="#f8fafc" stroke="#475569" stroke-width="1.5" /><text x="360" y="49" text-anchor="middle" fill="#0f172a" font-family="system-ui, sans-serif" font-size="14"><tspan x="360" dy="0">Start</tspan></text></g><g class="mermaid-node mermaid-action" data-node-id="A1"><rect x="60" y="108" width="600" height="72" rx="8" fill="#eff6ff" stroke="#2563eb" stroke-width="1.5" /><text x="360" y="134" text-anchor="middle" fill="#0f172a" font-family="system-ui, sans-serif" font-size="14"><tspan x="360" dy="0" class="node-label-title">1 - Action</tspan><tspan x="360" dy="20">Attempt to create an order using the synthetic order data.</tspan></text></g><g class="mermaid-node mermaid-expected" data-node-id="R1"><rect x="60" y="214" width="600" height="72" rx="8" fill="#f0fdf4" stroke="#16a34a" stroke-width="1.5" /><text x="360" y="240" text-anchor="middle" fill="#14532d" font-family="system-ui, sans-serif" font-size="14"><tspan x="360" dy="0" class="node-label-title">Expected result</tspan><tspan x="360" dy="20">The operation is denied and no order data is created.</tspan></text></g><g class="mermaid-node mermaid-terminal" data-node-id="F"><rect x="280" y="320" width="160" height="50" rx="25" fill="#f8fafc" stroke="#475569" stroke-width="1.5" /><text x="360" y="345" text-anchor="middle" fill="#0f172a" font-family="system-ui, sans-serif" font-size="14"><tspan x="360" dy="0">End</tspan></text></g></svg></div><pre class="mermaid-source" hidden>flowchart TD
+    S([Start])
+    A1[&quot;1 - Action&lt;br/&gt;Attempt to create an order using the synthetic order data.&quot;]
+    R1[&quot;Expected result&lt;br/&gt;The operation is denied and no order data is created.&quot;]
+    F([End])
+
+    S --&gt; A1 --&gt; R1 --&gt; F
+
+    classDef startEnd fill:#f8fafc,stroke:#475569,stroke-width:1.5px,color:#0f172a;
+    classDef action fill:#eff6ff,stroke:#2563eb,stroke-width:1.5px,color:#0f172a;
+    classDef expected fill:#f0fdf4,stroke:#16a34a,stroke-width:1.5px,color:#14532d;
+    classDef clarification fill:#fff7ed,stroke:#ea580c,stroke-width:1.5px,color:#7c2d12,stroke-dasharray:4 3;
+
+    class S,F startEnd;
+    class A1 action;
+    class R1 expected;</pre></section>
     <section><h3>Artefatos</h3><div class="artifact-links"><a href="test-cases/TC-008.json">JSON</a><a href="test-cases-md/TC-008.md">Markdown</a></div></section>
     <details class="technical"><summary>Detalhes t&eacute;cnicos</summary><p>Requisitos: REQ-004 | Cen&aacute;rios: SCN-008 | Coverage Points: CP-014, CP-015</p></details>
   </div>
@@ -257,10 +362,22 @@ th { background:#f0f3f2; font-size:13px; }
       <section><h3>Dados</h3><ul><li><strong>attempted edit</strong>: Change the quantity from 5 to 6.</li></ul></section>
     </div>
     <section><h3>Passos</h3><div class="table-wrap"><table class="steps"><thead><tr><th scope="col">#</th><th scope="col">A&ccedil;&atilde;o</th><th scope="col">Resultado esperado</th></tr></thead><tbody><tr><td class="step-number">1</td><td>Attempt to change the order-line quantity from 5 to 6.</td><td>The operation is denied and the order-line quantity remains 5.</td></tr></tbody></table></div></section>
-    <section><h3>Fluxo do Teste</h3><div class="test-flow" role="img" aria-label="Fluxo linear do teste"><div class="flow-node flow-action">1. Attempt to change the order-line quantity from 5 to 6.</div><div class="flow-connector" aria-hidden="true">&darr;</div><div class="flow-node flow-expected">Expected: The operation is denied and the order-line quantity remains 5.</div></div><pre class="mermaid-source" hidden>flowchart TD
-    A1[&quot;1. Attempt to change the order-line quantity from 5 to 6.&quot;]
-    E1[&quot;Expected: The operation is denied and the order-line quantity remains 5.&quot;]
-    A1 --&gt; E1</pre></section>
+    <section class="flow-section"><div class="flow-heading"><h3>Fluxo do Teste</h3><button type="button" class="expand-flow" data-flow-target="flow-TC-009" aria-label="Ampliar fluxo do TC-009">Ampliar fluxo</button></div><div class="mermaid-container" id="flow-TC-009"><svg class="mermaid-svg" viewBox="0 0 720 412" role="img" aria-label="Fluxo linear do teste" xmlns="http://www.w3.org/2000/svg"><defs><marker id="arrow-flow-TC-009" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#64748b" /></marker></defs><line x1="360" y1="74" x2="360" y2="101" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow-flow-TC-009)" /><line x1="360" y1="180" x2="360" y2="207" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow-flow-TC-009)" /><line x1="360" y1="304" x2="360" y2="331" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow-flow-TC-009)" /><g class="mermaid-node mermaid-terminal" data-node-id="S"><rect x="280" y="24" width="160" height="50" rx="25" fill="#f8fafc" stroke="#475569" stroke-width="1.5" /><text x="360" y="49" text-anchor="middle" fill="#0f172a" font-family="system-ui, sans-serif" font-size="14"><tspan x="360" dy="0">Start</tspan></text></g><g class="mermaid-node mermaid-action" data-node-id="A1"><rect x="60" y="108" width="600" height="72" rx="8" fill="#eff6ff" stroke="#2563eb" stroke-width="1.5" /><text x="360" y="134" text-anchor="middle" fill="#0f172a" font-family="system-ui, sans-serif" font-size="14"><tspan x="360" dy="0" class="node-label-title">1 - Action</tspan><tspan x="360" dy="20">Attempt to change the order-line quantity from 5 to 6.</tspan></text></g><g class="mermaid-node mermaid-expected" data-node-id="R1"><rect x="60" y="214" width="600" height="90" rx="8" fill="#f0fdf4" stroke="#16a34a" stroke-width="1.5" /><text x="360" y="239" text-anchor="middle" fill="#14532d" font-family="system-ui, sans-serif" font-size="14"><tspan x="360" dy="0" class="node-label-title">Expected result</tspan><tspan x="360" dy="20">The operation is denied and the order-line quantity remains</tspan><tspan x="360" dy="20">5.</tspan></text></g><g class="mermaid-node mermaid-terminal" data-node-id="F"><rect x="280" y="338" width="160" height="50" rx="25" fill="#f8fafc" stroke="#475569" stroke-width="1.5" /><text x="360" y="363" text-anchor="middle" fill="#0f172a" font-family="system-ui, sans-serif" font-size="14"><tspan x="360" dy="0">End</tspan></text></g></svg></div><pre class="mermaid-source" hidden>flowchart TD
+    S([Start])
+    A1[&quot;1 - Action&lt;br/&gt;Attempt to change the order-line quantity from 5 to 6.&quot;]
+    R1[&quot;Expected result&lt;br/&gt;The operation is denied and the order-line quantity remains&lt;br/&gt;5.&quot;]
+    F([End])
+
+    S --&gt; A1 --&gt; R1 --&gt; F
+
+    classDef startEnd fill:#f8fafc,stroke:#475569,stroke-width:1.5px,color:#0f172a;
+    classDef action fill:#eff6ff,stroke:#2563eb,stroke-width:1.5px,color:#0f172a;
+    classDef expected fill:#f0fdf4,stroke:#16a34a,stroke-width:1.5px,color:#14532d;
+    classDef clarification fill:#fff7ed,stroke:#ea580c,stroke-width:1.5px,color:#7c2d12,stroke-dasharray:4 3;
+
+    class S,F startEnd;
+    class A1 action;
+    class R1 expected;</pre></section>
     <section><h3>Artefatos</h3><div class="artifact-links"><a href="test-cases/TC-009.json">JSON</a><a href="test-cases-md/TC-009.md">Markdown</a></div></section>
     <details class="technical"><summary>Detalhes t&eacute;cnicos</summary><p>Requisitos: REQ-004 | Cen&aacute;rios: SCN-009 | Coverage Points: CP-016, CP-017</p></details>
   </div>
@@ -277,10 +394,22 @@ th { background:#f0f3f2; font-size:13px; }
       <section><h3>Dados</h3><ul><li><strong>draft order</strong>: A synthetic DRAFT order eligible for submission.</li></ul></section>
     </div>
     <section><h3>Passos</h3><div class="table-wrap"><table class="steps"><thead><tr><th scope="col">#</th><th scope="col">A&ccedil;&atilde;o</th><th scope="col">Resultado esperado</th></tr></thead><tbody><tr><td class="step-number">1</td><td>Submit the DRAFT order while the billing service is unavailable.</td><td>Submission does not complete and a retry action is available; the resulting state and retained data require clarification.</td></tr></tbody></table></div></section>
-    <section><h3>Fluxo do Teste</h3><div class="test-flow" role="img" aria-label="Fluxo linear do teste"><div class="flow-node flow-action">1. Submit the DRAFT order while the billing service is unavailable.</div><div class="flow-connector" aria-hidden="true">&darr;</div><div class="flow-node flow-expected">Expected: Submission does not complete and a retry action is available; the resulting state and retained data require...</div></div><pre class="mermaid-source" hidden>flowchart TD
-    A1[&quot;1. Submit the DRAFT order while the billing service is unavailable.&quot;]
-    E1[&quot;Expected: Submission does not complete and a retry action is available; the resulting state and retained data require...&quot;]
-    A1 --&gt; E1</pre></section>
+    <section class="flow-section"><div class="flow-heading"><h3>Fluxo do Teste</h3><button type="button" class="expand-flow" data-flow-target="flow-TC-010" aria-label="Ampliar fluxo do TC-010">Ampliar fluxo</button></div><div class="mermaid-container" id="flow-TC-010"><svg class="mermaid-svg" viewBox="0 0 720 450" role="img" aria-label="Fluxo linear do teste" xmlns="http://www.w3.org/2000/svg"><defs><marker id="arrow-flow-TC-010" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#64748b" /></marker></defs><line x1="360" y1="74" x2="360" y2="101" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow-flow-TC-010)" /><line x1="360" y1="198" x2="360" y2="225" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow-flow-TC-010)" /><line x1="360" y1="342" x2="360" y2="369" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow-flow-TC-010)" /><g class="mermaid-node mermaid-terminal" data-node-id="S"><rect x="280" y="24" width="160" height="50" rx="25" fill="#f8fafc" stroke="#475569" stroke-width="1.5" /><text x="360" y="49" text-anchor="middle" fill="#0f172a" font-family="system-ui, sans-serif" font-size="14"><tspan x="360" dy="0">Start</tspan></text></g><g class="mermaid-node mermaid-action" data-node-id="A1"><rect x="60" y="108" width="600" height="90" rx="8" fill="#eff6ff" stroke="#2563eb" stroke-width="1.5" /><text x="360" y="133" text-anchor="middle" fill="#0f172a" font-family="system-ui, sans-serif" font-size="14"><tspan x="360" dy="0" class="node-label-title">1 - Action</tspan><tspan x="360" dy="20">Submit the DRAFT order while the billing service is</tspan><tspan x="360" dy="20">unavailable.</tspan></text></g><g class="mermaid-node mermaid-expected" data-node-id="R1"><rect x="60" y="232" width="600" height="110" rx="8" fill="#f0fdf4" stroke="#16a34a" stroke-width="1.5" /><text x="360" y="257" text-anchor="middle" fill="#14532d" font-family="system-ui, sans-serif" font-size="14"><tspan x="360" dy="0" class="node-label-title">Expected result</tspan><tspan x="360" dy="20">Submission does not complete and a retry action is</tspan><tspan x="360" dy="20">available; the resulting state and retained data require</tspan><tspan x="360" dy="20">clarification.</tspan></text></g><g class="mermaid-node mermaid-terminal" data-node-id="F"><rect x="280" y="376" width="160" height="50" rx="25" fill="#f8fafc" stroke="#475569" stroke-width="1.5" /><text x="360" y="401" text-anchor="middle" fill="#0f172a" font-family="system-ui, sans-serif" font-size="14"><tspan x="360" dy="0">End</tspan></text></g></svg></div><pre class="mermaid-source" hidden>flowchart TD
+    S([Start])
+    A1[&quot;1 - Action&lt;br/&gt;Submit the DRAFT order while the billing service is&lt;br/&gt;unavailable.&quot;]
+    R1[&quot;Expected result&lt;br/&gt;Submission does not complete and a retry action is&lt;br/&gt;available; the resulting state and retained data require&lt;br/&gt;clarification.&quot;]
+    F([End])
+
+    S --&gt; A1 --&gt; R1 --&gt; F
+
+    classDef startEnd fill:#f8fafc,stroke:#475569,stroke-width:1.5px,color:#0f172a;
+    classDef action fill:#eff6ff,stroke:#2563eb,stroke-width:1.5px,color:#0f172a;
+    classDef expected fill:#f0fdf4,stroke:#16a34a,stroke-width:1.5px,color:#14532d;
+    classDef clarification fill:#fff7ed,stroke:#ea580c,stroke-width:1.5px,color:#7c2d12,stroke-dasharray:4 3;
+
+    class S,F startEnd;
+    class A1 action;
+    class R1 expected;</pre></section>
     <section><h3>Artefatos</h3><div class="artifact-links"><a href="test-cases/TC-010.json">JSON</a><a href="test-cases-md/TC-010.md">Markdown</a></div></section>
     <details class="technical"><summary>Detalhes t&eacute;cnicos</summary><p>Requisitos: REQ-006 | Cen&aacute;rios: SCN-010 | Coverage Points: CP-019, CP-020</p></details>
   </div>
@@ -297,10 +426,22 @@ th { background:#f0f3f2; font-size:13px; }
       <section><h3>Dados</h3><ul><li><strong>submitted order</strong>: A synthetic order currently shown in SUBMITTED state.</li></ul></section>
     </div>
     <section><h3>Passos</h3><div class="table-wrap"><table class="steps"><thead><tr><th scope="col">#</th><th scope="col">A&ccedil;&atilde;o</th><th scope="col">Resultado esperado</th></tr></thead><tbody><tr><td class="step-number">1</td><td>Finalize the SUBMITTED order.</td><td>The order state changes to FINALIZED and a visible confirmation is shown.</td></tr></tbody></table></div></section>
-    <section><h3>Fluxo do Teste</h3><div class="test-flow" role="img" aria-label="Fluxo linear do teste"><div class="flow-node flow-action">1. Finalize the SUBMITTED order.</div><div class="flow-connector" aria-hidden="true">&darr;</div><div class="flow-node flow-expected">Expected: The order state changes to FINALIZED and a visible confirmation is shown.</div></div><pre class="mermaid-source" hidden>flowchart TD
-    A1[&quot;1. Finalize the SUBMITTED order.&quot;]
-    E1[&quot;Expected: The order state changes to FINALIZED and a visible confirmation is shown.&quot;]
-    A1 --&gt; E1</pre></section>
+    <section class="flow-section"><div class="flow-heading"><h3>Fluxo do Teste</h3><button type="button" class="expand-flow" data-flow-target="flow-TC-011" aria-label="Ampliar fluxo do TC-011">Ampliar fluxo</button></div><div class="mermaid-container" id="flow-TC-011"><svg class="mermaid-svg" viewBox="0 0 720 412" role="img" aria-label="Fluxo linear do teste" xmlns="http://www.w3.org/2000/svg"><defs><marker id="arrow-flow-TC-011" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#64748b" /></marker></defs><line x1="360" y1="74" x2="360" y2="101" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow-flow-TC-011)" /><line x1="360" y1="180" x2="360" y2="207" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow-flow-TC-011)" /><line x1="360" y1="304" x2="360" y2="331" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow-flow-TC-011)" /><g class="mermaid-node mermaid-terminal" data-node-id="S"><rect x="280" y="24" width="160" height="50" rx="25" fill="#f8fafc" stroke="#475569" stroke-width="1.5" /><text x="360" y="49" text-anchor="middle" fill="#0f172a" font-family="system-ui, sans-serif" font-size="14"><tspan x="360" dy="0">Start</tspan></text></g><g class="mermaid-node mermaid-action" data-node-id="A1"><rect x="60" y="108" width="600" height="72" rx="8" fill="#eff6ff" stroke="#2563eb" stroke-width="1.5" /><text x="360" y="134" text-anchor="middle" fill="#0f172a" font-family="system-ui, sans-serif" font-size="14"><tspan x="360" dy="0" class="node-label-title">1 - Action</tspan><tspan x="360" dy="20">Finalize the SUBMITTED order.</tspan></text></g><g class="mermaid-node mermaid-expected" data-node-id="R1"><rect x="60" y="214" width="600" height="90" rx="8" fill="#f0fdf4" stroke="#16a34a" stroke-width="1.5" /><text x="360" y="239" text-anchor="middle" fill="#14532d" font-family="system-ui, sans-serif" font-size="14"><tspan x="360" dy="0" class="node-label-title">Expected result</tspan><tspan x="360" dy="20">The order state changes to FINALIZED and a visible</tspan><tspan x="360" dy="20">confirmation is shown.</tspan></text></g><g class="mermaid-node mermaid-terminal" data-node-id="F"><rect x="280" y="338" width="160" height="50" rx="25" fill="#f8fafc" stroke="#475569" stroke-width="1.5" /><text x="360" y="363" text-anchor="middle" fill="#0f172a" font-family="system-ui, sans-serif" font-size="14"><tspan x="360" dy="0">End</tspan></text></g></svg></div><pre class="mermaid-source" hidden>flowchart TD
+    S([Start])
+    A1[&quot;1 - Action&lt;br/&gt;Finalize the SUBMITTED order.&quot;]
+    R1[&quot;Expected result&lt;br/&gt;The order state changes to FINALIZED and a visible&lt;br/&gt;confirmation is shown.&quot;]
+    F([End])
+
+    S --&gt; A1 --&gt; R1 --&gt; F
+
+    classDef startEnd fill:#f8fafc,stroke:#475569,stroke-width:1.5px,color:#0f172a;
+    classDef action fill:#eff6ff,stroke:#2563eb,stroke-width:1.5px,color:#0f172a;
+    classDef expected fill:#f0fdf4,stroke:#16a34a,stroke-width:1.5px,color:#14532d;
+    classDef clarification fill:#fff7ed,stroke:#ea580c,stroke-width:1.5px,color:#7c2d12,stroke-dasharray:4 3;
+
+    class S,F startEnd;
+    class A1 action;
+    class R1 expected;</pre></section>
     <section><h3>Artefatos</h3><div class="artifact-links"><a href="test-cases/TC-011.json">JSON</a><a href="test-cases-md/TC-011.md">Markdown</a></div></section>
     <details class="technical"><summary>Detalhes t&eacute;cnicos</summary><p>Requisitos: REQ-008 | Cen&aacute;rios: SCN-011 | Coverage Points: CP-023, CP-024</p></details>
   </div>
@@ -326,10 +467,20 @@ th { background:#f0f3f2; font-size:13px; }
 </article></section>
 <section id="cobertura"><h2>Cobertura</h2><section class="requirement-block"><h3>A signed-in customer with ORDER_EDIT can create an order that receives a visible reference and starts in DRAFT state.</h3><p class="requirement-source">ORD-001</p><ul class="coverage-list"><li class="coverage-test_case"><span class="coverage-marker">&#10003;</span><div><strong>An authorized signed-in customer can create an order.</strong><span>TC: Create a draft order</span><details class="technical"><summary>Detalhes t&eacute;cnicos</summary><p>CP-001</p></details></div></li><li class="coverage-test_case"><span class="coverage-marker">&#10003;</span><div><strong>Successful order creation provides a visible order reference.</strong><span>TC: Create a draft order</span><details class="technical"><summary>Detalhes t&eacute;cnicos</summary><p>CP-002</p></details></div></li><li class="coverage-test_case"><span class="coverage-marker">&#10003;</span><div><strong>A created order is shown in DRAFT state.</strong><span>TC: Create a draft order</span><details class="technical"><summary>Detalhes t&eacute;cnicos</summary><p>CP-003</p></details></div></li></ul></section><section class="requirement-block"><h3>A DRAFT order line accepts integer quantities from 1 through 10 and rejects values outside that range without changing the existing quantity.</h3><p class="requirement-source">ORD-002</p><ul class="coverage-list"><li class="coverage-test_case"><span class="coverage-marker">&#10003;</span><div><strong>The minimum quantity 1 is accepted.</strong><span>TC: Accept the minimum quantity</span><details class="technical"><summary>Detalhes t&eacute;cnicos</summary><p>CP-004</p></details></div></li><li class="coverage-test_case"><span class="coverage-marker">&#10003;</span><div><strong>The maximum quantity 10 is accepted.</strong><span>TC: Accept the maximum quantity</span><details class="technical"><summary>Detalhes t&eacute;cnicos</summary><p>CP-005</p></details></div></li><li class="coverage-test_case"><span class="coverage-marker">&#10003;</span><div><strong>A quantity below the minimum is rejected.</strong><span>TC: Reject a quantity below the minimum</span><details class="technical"><summary>Detalhes t&eacute;cnicos</summary><p>CP-006</p></details></div></li><li class="coverage-test_case"><span class="coverage-marker">&#10003;</span><div><strong>After a below-minimum rejection, the existing quantity remains unchanged.</strong><span>TC: Reject a quantity below the minimum</span><details class="technical"><summary>Detalhes t&eacute;cnicos</summary><p>CP-007</p></details></div></li><li class="coverage-test_case"><span class="coverage-marker">&#10003;</span><div><strong>A quantity above the maximum is rejected.</strong><span>TC: Reject a quantity above the maximum</span><details class="technical"><summary>Detalhes t&eacute;cnicos</summary><p>CP-008</p></details></div></li><li class="coverage-test_case"><span class="coverage-marker">&#10003;</span><div><strong>After an above-maximum rejection, the existing quantity remains unchanged.</strong><span>TC: Reject a quantity above the maximum</span><details class="technical"><summary>Detalhes t&eacute;cnicos</summary><p>CP-009</p></details></div></li></ul></section><section class="requirement-block"><h3>Submitting a DRAFT order changes it to SUBMITTED, after which edits are rejected without changing order data.</h3><p class="requirement-source">ORD-003</p><ul class="coverage-list"><li class="coverage-test_case"><span class="coverage-marker">&#10003;</span><div><strong>A DRAFT order can be submitted.</strong><span>TC: Submit a draft order</span><details class="technical"><summary>Detalhes t&eacute;cnicos</summary><p>CP-010</p></details></div></li><li class="coverage-test_case"><span class="coverage-marker">&#10003;</span><div><strong>Successful submission changes the order state to SUBMITTED.</strong><span>TC: Submit a draft order</span><details class="technical"><summary>Detalhes t&eacute;cnicos</summary><p>CP-011</p></details></div></li><li class="coverage-test_case"><span class="coverage-marker">&#10003;</span><div><strong>An edit to a SUBMITTED order is rejected.</strong><span>TC: Reject edits to a submitted order</span><details class="technical"><summary>Detalhes t&eacute;cnicos</summary><p>CP-012</p></details></div></li><li class="coverage-test_case"><span class="coverage-marker">&#10003;</span><div><strong>A rejected edit leaves submitted order data unchanged.</strong><span>TC: Reject edits to a submitted order</span><details class="technical"><summary>Detalhes t&eacute;cnicos</summary><p>CP-013</p></details></div></li></ul></section><section class="requirement-block"><h3>A signed-in customer without ORDER_EDIT cannot create or edit orders, and denied attempts do not change order data.</h3><p class="requirement-source">ORD-004</p><ul class="coverage-list"><li class="coverage-test_case"><span class="coverage-marker">&#10003;</span><div><strong>Order creation without ORDER_EDIT is denied.</strong><span>TC: Deny order creation without permission</span><details class="technical"><summary>Detalhes t&eacute;cnicos</summary><p>CP-014</p></details></div></li><li class="coverage-test_case"><span class="coverage-marker">&#10003;</span><div><strong>A denied create attempt creates no order data.</strong><span>TC: Deny order creation without permission</span><details class="technical"><summary>Detalhes t&eacute;cnicos</summary><p>CP-015</p></details></div></li><li class="coverage-test_case"><span class="coverage-marker">&#10003;</span><div><strong>Order editing without ORDER_EDIT is denied.</strong><span>TC: Deny order editing without permission</span><details class="technical"><summary>Detalhes t&eacute;cnicos</summary><p>CP-016</p></details></div></li><li class="coverage-test_case"><span class="coverage-marker">&#10003;</span><div><strong>A denied edit attempt leaves order data unchanged.</strong><span>TC: Deny order editing without permission</span><details class="technical"><summary>Detalhes t&eacute;cnicos</summary><p>CP-017</p></details></div></li></ul></section><section class="requirement-block"><h3>A customer can cancel an order before invoicing.</h3><p class="requirement-source">ORD-005</p><ul class="coverage-list"><li class="coverage-question"><span class="coverage-marker">?</span><div><strong>A customer can cancel an order before invoicing, but the observable success result is undefined.</strong><span>Pergunta: What observable result and final order state confirm a successful cancellation before invoicing?</span><details class="technical"><summary>Detalhes t&eacute;cnicos</summary><p>CP-018</p></details></div></li></ul></section><section class="requirement-block"><h3>When billing is unavailable during submission, submission does not complete and retry is available.</h3><p class="requirement-source">ORD-006</p><ul class="coverage-list"><li class="coverage-test_case"><span class="coverage-marker">&#10003;</span><div><strong>Submission does not complete when billing is unavailable.</strong><span>TC: Handle billing unavailability during submission</span><details class="technical"><summary>Detalhes t&eacute;cnicos</summary><p>CP-019</p></details></div></li><li class="coverage-test_case"><span class="coverage-marker">&#10003;</span><div><strong>A retry action is available after billing unavailability.</strong><span>TC: Handle billing unavailability during submission</span><details class="technical"><summary>Detalhes t&eacute;cnicos</summary><p>CP-020</p></details></div></li><li class="coverage-question"><span class="coverage-marker">?</span><div><strong>The order state and retained data after billing failure are undefined.</strong><span>Pergunta: What order state and retained data are expected after submission fails because billing is unavailable?</span><details class="technical"><summary>Detalhes t&eacute;cnicos</summary><p>CP-021</p></details></div></li></ul></section><section class="requirement-block"><h3>Orders should be processed quickly.</h3><p class="requirement-source">ORD-007</p><ul class="coverage-list"><li class="coverage-question"><span class="coverage-marker">?</span><div><strong>The required processing speed has no measurable target.</strong><span>Pergunta: What measurable processing-time target, percentile, load, and start/end points define &#x27;quickly&#x27;?</span><details class="technical"><summary>Detalhes t&eacute;cnicos</summary><p>CP-022</p></details></div></li></ul></section><section class="requirement-block"><h3>Finalizing a SUBMITTED order changes it to FINALIZED and shows a visible confirmation.</h3><p class="requirement-source">ORD-008</p><ul class="coverage-list"><li class="coverage-test_case"><span class="coverage-marker">&#10003;</span><div><strong>Finalizing a SUBMITTED order changes its state to FINALIZED.</strong><span>TC: Finalize a submitted order</span><details class="technical"><summary>Detalhes t&eacute;cnicos</summary><p>CP-023</p></details></div></li><li class="coverage-test_case"><span class="coverage-marker">&#10003;</span><div><strong>Successful finalization shows a visible confirmation.</strong><span>TC: Finalize a submitted order</span><details class="technical"><summary>Detalhes t&eacute;cnicos</summary><p>CP-024</p></details></div></li></ul></section></section>
 </main>
+<div id="flow-modal" class="flow-modal" role="dialog" aria-modal="true" aria-labelledby="flow-modal-title" hidden>
+  <div class="flow-modal-panel">
+    <div class="flow-modal-header"><h2 id="flow-modal-title">Fluxo do Teste</h2><button type="button" class="modal-close" aria-label="Fechar fluxo ampliado">Fechar</button></div>
+    <div id="flow-modal-canvas" class="flow-modal-canvas"></div>
+  </div>
+</div>
 <script>
 const search=document.getElementById('search');const statusFilter=document.getElementById('status-filter');const priorityFilter=document.getElementById('priority-filter');const cards=[...document.querySelectorAll('.tc-card')];const noResults=document.getElementById('no-results');
 function applyFilters(){const term=search.value.trim().toLocaleLowerCase();let visible=0;cards.forEach(card=>{const show=(!term||card.dataset.search.includes(term))&&(!statusFilter.value||card.dataset.status===statusFilter.value)&&(!priorityFilter.value||card.dataset.priority===priorityFilter.value);card.hidden=!show;if(show)visible+=1;});noResults.hidden=visible!==0;}
 [search,statusFilter,priorityFilter].forEach(control=>control.addEventListener(control===search?'input':'change',applyFilters));
+const flowModal=document.getElementById('flow-modal');const flowCanvas=document.getElementById('flow-modal-canvas');const flowClose=flowModal.querySelector('.modal-close');let flowTrigger=null;
+function closeFlowModal(){if(flowModal.hidden)return;flowModal.hidden=true;flowCanvas.replaceChildren();document.body.classList.remove('modal-open');if(flowTrigger)flowTrigger.focus();}
+document.querySelectorAll('.expand-flow').forEach(button=>button.addEventListener('click',()=>{const source=document.getElementById(button.dataset.flowTarget);const svg=source&&source.querySelector('svg');if(!svg)return;flowTrigger=button;flowCanvas.replaceChildren(svg.cloneNode(true));flowModal.hidden=false;document.body.classList.add('modal-open');flowClose.focus();}));
+flowClose.addEventListener('click',closeFlowModal);flowModal.addEventListener('click',event=>{if(event.target===flowModal)closeFlowModal();});document.addEventListener('keydown',event=>{if(event.key==='Escape')closeFlowModal();});
 </script>
 </body>
 </html>

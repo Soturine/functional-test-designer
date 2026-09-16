@@ -51,8 +51,10 @@ class MarkdownRendererTests(unittest.TestCase):
         self.assertTrue(markdown.rstrip().endswith("```"))
         self.assertEqual(RENDERER.mermaid_source(case), mermaid)
         self.assertNotIn("-->|", mermaid)
-        self.assertIn("A1 --> E1", mermaid)
-        self.assertIn("E1 --> A2", mermaid)
+        self.assertIn("S --> A1 --> R1 --> A2 --> R2 --> F", mermaid)
+        self.assertIn("classDef action", mermaid)
+        self.assertIn("classDef expected", mermaid)
+        self.assertIn("class S,F startEnd", mermaid)
 
     def test_missing_expected_result_is_marked_without_invention(self) -> None:
         case = json.loads((self.output / "test-cases/TC-010.json").read_text(encoding="utf-8"))
@@ -61,7 +63,24 @@ class MarkdownRendererTests(unittest.TestCase):
 
         markdown = RENDERER.render_case(case, "test-cases/TC-010.json")
 
-        self.assertIn("Clarification required for expected result", markdown)
+        self.assertIn("Clarification required", markdown)
+        self.assertIn("class C1 clarification", markdown)
+
+    def test_mermaid_wraps_long_labels_without_changing_json(self) -> None:
+        label = "Confirm the synthetic reservation and then inspect the resulting availability for the selected item"
+
+        wrapped = RENDERER.wrap_mermaid_label(label, width=50)
+
+        self.assertIn("<br/>", wrapped)
+        self.assertEqual(label, wrapped.replace("<br/>", " "))
+
+    def test_mermaid_sanitizes_parser_breaking_content(self) -> None:
+        label = '<script>"bad" [node] {shape} | value & more'
+
+        sanitized = RENDERER.wrap_mermaid_label(label)
+
+        for token in ('<script>', '"', "[", "]", "{", "}", "|"):
+            self.assertNotIn(token, sanitized)
 
     def test_renderer_does_not_change_json(self) -> None:
         json_files = sorted(self.output.rglob("*.json"))

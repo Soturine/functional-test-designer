@@ -38,30 +38,74 @@ def joined(values: list[str]) -> str:
     return ", ".join(f"`{value}`" for value in values) if values else "None"
 
 
-def mermaid_label(value: Any, limit: int = 120) -> str:
+def mermaid_label(value: Any) -> str:
     text = re.sub(r"\s+", " ", str(value)).strip()
-    text = re.sub(r'["\[\]{}|<>]', " ", text)
+    text = text.replace("&", " and ")
+    text = re.sub(r'["`\\\[\]{}|<>]', " ", text)
+    text = re.sub(r"[\x00-\x1f\x7f]", " ", text)
     text = re.sub(r"\s+", " ", text).strip()
-    if len(text) > limit:
-        text = text[: limit - 3].rstrip() + "..."
     return text or "Not specified"
 
 
+def wrap_mermaid_label(value: Any, width: int = 60) -> str:
+    words = mermaid_label(value).split()
+    lines: list[str] = []
+    current: list[str] = []
+    current_length = 0
+    for word in words:
+        candidate_length = current_length + (1 if current else 0) + len(word)
+        if current and candidate_length > width:
+            lines.append(" ".join(current))
+            current = [word]
+            current_length = len(word)
+        else:
+            current.append(word)
+            current_length = candidate_length
+    if current:
+        lines.append(" ".join(current))
+    return "<br/>".join(lines)
+
+
 def mermaid_source(case: dict[str, Any]) -> str:
-    lines = ["flowchart TD"]
-    previous_result: str | None = None
+    lines = ["flowchart TD", "    S([Start])"]
+    chain = ["S"]
+    expected_nodes: list[str] = []
+    clarification_nodes: list[str] = []
     for step in case["steps"]:
         number = step["step"]
         action_id = f"A{number}"
-        result_id = f"E{number}"
         expected = step["expected_result"]
-        result = expected if expected is not None else "Clarification required for expected result"
-        lines.append(f'    {action_id}["{mermaid_label(f"{number}. {step["action"]}")}"]')
-        lines.append(f'    {result_id}["{mermaid_label(f"Expected: {result}")}"]')
-        if previous_result:
-            lines.append(f"    {previous_result} --> {action_id}")
-        lines.append(f"    {action_id} --> {result_id}")
-        previous_result = result_id
+        result_id = f"R{number}" if expected is not None else f"C{number}"
+        action = wrap_mermaid_label(step["action"])
+        result = wrap_mermaid_label(expected or "Result needs clarification")
+        lines.append(f'    {action_id}["{number} - Action<br/>{action}"]')
+        if expected is None:
+            lines.append(f'    {result_id}["Clarification required<br/>{result}"]')
+            clarification_nodes.append(result_id)
+        else:
+            lines.append(f'    {result_id}["Expected result<br/>{result}"]')
+            expected_nodes.append(result_id)
+        chain.extend((action_id, result_id))
+    lines.append("    F([End])")
+    chain.append("F")
+    lines.extend(
+        [
+            "",
+            "    " + " --> ".join(chain),
+            "",
+            "    classDef startEnd fill:#f8fafc,stroke:#475569,stroke-width:1.5px,color:#0f172a;",
+            "    classDef action fill:#eff6ff,stroke:#2563eb,stroke-width:1.5px,color:#0f172a;",
+            "    classDef expected fill:#f0fdf4,stroke:#16a34a,stroke-width:1.5px,color:#14532d;",
+            "    classDef clarification fill:#fff7ed,stroke:#ea580c,stroke-width:1.5px,color:#7c2d12,stroke-dasharray:4 3;",
+            "",
+            "    class S,F startEnd;",
+            "    class " + ",".join(f"A{step['step']}" for step in case["steps"]) + " action;",
+        ]
+    )
+    if expected_nodes:
+        lines.append("    class " + ",".join(expected_nodes) + " expected;")
+    if clarification_nodes:
+        lines.append("    class " + ",".join(clarification_nodes) + " clarification;")
     return "\n".join(lines)
 
 
