@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import importlib.util
+import json
 import shutil
 import tempfile
 import unittest
@@ -44,8 +45,41 @@ class RendererTests(unittest.TestCase):
         self.assertIn("Perguntas", report)
         self.assertIn("Cobertura", report)
         self.assertIn("The minimum quantity 1 is accepted.", report)
+        self.assertIn("Fluxo do Teste", report)
+        self.assertIn('href="test-cases/TC-001.json"', report)
+        self.assertIn('href="test-cases-md/TC-001.md"', report)
+        self.assertIn('href="test-cases/TC-010.json"', report)
+        self.assertIn('href="test-cases-md/TC-010.md"', report)
+        self.assertEqual(10, report.count('class="tc-card"'))
         self.assertNotIn("https://", report)
         self.assertNotIn("<script src=", report)
+
+    def test_html_uses_the_exact_mermaid_from_each_markdown(self) -> None:
+        report = RENDERER.render_report(self.output).read_text(encoding="utf-8")
+        index = json.loads((self.output / "test-cases.json").read_text(encoding="utf-8"))
+
+        for entry in index["test_cases"]:
+            markdown = (self.output / entry["markdown_file"]).read_text(encoding="utf-8")
+            mermaid = RENDERER.extract_mermaid(markdown)
+            self.assertIn(RENDERER.esc(mermaid), report)
+
+    def test_html_refuses_missing_or_divergent_markdown(self) -> None:
+        markdown_path = self.output / "test-cases-md/TC-001.md"
+        markdown_path.unlink()
+
+        with self.assertRaisesRegex(ValueError, "Missing Markdown artifact for TC-001"):
+            RENDERER.render_report(self.output)
+
+    def test_json_markdown_and_cards_remain_one_to_one(self) -> None:
+        report = RENDERER.render_report(self.output).read_text(encoding="utf-8")
+        index = json.loads((self.output / "test-cases.json").read_text(encoding="utf-8"))
+        markdown_files = list((self.output / "test-cases-md").glob("*.md"))
+
+        self.assertEqual(len(index["test_cases"]), len(markdown_files))
+        self.assertEqual(len(index["test_cases"]), report.count('class="tc-card"'))
+        for entry in index["test_cases"]:
+            self.assertIn(entry["file"], report)
+            self.assertIn(entry["markdown_file"], report)
 
     def test_renderer_refuses_invalid_output(self) -> None:
         (self.output / "test-cases" / "TC-001.json").unlink()

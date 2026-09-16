@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import html
 import json
+import re
 import sys
 from collections import Counter
 from pathlib import Path
@@ -17,6 +18,7 @@ if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
 from validate_output import validate  # noqa: E402
+from render_markdown import extract_mermaid, mermaid_source  # noqa: E402
 
 
 STATUS_LABELS = {
@@ -80,7 +82,24 @@ def render_steps(steps: list[dict[str, Any]]) -> str:
     )
 
 
-def render_case(case: dict[str, Any]) -> str:
+def render_flow(source: str) -> str:
+    node_pattern = re.compile(r'^\s+([AE][0-9]+)\["(.*)"\]$')
+    nodes = []
+    for line in source.splitlines():
+        match = node_pattern.match(line)
+        if match:
+            kind = "action" if match.group(1).startswith("A") else "expected"
+            nodes.append(f'<div class="flow-node flow-{kind}">{esc(match.group(2))}</div>')
+    if not nodes:
+        raise ValueError("Mermaid flow contains no supported action/result nodes")
+    visual = '<div class="flow-connector" aria-hidden="true">&darr;</div>'.join(nodes)
+    return (
+        f'<div class="test-flow" role="img" aria-label="Fluxo linear do teste">{visual}</div>'
+        f'<pre class="mermaid-source" hidden>{esc(source)}</pre>'
+    )
+
+
+def render_case(case: dict[str, Any], entry: dict[str, Any], mermaid: str) -> str:
     status = case["status"]
     priority = case["priority"]
     search_text = " ".join(
@@ -90,6 +109,10 @@ def render_case(case: dict[str, Any]) -> str:
         f'Requisitos: {", ".join(case["requirement_refs"])} | '
         f'Cen&aacute;rios: {", ".join(case["scenario_refs"])} | '
         f'Coverage Points: {", ".join(case["coverage_point_refs"])}'
+    )
+    artifacts = (
+        f'<a href="{esc(entry["file"])}">JSON</a>'
+        f'<a href="{esc(entry["markdown_file"])}">Markdown</a>'
     )
     return f"""
 <details class="tc-card" data-status="{esc(status)}" data-priority="{esc(priority)}" data-search="{esc(search_text)}">
@@ -104,6 +127,8 @@ def render_case(case: dict[str, Any]) -> str:
       <section><h3>Dados</h3>{render_data(case.get('test_data', []))}</section>
     </div>
     <section><h3>Passos</h3>{render_steps(case['steps'])}</section>
+    <section><h3>Fluxo do Teste</h3>{render_flow(mermaid)}</section>
+    <section><h3>Artefatos</h3><div class="artifact-links">{artifacts}</div></section>
     <details class="technical"><summary>Detalhes t&eacute;cnicos</summary><p>{technical}</p></details>
   </div>
 </details>"""
@@ -169,6 +194,17 @@ def render_report(output_dir: Path, destination: Path | None = None) -> Path:
     index = read_json(output_dir / "test-cases.json")
     questions_doc = read_json(output_dir / "questions.json")
     cases = [read_json(output_dir / entry["file"]) for entry in index["test_cases"]]
+    mermaid_by_id: dict[str, str] = {}
+    for entry, case in zip(index["test_cases"], cases):
+        markdown_path = output_dir / entry["markdown_file"]
+        try:
+            markdown = markdown_path.read_text(encoding="utf-8")
+        except FileNotFoundError as exc:
+            raise ValueError(f"Missing Markdown artifact for {entry['id']}: {entry['markdown_file']}") from exc
+        source = extract_mermaid(markdown)
+        if source != mermaid_source(case):
+            raise ValueError(f"Markdown Mermaid flow differs from JSON steps for {entry['id']}")
+        mermaid_by_id[entry["id"]] = source
     questions = questions_doc["questions"]
     status_counts = Counter(case["status"] for case in cases)
     entries_by_id = {entry["id"]: entry for entry in index["test_cases"]}
@@ -184,7 +220,10 @@ def render_report(output_dir: Path, destination: Path | None = None) -> Path:
         if blocking_count or status_counts["BLOCKED"]
         else ""
     )
-    case_html = "".join(render_case(case) for case in cases)
+    case_html = "".join(
+        render_case(case, entry, mermaid_by_id[case["id"]])
+        for entry, case in zip(index["test_cases"], cases)
+    )
     question_html = "".join(render_question(question) for question in questions)
     coverage_html = render_coverage(
         index["requirements"], coverage_points, entries_by_id, questions_by_id
@@ -236,6 +275,14 @@ table {{ width:100%; border-collapse:collapse; background:#fff; }}
 th,td {{ border:1px solid var(--line); padding:10px; text-align:left; vertical-align:top; }}
 th {{ background:#f0f3f2; font-size:13px; }}
 .step-number {{ width:48px; text-align:center; font-weight:700; }}
+.test-flow {{ display:flex; flex-direction:column; align-items:stretch; width:min(680px,100%); margin:10px 0 18px; }}
+.flow-node {{ border:1px solid var(--line); padding:10px 12px; background:#fff; }}
+.flow-action {{ border-left:4px solid var(--accent); font-weight:650; }}
+.flow-expected {{ background:#f0f3f2; }}
+.flow-connector {{ align-self:center; color:var(--muted); font-size:20px; line-height:24px; }}
+.artifact-links {{ display:flex; gap:10px; flex-wrap:wrap; }}
+.artifact-links a {{ border:1px solid #aeb7bc; border-radius:4px; padding:7px 10px; text-decoration:none; font-weight:650; }}
+.artifact-links a:hover {{ border-color:var(--accent); color:var(--accent); }}
 .technical {{ margin-top:12px; color:var(--muted); font-size:13px; }}
 .technical>summary {{ cursor:pointer; }}
 .question-item,.requirement-block {{ margin-bottom:10px; border:1px solid var(--line); border-radius:6px; background:#fff; padding:16px; }}
@@ -251,7 +298,7 @@ th {{ background:#f0f3f2; font-size:13px; }}
 </style>
 </head>
 <body>
-<header><div class="shell"><h1>Functional Test Report</h1><p class="subtitle">Casos manuais derivados exclusivamente do documento de requisitos.</p><nav aria-label="Relat&oacute;rio"><a href="#resumo">Resumo</a><a href="#test-cases">Test Cases</a><a href="#perguntas">Perguntas</a><a href="#cobertura">Cobertura</a></nav></div></header>
+<header><div class="shell"><h1>Functional Test Report</h1><p class="subtitle">Casos manuais derivados das fontes explicitamente selecionadas.</p><nav aria-label="Relat&oacute;rio"><a href="#resumo">Resumo</a><a href="#test-cases">Test Cases</a><a href="#perguntas">Perguntas</a><a href="#cobertura">Cobertura</a></nav></div></header>
 <main class="shell">
 <section id="resumo"><h2>Resumo</h2><div class="metrics">
 <div class="metric"><strong>{len(cases)}</strong><span>Total de TCs</span></div>
@@ -277,7 +324,8 @@ function applyFilters(){{const term=search.value.trim().toLocaleLowerCase();let 
 </html>
 """
     destination = destination.resolve() if destination else output_dir / "report.html"
-    destination.write_text(report, encoding="utf-8")
+    with destination.open("w", encoding="utf-8", newline="\n") as handle:
+        handle.write(report)
     return destination
 
 

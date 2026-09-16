@@ -44,6 +44,14 @@ table { width:100%; border-collapse:collapse; background:#fff; }
 th,td { border:1px solid var(--line); padding:10px; text-align:left; vertical-align:top; }
 th { background:#f0f3f2; font-size:13px; }
 .step-number { width:48px; text-align:center; font-weight:700; }
+.test-flow { display:flex; flex-direction:column; align-items:stretch; width:min(680px,100%); margin:10px 0 18px; }
+.flow-node { border:1px solid var(--line); padding:10px 12px; background:#fff; }
+.flow-action { border-left:4px solid var(--accent); font-weight:650; }
+.flow-expected { background:#f0f3f2; }
+.flow-connector { align-self:center; color:var(--muted); font-size:20px; line-height:24px; }
+.artifact-links { display:flex; gap:10px; flex-wrap:wrap; }
+.artifact-links a { border:1px solid #aeb7bc; border-radius:4px; padding:7px 10px; text-decoration:none; font-weight:650; }
+.artifact-links a:hover { border-color:var(--accent); color:var(--accent); }
 .technical { margin-top:12px; color:var(--muted); font-size:13px; }
 .technical>summary { cursor:pointer; }
 .question-item,.requirement-block { margin-bottom:10px; border:1px solid var(--line); border-radius:6px; background:#fff; padding:16px; }
@@ -59,7 +67,7 @@ th { background:#f0f3f2; font-size:13px; }
 </style>
 </head>
 <body>
-<header><div class="shell"><h1>Functional Test Report</h1><p class="subtitle">Casos manuais derivados exclusivamente do documento de requisitos.</p><nav aria-label="Relat&oacute;rio"><a href="#resumo">Resumo</a><a href="#test-cases">Test Cases</a><a href="#perguntas">Perguntas</a><a href="#cobertura">Cobertura</a></nav></div></header>
+<header><div class="shell"><h1>Functional Test Report</h1><p class="subtitle">Casos manuais derivados das fontes explicitamente selecionadas.</p><nav aria-label="Relat&oacute;rio"><a href="#resumo">Resumo</a><a href="#test-cases">Test Cases</a><a href="#perguntas">Perguntas</a><a href="#cobertura">Cobertura</a></nav></div></header>
 <main class="shell">
 <section id="resumo"><h2>Resumo</h2><div class="metrics">
 <div class="metric"><strong>10</strong><span>Total de TCs</span></div>
@@ -85,6 +93,15 @@ th { background:#f0f3f2; font-size:13px; }
       <section><h3>Dados</h3><ul><li><strong>order</strong>: Synthetic order data accepted by the available order entry point.</li></ul></section>
     </div>
     <section><h3>Passos</h3><div class="table-wrap"><table class="steps"><thead><tr><th scope="col">#</th><th scope="col">A&ccedil;&atilde;o</th><th scope="col">Resultado esperado</th></tr></thead><tbody><tr><td class="step-number">1</td><td>Submit a create-order request using the synthetic order data.</td><td>An order is created and a visible order reference is provided.</td></tr><tr><td class="step-number">2</td><td>Observe the state shown for the created order.</td><td>The order state is DRAFT.</td></tr></tbody></table></div></section>
+    <section><h3>Fluxo do Teste</h3><div class="test-flow" role="img" aria-label="Fluxo linear do teste"><div class="flow-node flow-action">1. Submit a create-order request using the synthetic order data.</div><div class="flow-connector" aria-hidden="true">&darr;</div><div class="flow-node flow-expected">Expected: An order is created and a visible order reference is provided.</div><div class="flow-connector" aria-hidden="true">&darr;</div><div class="flow-node flow-action">2. Observe the state shown for the created order.</div><div class="flow-connector" aria-hidden="true">&darr;</div><div class="flow-node flow-expected">Expected: The order state is DRAFT.</div></div><pre class="mermaid-source" hidden>flowchart TD
+    A1[&quot;1. Submit a create-order request using the synthetic order data.&quot;]
+    E1[&quot;Expected: An order is created and a visible order reference is provided.&quot;]
+    A1 --&gt; E1
+    A2[&quot;2. Observe the state shown for the created order.&quot;]
+    E2[&quot;Expected: The order state is DRAFT.&quot;]
+    E1 --&gt; A2
+    A2 --&gt; E2</pre></section>
+    <section><h3>Artefatos</h3><div class="artifact-links"><a href="test-cases/TC-001.json">JSON</a><a href="test-cases-md/TC-001.md">Markdown</a></div></section>
     <details class="technical"><summary>Detalhes t&eacute;cnicos</summary><p>Requisitos: REQ-001 | Cen&aacute;rios: SCN-001 | Coverage Points: CP-001, CP-002, CP-003</p></details>
   </div>
 </details>
@@ -100,6 +117,11 @@ th { background:#f0f3f2; font-size:13px; }
       <section><h3>Dados</h3><ul><li><strong>quantity</strong>: Minimum valid integer quantity: 1.</li></ul></section>
     </div>
     <section><h3>Passos</h3><div class="table-wrap"><table class="steps"><thead><tr><th scope="col">#</th><th scope="col">A&ccedil;&atilde;o</th><th scope="col">Resultado esperado</th></tr></thead><tbody><tr><td class="step-number">1</td><td>Set the order-line quantity to 1 and submit the change.</td><td>The quantity 1 is accepted.</td></tr></tbody></table></div></section>
+    <section><h3>Fluxo do Teste</h3><div class="test-flow" role="img" aria-label="Fluxo linear do teste"><div class="flow-node flow-action">1. Set the order-line quantity to 1 and submit the change.</div><div class="flow-connector" aria-hidden="true">&darr;</div><div class="flow-node flow-expected">Expected: The quantity 1 is accepted.</div></div><pre class="mermaid-source" hidden>flowchart TD
+    A1[&quot;1. Set the order-line quantity to 1 and submit the change.&quot;]
+    E1[&quot;Expected: The quantity 1 is accepted.&quot;]
+    A1 --&gt; E1</pre></section>
+    <section><h3>Artefatos</h3><div class="artifact-links"><a href="test-cases/TC-002.json">JSON</a><a href="test-cases-md/TC-002.md">Markdown</a></div></section>
     <details class="technical"><summary>Detalhes t&eacute;cnicos</summary><p>Requisitos: REQ-002 | Cen&aacute;rios: SCN-002 | Coverage Points: CP-004</p></details>
   </div>
 </details>
@@ -115,6 +137,11 @@ th { background:#f0f3f2; font-size:13px; }
       <section><h3>Dados</h3><ul><li><strong>quantity</strong>: Maximum valid integer quantity: 10.</li></ul></section>
     </div>
     <section><h3>Passos</h3><div class="table-wrap"><table class="steps"><thead><tr><th scope="col">#</th><th scope="col">A&ccedil;&atilde;o</th><th scope="col">Resultado esperado</th></tr></thead><tbody><tr><td class="step-number">1</td><td>Set the order-line quantity to 10 and submit the change.</td><td>The quantity 10 is accepted.</td></tr></tbody></table></div></section>
+    <section><h3>Fluxo do Teste</h3><div class="test-flow" role="img" aria-label="Fluxo linear do teste"><div class="flow-node flow-action">1. Set the order-line quantity to 10 and submit the change.</div><div class="flow-connector" aria-hidden="true">&darr;</div><div class="flow-node flow-expected">Expected: The quantity 10 is accepted.</div></div><pre class="mermaid-source" hidden>flowchart TD
+    A1[&quot;1. Set the order-line quantity to 10 and submit the change.&quot;]
+    E1[&quot;Expected: The quantity 10 is accepted.&quot;]
+    A1 --&gt; E1</pre></section>
+    <section><h3>Artefatos</h3><div class="artifact-links"><a href="test-cases/TC-003.json">JSON</a><a href="test-cases-md/TC-003.md">Markdown</a></div></section>
     <details class="technical"><summary>Detalhes t&eacute;cnicos</summary><p>Requisitos: REQ-002 | Cen&aacute;rios: SCN-003 | Coverage Points: CP-005</p></details>
   </div>
 </details>
@@ -130,6 +157,11 @@ th { background:#f0f3f2; font-size:13px; }
       <section><h3>Dados</h3><ul><li><strong>quantity</strong>: Below-minimum integer quantity: 0.</li></ul></section>
     </div>
     <section><h3>Passos</h3><div class="table-wrap"><table class="steps"><thead><tr><th scope="col">#</th><th scope="col">A&ccedil;&atilde;o</th><th scope="col">Resultado esperado</th></tr></thead><tbody><tr><td class="step-number">1</td><td>Set the order-line quantity to 0 and submit the change.</td><td>The value is rejected and the existing quantity remains 5.</td></tr></tbody></table></div></section>
+    <section><h3>Fluxo do Teste</h3><div class="test-flow" role="img" aria-label="Fluxo linear do teste"><div class="flow-node flow-action">1. Set the order-line quantity to 0 and submit the change.</div><div class="flow-connector" aria-hidden="true">&darr;</div><div class="flow-node flow-expected">Expected: The value is rejected and the existing quantity remains 5.</div></div><pre class="mermaid-source" hidden>flowchart TD
+    A1[&quot;1. Set the order-line quantity to 0 and submit the change.&quot;]
+    E1[&quot;Expected: The value is rejected and the existing quantity remains 5.&quot;]
+    A1 --&gt; E1</pre></section>
+    <section><h3>Artefatos</h3><div class="artifact-links"><a href="test-cases/TC-004.json">JSON</a><a href="test-cases-md/TC-004.md">Markdown</a></div></section>
     <details class="technical"><summary>Detalhes t&eacute;cnicos</summary><p>Requisitos: REQ-002 | Cen&aacute;rios: SCN-004 | Coverage Points: CP-006, CP-007</p></details>
   </div>
 </details>
@@ -145,6 +177,11 @@ th { background:#f0f3f2; font-size:13px; }
       <section><h3>Dados</h3><ul><li><strong>quantity</strong>: Above-maximum integer quantity: 11.</li></ul></section>
     </div>
     <section><h3>Passos</h3><div class="table-wrap"><table class="steps"><thead><tr><th scope="col">#</th><th scope="col">A&ccedil;&atilde;o</th><th scope="col">Resultado esperado</th></tr></thead><tbody><tr><td class="step-number">1</td><td>Set the order-line quantity to 11 and submit the change.</td><td>The value is rejected and the existing quantity remains 5.</td></tr></tbody></table></div></section>
+    <section><h3>Fluxo do Teste</h3><div class="test-flow" role="img" aria-label="Fluxo linear do teste"><div class="flow-node flow-action">1. Set the order-line quantity to 11 and submit the change.</div><div class="flow-connector" aria-hidden="true">&darr;</div><div class="flow-node flow-expected">Expected: The value is rejected and the existing quantity remains 5.</div></div><pre class="mermaid-source" hidden>flowchart TD
+    A1[&quot;1. Set the order-line quantity to 11 and submit the change.&quot;]
+    E1[&quot;Expected: The value is rejected and the existing quantity remains 5.&quot;]
+    A1 --&gt; E1</pre></section>
+    <section><h3>Artefatos</h3><div class="artifact-links"><a href="test-cases/TC-005.json">JSON</a><a href="test-cases-md/TC-005.md">Markdown</a></div></section>
     <details class="technical"><summary>Detalhes t&eacute;cnicos</summary><p>Requisitos: REQ-002 | Cen&aacute;rios: SCN-005 | Coverage Points: CP-008, CP-009</p></details>
   </div>
 </details>
@@ -160,6 +197,11 @@ th { background:#f0f3f2; font-size:13px; }
       <section><h3>Dados</h3><ul><li><strong>draft order</strong>: A synthetic order currently shown in DRAFT state.</li></ul></section>
     </div>
     <section><h3>Passos</h3><div class="table-wrap"><table class="steps"><thead><tr><th scope="col">#</th><th scope="col">A&ccedil;&atilde;o</th><th scope="col">Resultado esperado</th></tr></thead><tbody><tr><td class="step-number">1</td><td>Submit the DRAFT order.</td><td>The order is submitted and its state changes to SUBMITTED.</td></tr></tbody></table></div></section>
+    <section><h3>Fluxo do Teste</h3><div class="test-flow" role="img" aria-label="Fluxo linear do teste"><div class="flow-node flow-action">1. Submit the DRAFT order.</div><div class="flow-connector" aria-hidden="true">&darr;</div><div class="flow-node flow-expected">Expected: The order is submitted and its state changes to SUBMITTED.</div></div><pre class="mermaid-source" hidden>flowchart TD
+    A1[&quot;1. Submit the DRAFT order.&quot;]
+    E1[&quot;Expected: The order is submitted and its state changes to SUBMITTED.&quot;]
+    A1 --&gt; E1</pre></section>
+    <section><h3>Artefatos</h3><div class="artifact-links"><a href="test-cases/TC-006.json">JSON</a><a href="test-cases-md/TC-006.md">Markdown</a></div></section>
     <details class="technical"><summary>Detalhes t&eacute;cnicos</summary><p>Requisitos: REQ-003 | Cen&aacute;rios: SCN-006 | Coverage Points: CP-010, CP-011</p></details>
   </div>
 </details>
@@ -175,6 +217,11 @@ th { background:#f0f3f2; font-size:13px; }
       <section><h3>Dados</h3><ul><li><strong>attempted edit</strong>: Change the quantity from 5 to 6.</li></ul></section>
     </div>
     <section><h3>Passos</h3><div class="table-wrap"><table class="steps"><thead><tr><th scope="col">#</th><th scope="col">A&ccedil;&atilde;o</th><th scope="col">Resultado esperado</th></tr></thead><tbody><tr><td class="step-number">1</td><td>Attempt to change the submitted order-line quantity from 5 to 6.</td><td>The edit is rejected and the order-line quantity remains 5.</td></tr></tbody></table></div></section>
+    <section><h3>Fluxo do Teste</h3><div class="test-flow" role="img" aria-label="Fluxo linear do teste"><div class="flow-node flow-action">1. Attempt to change the submitted order-line quantity from 5 to 6.</div><div class="flow-connector" aria-hidden="true">&darr;</div><div class="flow-node flow-expected">Expected: The edit is rejected and the order-line quantity remains 5.</div></div><pre class="mermaid-source" hidden>flowchart TD
+    A1[&quot;1. Attempt to change the submitted order-line quantity from 5 to 6.&quot;]
+    E1[&quot;Expected: The edit is rejected and the order-line quantity remains 5.&quot;]
+    A1 --&gt; E1</pre></section>
+    <section><h3>Artefatos</h3><div class="artifact-links"><a href="test-cases/TC-007.json">JSON</a><a href="test-cases-md/TC-007.md">Markdown</a></div></section>
     <details class="technical"><summary>Detalhes t&eacute;cnicos</summary><p>Requisitos: REQ-003 | Cen&aacute;rios: SCN-007 | Coverage Points: CP-012, CP-013</p></details>
   </div>
 </details>
@@ -190,6 +237,11 @@ th { background:#f0f3f2; font-size:13px; }
       <section><h3>Dados</h3><ul><li><strong>order</strong>: Synthetic create-order data.</li></ul></section>
     </div>
     <section><h3>Passos</h3><div class="table-wrap"><table class="steps"><thead><tr><th scope="col">#</th><th scope="col">A&ccedil;&atilde;o</th><th scope="col">Resultado esperado</th></tr></thead><tbody><tr><td class="step-number">1</td><td>Attempt to create an order using the synthetic order data.</td><td>The operation is denied and no order data is created.</td></tr></tbody></table></div></section>
+    <section><h3>Fluxo do Teste</h3><div class="test-flow" role="img" aria-label="Fluxo linear do teste"><div class="flow-node flow-action">1. Attempt to create an order using the synthetic order data.</div><div class="flow-connector" aria-hidden="true">&darr;</div><div class="flow-node flow-expected">Expected: The operation is denied and no order data is created.</div></div><pre class="mermaid-source" hidden>flowchart TD
+    A1[&quot;1. Attempt to create an order using the synthetic order data.&quot;]
+    E1[&quot;Expected: The operation is denied and no order data is created.&quot;]
+    A1 --&gt; E1</pre></section>
+    <section><h3>Artefatos</h3><div class="artifact-links"><a href="test-cases/TC-008.json">JSON</a><a href="test-cases-md/TC-008.md">Markdown</a></div></section>
     <details class="technical"><summary>Detalhes t&eacute;cnicos</summary><p>Requisitos: REQ-004 | Cen&aacute;rios: SCN-008 | Coverage Points: CP-014, CP-015</p></details>
   </div>
 </details>
@@ -205,6 +257,11 @@ th { background:#f0f3f2; font-size:13px; }
       <section><h3>Dados</h3><ul><li><strong>attempted edit</strong>: Change the quantity from 5 to 6.</li></ul></section>
     </div>
     <section><h3>Passos</h3><div class="table-wrap"><table class="steps"><thead><tr><th scope="col">#</th><th scope="col">A&ccedil;&atilde;o</th><th scope="col">Resultado esperado</th></tr></thead><tbody><tr><td class="step-number">1</td><td>Attempt to change the order-line quantity from 5 to 6.</td><td>The operation is denied and the order-line quantity remains 5.</td></tr></tbody></table></div></section>
+    <section><h3>Fluxo do Teste</h3><div class="test-flow" role="img" aria-label="Fluxo linear do teste"><div class="flow-node flow-action">1. Attempt to change the order-line quantity from 5 to 6.</div><div class="flow-connector" aria-hidden="true">&darr;</div><div class="flow-node flow-expected">Expected: The operation is denied and the order-line quantity remains 5.</div></div><pre class="mermaid-source" hidden>flowchart TD
+    A1[&quot;1. Attempt to change the order-line quantity from 5 to 6.&quot;]
+    E1[&quot;Expected: The operation is denied and the order-line quantity remains 5.&quot;]
+    A1 --&gt; E1</pre></section>
+    <section><h3>Artefatos</h3><div class="artifact-links"><a href="test-cases/TC-009.json">JSON</a><a href="test-cases-md/TC-009.md">Markdown</a></div></section>
     <details class="technical"><summary>Detalhes t&eacute;cnicos</summary><p>Requisitos: REQ-004 | Cen&aacute;rios: SCN-009 | Coverage Points: CP-016, CP-017</p></details>
   </div>
 </details>
@@ -220,6 +277,11 @@ th { background:#f0f3f2; font-size:13px; }
       <section><h3>Dados</h3><ul><li><strong>draft order</strong>: A synthetic DRAFT order eligible for submission.</li></ul></section>
     </div>
     <section><h3>Passos</h3><div class="table-wrap"><table class="steps"><thead><tr><th scope="col">#</th><th scope="col">A&ccedil;&atilde;o</th><th scope="col">Resultado esperado</th></tr></thead><tbody><tr><td class="step-number">1</td><td>Submit the DRAFT order while the billing service is unavailable.</td><td>Submission does not complete and a retry action is available; the resulting state and retained data require clarification.</td></tr></tbody></table></div></section>
+    <section><h3>Fluxo do Teste</h3><div class="test-flow" role="img" aria-label="Fluxo linear do teste"><div class="flow-node flow-action">1. Submit the DRAFT order while the billing service is unavailable.</div><div class="flow-connector" aria-hidden="true">&darr;</div><div class="flow-node flow-expected">Expected: Submission does not complete and a retry action is available; the resulting state and retained data require...</div></div><pre class="mermaid-source" hidden>flowchart TD
+    A1[&quot;1. Submit the DRAFT order while the billing service is unavailable.&quot;]
+    E1[&quot;Expected: Submission does not complete and a retry action is available; the resulting state and retained data require...&quot;]
+    A1 --&gt; E1</pre></section>
+    <section><h3>Artefatos</h3><div class="artifact-links"><a href="test-cases/TC-010.json">JSON</a><a href="test-cases-md/TC-010.md">Markdown</a></div></section>
     <details class="technical"><summary>Detalhes t&eacute;cnicos</summary><p>Requisitos: REQ-006 | Cen&aacute;rios: SCN-010 | Coverage Points: CP-019, CP-020</p></details>
   </div>
 </details></div><p id="no-results" hidden>Nenhum Test Case corresponde aos filtros.</p></section>
