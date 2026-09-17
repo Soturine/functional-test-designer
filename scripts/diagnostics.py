@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from collections import Counter
 from datetime import datetime, timezone
@@ -69,7 +70,21 @@ AGGREGATION_STRATEGIES = {
     "output_path": "last",
     "diagnostics_path": "last",
     "artifact_root_source": "last",
+    "detailed_execution_evidence_available": "last",
 }
+
+ABSTRACT_ACTION_PATTERNS = (
+    r"\bexecute (?:the )?(?:complete )?flow\b",
+    r"\bcomplete (?:the )?(?:process|operation|cycle)\b",
+    r"\bvalidate (?:the )?functionality\b",
+    r"\bperform (?:the )?(?:process|operation)\b",
+    r"\bexecutar (?:o )?fluxo\b",
+    r"\brealizar (?:o )?processo\b",
+    r"\bcompletar (?:a )?opera[cç][aã]o\b",
+    r"\bvalidar (?:a )?funcionalidade\b",
+    r"\bfazer (?:a )?(?:sa[ií]da|entrada)\b",
+    r"\bprocessar corretamente\b",
+)
 
 
 def now_utc() -> datetime:
@@ -229,6 +244,46 @@ def output_totals(output_dir: Path | None) -> dict[str, Any]:
     questions = read_document(output_dir / "questions.json").get("questions", [])
     cases = [read_document(output_dir / entry["file"]) for entry in index.get("test_cases", [])]
     statuses = Counter(case.get("status") for case in cases)
+    source_roles = {
+        source.get("path"): source.get("role")
+        for source in index.get("sources", [])
+        if isinstance(source, dict)
+    }
+    case_roles = [
+        {
+            source_roles.get(ref.get("source"))
+            for ref in case.get("source_refs", [])
+            if isinstance(ref, dict) and source_roles.get(ref.get("source"))
+        }
+        for case in cases
+    ]
+    step_counts = [len(case.get("steps", [])) for case in cases]
+    abstract_actions = sum(
+        any(re.search(pattern, str(step.get("action", "")), re.IGNORECASE) for pattern in ABSTRACT_ACTION_PATTERNS)
+        for case in cases
+        for step in case.get("steps", [])
+        if isinstance(step, dict)
+    )
+    concrete_data_cases = sum(
+        any(
+            "<" not in str(item.get("description", ""))
+            and bool(re.search(r"\d|`|\b[A-Z][A-Z0-9_]{1,}\b", str(item.get("description", ""))))
+            for item in case.get("test_data", [])
+            if isinstance(item, dict)
+        )
+        for case in cases
+    )
+    path_question_count = sum(
+        bool(
+            re.search(
+                r"\b(?:path|route|menu|button|endpoint|caminho|rota|bot[aã]o|como executar)\b",
+                str(question.get("question", "")) + " " + str(question.get("reason", "")),
+                re.IGNORECASE,
+            )
+        )
+        for question in questions
+        if isinstance(question, dict)
+    )
     return {
         "requirements": len(index.get("requirements", [])),
         "coverage_points": len(index.get("coverage_points", [])),
@@ -240,6 +295,20 @@ def output_totals(output_dir: Path | None) -> dict[str, Any]:
         "blocked": statuses["BLOCKED"],
         "questions": len(questions),
         "markdown_files": len(list((output_dir / "test-cases-md").glob("*.md"))),
+        "test_cases_with_one_step": sum(count == 1 for count in step_counts),
+        "test_cases_with_multiple_steps": sum(count > 1 for count in step_counts),
+        "average_steps_per_test_case": round(sum(step_counts) / len(cases), 2) if cases else 0.0,
+        "test_cases_with_execution_enrichment": sum(
+            bool(roles - {"FUNCTIONAL_AUTHORITY"}) for roles in case_roles
+        ),
+        "test_cases_with_multiple_source_roles": sum(len(roles) > 1 for roles in case_roles),
+        "test_cases_with_concrete_test_data": concrete_data_cases,
+        "abstract_action_warnings": abstract_actions,
+        "execution_path_questions": path_question_count,
+        "functional_authority_contributions": sum("FUNCTIONAL_AUTHORITY" in roles for roles in case_roles),
+        "technical_context_contributions": sum("TECHNICAL_CONTEXT" in roles for roles in case_roles),
+        "implementation_evidence_contributions": sum("IMPLEMENTATION_EVIDENCE" in roles for roles in case_roles),
+        "test_asset_contributions": sum("TEST_ASSET" in roles for roles in case_roles),
     }
 
 
@@ -308,6 +377,21 @@ def finish_run(
                 "code": "HIGH_UNATTRIBUTED_TIME",
                 "message": "More than 20% of elapsed time was outside measured stages; start timers before stage reasoning.",
                 "unattributed_percent": run["unattributed_percent"],
+            }
+        )
+    case_count = document["totals"].get("test_cases", 0)
+    single_step_count = document["totals"].get("test_cases_with_one_step", 0)
+    if (
+        observed.get("detailed_execution_evidence_available") is True
+        and case_count >= 5
+        and single_step_count / case_count >= 0.8
+    ):
+        document["warnings"].append(
+            {
+                "code": "POSSIBLE_EXECUTION_UNDER_SPECIFICATION",
+                "message": "Detailed selected execution evidence exists, but at least 80% of Test Cases contain one step.",
+                "test_cases_with_one_step": single_step_count,
+                "test_cases": case_count,
             }
         )
     document["scope_proof"] = {

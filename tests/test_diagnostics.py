@@ -203,6 +203,56 @@ class DiagnosticsTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "No aggregation strategy"):
             DIAGNOSTICS.finish_run(self.metrics)
 
+    def test_execution_metrics_are_derived_from_real_cases_and_source_roles(self) -> None:
+        totals = DIAGNOSTICS.output_totals(self.output)
+
+        self.assertEqual(11, totals["test_cases"])
+        self.assertEqual(2, totals["test_cases_with_multiple_steps"])
+        self.assertEqual(9, totals["test_cases_with_one_step"])
+        self.assertGreater(totals["average_steps_per_test_case"], 1)
+        self.assertEqual(2, totals["test_cases_with_execution_enrichment"])
+        self.assertEqual(2, totals["test_cases_with_multiple_source_roles"])
+        self.assertEqual(11, totals["functional_authority_contributions"])
+        self.assertEqual(1, totals["technical_context_contributions"])
+        self.assertEqual(2, totals["implementation_evidence_contributions"])
+        self.assertEqual(0, totals["test_asset_contributions"])
+
+    def test_detailed_evidence_single_step_distribution_adds_non_blocking_warning(self) -> None:
+        index = DIAGNOSTICS.read_document(self.output / "test-cases.json")
+        for entry in index["test_cases"]:
+            path = self.output / entry["file"]
+            case = DIAGNOSTICS.read_document(path)
+            case["steps"] = [case["steps"][-1] | {"step": 1}]
+            DIAGNOSTICS.write_document(path, case)
+        DIAGNOSTICS.start_run(self.metrics)
+        DIAGNOSTICS.begin_stage(self.metrics, "test_case_generation")
+        DIAGNOSTICS.end_stage(
+            self.metrics,
+            "test_case_generation",
+            ["Observed detailed execution evidence."],
+            {"detailed_execution_evidence_available": True},
+        )
+        for name in DIAGNOSTICS.STAGE_NAMES:
+            if name != "test_case_generation":
+                DIAGNOSTICS.skip_stage(self.metrics, name, ["Not needed for execution warning test."])
+
+        document = DIAGNOSTICS.finish_run(self.metrics, self.output)
+
+        warning_codes = {warning["code"] for warning in document["warnings"]}
+        self.assertIn("POSSIBLE_EXECUTION_UNDER_SPECIFICATION", warning_codes)
+
+    def test_abstract_action_detection_is_non_destructive(self) -> None:
+        index = DIAGNOSTICS.read_document(self.output / "test-cases.json")
+        path = self.output / index["test_cases"][0]["file"]
+        case = DIAGNOSTICS.read_document(path)
+        case["steps"][0]["action"] = "Execute the complete flow."
+        DIAGNOSTICS.write_document(path, case)
+
+        totals = DIAGNOSTICS.output_totals(self.output)
+
+        self.assertEqual(1, totals["abstract_action_warnings"])
+        self.assertEqual("Execute the complete flow.", DIAGNOSTICS.read_document(path)["steps"][0]["action"])
+
 
 if __name__ == "__main__":
     unittest.main()

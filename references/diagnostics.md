@@ -73,10 +73,28 @@ Record these when naturally observable:
 - `output_path`
 - `diagnostics_path`
 - `artifact_root_source`
+- `detailed_execution_evidence_available`
+
+The finish helper derives these objective metrics from final JSON; do not record them again in a stage:
+
+- `test_cases_with_one_step`
+- `test_cases_with_multiple_steps`
+- `average_steps_per_test_case`
+- `test_cases_with_execution_enrichment`
+- `test_cases_with_multiple_source_roles`
+- `test_cases_with_concrete_test_data`
+- `abstract_action_warnings`
+- `execution_path_questions`
+- `functional_authority_contributions`
+- `technical_context_contributions`
+- `implementation_evidence_contributions`
+- `test_asset_contributions`
 
 `selected_scope_roots` and `resolved_scope_paths` are arrays of normalized paths. Destination metrics are strings; other metrics should normally be counts. Never record source text, client names, payloads, credentials, production data, or confidential identifiers.
 
 Aggregation is explicit per metric: event counters such as reads and real validator executions use `sum`; generated artifact/state counts use the last authoritative stage; roots and paths use ordered set/array aggregation; destination fields use the last resolved value. Do not repeat `test_cases_generated` in `json_write`; record `individual_json_files_written` there. A summary that reads a validation result does not increment `validator_runs`. The helper rejects unknown metrics until an aggregation strategy is defined and verifies that scope values in `totals` and `scope_proof` match by value and type.
+
+The helper derives step distribution, selected-role contributions, multi-role provenance, execution enrichment, concrete-data signals, abstract-action signals, and execution-path Questions from final JSON. Role contribution counts only TCs that actually cite a source with that role. When the evidence map objectively contains detailed execution paths, record `detailed_execution_evidence_available=true`; if at least 80% of a suite with five or more cases still has one step, the helper adds the non-blocking `POSSIBLE_EXECUTION_UNDER_SPECIFICATION` warning. This is not a quality score and does not force extra steps.
 
 ## Finish
 
