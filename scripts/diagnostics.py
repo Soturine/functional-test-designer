@@ -18,8 +18,9 @@ if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
 from cross_rf_audit import audit_cross_rf  # noqa: E402
+from execution_quality import step_distribution  # noqa: E402
 from requirement_groups import requirement_group_map  # noqa: E402
-from source_coverage_audit import per_requirement_summary  # noqa: E402
+from source_coverage_audit import per_requirement_summary, possible_compound_claims  # noqa: E402
 
 
 STAGE_NAMES = (
@@ -31,9 +32,9 @@ STAGE_NAMES = (
     "testability_and_questions",
     "test_design_and_scenarios",
     "early_deduplication",
-    "test_case_generation",
     "evidence_enrichment",
     "execution_path_synthesis",
+    "test_case_generation",
     "source_coverage_audit",
     "source_coverage_recovery",
     "source_coverage_verification",
@@ -90,6 +91,20 @@ AGGREGATION_STRATEGIES = {
     "source_claims_represented": "last",
     "source_coverage_gaps": "last",
     "recovered_source_gaps": "last",
+    "atomic_source_claims_identified": "last",
+    "compound_source_items_split": "last",
+    "possible_compound_claim_warnings": "last",
+    "referenced_normative_rules": "last",
+    "referenced_rules_resolved_in_scope": "last",
+    "referenced_rules_unresolved": "last",
+    "applicable_rule_claims": "last",
+    "applicable_rule_claims_represented": "last",
+    "evidence_map_hits": "sum",
+    "evidence_map_misses": "sum",
+    "source_files_opened_once": "last",
+    "source_files_reopened": "sum",
+    "tc_generation_reuse_hits": "sum",
+    "varied_execution_paths_available": "last",
 }
 
 ABSTRACT_ACTION_PATTERNS = (
@@ -318,6 +333,7 @@ def output_totals(output_dir: Path | None) -> dict[str, Any]:
     )
     requirement_summaries = per_requirement_summary(index, questions)
     source_gaps = sum(item["source_coverage_gaps"] for item in requirement_summaries.values())
+    execution_metrics = step_distribution(cases)
     gap_counts_by_group: dict[str, int] = {}
     for requirement_id, summary in requirement_summaries.items():
         label = groups.get(requirement_id, requirement_id)
@@ -336,6 +352,7 @@ def output_totals(output_dir: Path | None) -> dict[str, Any]:
         "test_cases_with_one_step": sum(count == 1 for count in step_counts),
         "test_cases_with_multiple_steps": sum(count > 1 for count in step_counts),
         "average_steps_per_test_case": round(sum(step_counts) / len(cases), 2) if cases else 0.0,
+        **execution_metrics,
         "test_cases_with_execution_enrichment": sum(
             bool(roles - {"FUNCTIONAL_AUTHORITY"}) for roles in case_roles
         ),
@@ -353,6 +370,12 @@ def output_totals(output_dir: Path | None) -> dict[str, Any]:
         ),
         "source_claims_represented": sum(
             item["source_claims_represented"] for item in requirement_summaries.values()
+        ),
+        "atomic_source_claims_identified": sum(
+            item["source_claims_identified"] for item in requirement_summaries.values()
+        ),
+        "possible_compound_claim_warnings": len(
+            possible_compound_claims(index.get("normative_clauses", []))
         ),
         "source_coverage_gaps": source_gaps,
         "recovered_source_gaps": 0,
@@ -447,6 +470,40 @@ def finish_run(
                 "message": "Detailed selected execution evidence exists, but at least 80% of Test Cases contain one step.",
                 "test_cases_with_one_step": single_step_count,
                 "test_cases": case_count,
+            }
+        )
+    histogram = document["totals"].get("step_count_histogram", {})
+    if (
+        observed.get("varied_execution_paths_available") is True
+        and case_count >= 5
+        and len(histogram) == 1
+    ):
+        document["totals"]["possible_step_template_bias"] = True
+        document["warnings"].append(
+            {
+                "code": "POSSIBLE_STEP_TEMPLATE_BIAS",
+                "message": "Selected evidence contains differently complex paths, but every Test Case has the same step count.",
+                "step_count_histogram": histogram,
+            }
+        )
+    else:
+        document["totals"]["possible_step_template_bias"] = False
+    compound_count = document["totals"].get("possible_compound_claim_warnings", 0)
+    if compound_count:
+        document["warnings"].append(
+            {
+                "code": "POSSIBLE_COMPOUND_NORMATIVE_CLAIM",
+                "message": "One or more materialized normative claims may contain independently observable outcomes.",
+                "count": compound_count,
+            }
+        )
+    multi_action_count = document["totals"].get("multi_action_step_warnings", 0)
+    if multi_action_count:
+        document["warnings"].append(
+            {
+                "code": "POSSIBLE_MULTI_ACTION_STEP",
+                "message": "One or more steps may compress a documented operational sequence.",
+                "count": multi_action_count,
             }
         )
     document["scope_proof"] = {

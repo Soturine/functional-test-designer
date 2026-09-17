@@ -1,0 +1,26 @@
+[
+  {
+    "source_item": "The system shows status and history.",
+    "atomic_claims": [
+      {"requirement_ref": "REQ-001", "normalized_claim": "The system shows current status."},
+      {"requirement_ref": "REQ-001", "normalized_claim": "The system shows history."}
+    ]
+  },
+  {
+    "source_item": "The system searches by ID, RFID or barcode.",
+    "atomic_claims": [
+      {"requirement_ref": "REQ-001", "normalized_claim": "The system searches by ID."},
+      {"requirement_ref": "REQ-001", "normalized_claim": "The system searches by RFID."},
+      {"requirement_ref": "REQ-001", "normalized_claim": "The system searches by barcode."}
+    ]
+  },
+  {
+    "source_item": "The system records timestamp, user, previous state and new state.",
+    "atomic_claims": [
+      {"requirement_ref": "REQ-001", "normalized_claim": "The system records the timestamp."},
+      {"requirement_ref": "REQ-001", "normalized_claim": "The system records the user."},
+      {"requirement_ref": "REQ-001", "normalized_claim": "The system records the previous state."},
+      {"requirement_ref": "REQ-001", "normalized_claim": "The system records the new state."}
+    ]
+  }
+]

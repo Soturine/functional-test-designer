@@ -223,6 +223,8 @@ class DiagnosticsTests(unittest.TestCase):
         self.assertEqual(23, totals["source_claims_identified"])
         self.assertEqual(0, totals["automatic_merges"])
         self.assertEqual(0, totals["automatic_removals"])
+        self.assertEqual({"1": 9, "2": 1, "3": 1}, totals["step_count_histogram"])
+        self.assertEqual(23, totals["atomic_source_claims_identified"])
 
     def test_detailed_evidence_single_step_distribution_adds_non_blocking_warning(self) -> None:
         index = DIAGNOSTICS.read_document(self.output / "test-cases.json")
@@ -259,6 +261,48 @@ class DiagnosticsTests(unittest.TestCase):
 
         self.assertEqual(1, totals["abstract_action_warnings"])
         self.assertEqual("Execute the complete flow.", DIAGNOSTICS.read_document(path)["steps"][0]["action"])
+
+    def test_uniform_steps_warn_only_when_varied_paths_are_observed(self) -> None:
+        index = DIAGNOSTICS.read_document(self.output / "test-cases.json")
+        for entry in index["test_cases"]:
+            path = self.output / entry["file"]
+            case = DIAGNOSTICS.read_document(path)
+            case["steps"] = [case["steps"][0] | {"step": 1}, case["steps"][-1] | {"step": 2}]
+            DIAGNOSTICS.write_document(path, case)
+        DIAGNOSTICS.start_run(self.metrics)
+        DIAGNOSTICS.begin_stage(self.metrics, "execution_path_synthesis")
+        DIAGNOSTICS.end_stage(
+            self.metrics,
+            "execution_path_synthesis",
+            ["Observed selected paths with different supported complexity."],
+            {"varied_execution_paths_available": True},
+        )
+        for name in DIAGNOSTICS.STAGE_NAMES:
+            if name != "execution_path_synthesis":
+                DIAGNOSTICS.skip_stage(self.metrics, name, ["Not needed for template-bias test."])
+
+        document = DIAGNOSTICS.finish_run(self.metrics, self.output)
+
+        self.assertTrue(document["totals"]["possible_step_template_bias"])
+        self.assertIn("POSSIBLE_STEP_TEMPLATE_BIAS", {item["code"] for item in document["warnings"]})
+
+    def test_compound_claim_and_multi_action_signals_are_non_blocking_warnings(self) -> None:
+        index = DIAGNOSTICS.read_document(self.output / "test-cases.json")
+        index["normative_clauses"][0]["normalized_claim"] = "Show status and record history."
+        DIAGNOSTICS.write_document(self.output / "test-cases.json", index)
+        case_path = self.output / index["test_cases"][0]["file"]
+        case = DIAGNOSTICS.read_document(case_path)
+        case["steps"][0]["action"] = "Open the item, select the state, enter a reason, then confirm."
+        DIAGNOSTICS.write_document(case_path, case)
+        DIAGNOSTICS.start_run(self.metrics)
+        for name in DIAGNOSTICS.STAGE_NAMES:
+            DIAGNOSTICS.skip_stage(self.metrics, name, ["Not needed for advisory-warning test."])
+
+        document = DIAGNOSTICS.finish_run(self.metrics, self.output)
+        warning_codes = {item["code"] for item in document["warnings"]}
+
+        self.assertIn("POSSIBLE_COMPOUND_NORMATIVE_CLAIM", warning_codes)
+        self.assertIn("POSSIBLE_MULTI_ACTION_STEP", warning_codes)
 
 
 if __name__ == "__main__":

@@ -1,0 +1,15 @@
+[
+  {"id": "TC-001", "steps": [{"step": 1, "action": "Select Refresh.", "expected_result": "The counter updates."}]},
+  {"id": "TC-002", "steps": [
+    {"step": 1, "action": "Open the order.", "expected_result": "The order details open."},
+    {"step": 2, "action": "Review the items.", "expected_result": "The recorded items are visible."},
+    {"step": 3, "action": "Select Finalize.", "expected_result": "The order is finalized."}
+  ]},
+  {"id": "TC-003", "steps": [
+    {"step": 1, "action": "Open the eligible item.", "expected_result": "The item details open."},
+    {"step": 2, "action": "Select the target state.", "expected_result": "The state is selected."},
+    {"step": 3, "action": "Enter the required reason.", "expected_result": "The reason is accepted."},
+    {"step": 4, "action": "Confirm the change.", "expected_result": "The state changes."},
+    {"step": 5, "action": "Open the audit history.", "expected_result": "The change is recorded."}
+  ]}
+]

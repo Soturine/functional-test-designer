@@ -9,6 +9,12 @@ from typing import Any
 
 
 SOURCE_GAP_PREFIX = "[SOURCE_COVERAGE_GAP]"
+COMPOUND_CONNECTOR = re.compile(r"(?:,|\b(?:and|or|e|ou)\b)", re.IGNORECASE)
+OBSERVABLE_VERB = re.compile(
+    r"\b(?:show|display|search|record|update|block|return|persist|send|receive|"
+    r"exibir|mostrar|buscar|pesquisar|registrar|atualizar|bloquear|retornar|persistir|enviar|receber)\w*\b",
+    re.IGNORECASE,
+)
 
 
 def canonical_claim(value: Any) -> str:
@@ -19,6 +25,45 @@ def canonical_claim(value: Any) -> str:
 
 def claim_key(item: dict[str, Any], text_field: str) -> tuple[str, str]:
     return str(item.get("requirement_ref", "")), canonical_claim(item.get(text_field, ""))
+
+
+def atomic_claim_inventory(source_items: list[dict[str, Any]]) -> dict[str, Any]:
+    """Count an agent-materialized atomic inventory without splitting prose mechanically."""
+    claims: list[dict[str, Any]] = []
+    split_items = 0
+    for item in source_items:
+        parts = item.get("atomic_claims", [])
+        if not isinstance(parts, list) or not parts:
+            raise ValueError("Every source item requires at least one materialized atomic_claim")
+        if len(parts) > 1:
+            split_items += 1
+        for part in parts:
+            if not isinstance(part, dict) or not part.get("normalized_claim"):
+                raise ValueError("Every atomic claim requires normalized_claim")
+            claims.append(part)
+    return {
+        "source_items": len(source_items),
+        "atomic_source_claims_identified": len(claims),
+        "compound_source_items_split": split_items,
+        "claims": claims,
+    }
+
+
+def possible_compound_claims(items: list[dict[str, Any]]) -> list[dict[str, str]]:
+    """Flag suspicious materialized claims for review; never split them automatically."""
+    warnings: list[dict[str, str]] = []
+    for item in items:
+        text = str(item.get("normalized_claim", item.get("statement", "")))
+        verbs = OBSERVABLE_VERB.findall(text)
+        if len(verbs) >= 2 and COMPOUND_CONNECTOR.search(text):
+            warnings.append(
+                {
+                    "id": str(item.get("id", "")),
+                    "code": "POSSIBLE_COMPOUND_NORMATIVE_CLAIM",
+                    "statement": text,
+                }
+            )
+    return warnings
 
 
 def audit_source_claims(
