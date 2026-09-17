@@ -19,7 +19,6 @@ if str(SCRIPT_DIR) not in sys.path:
 
 from validate_output import validate  # noqa: E402
 from render_markdown import extract_mermaid, mermaid_source  # noqa: E402
-from cross_rf_audit import DUPLICATE_CANDIDATE, audit_cross_rf  # noqa: E402
 from requirement_groups import (  # noqa: E402
     case_group,
     group_identifier,
@@ -34,10 +33,17 @@ STATUS_LABELS = {
     "BLOCKED": "BLOCKED",
 }
 PRIORITY_LABELS = {
-    "CRITICAL": "Cr&iacute;tica",
-    "HIGH": "Alta",
-    "MEDIUM": "M&eacute;dia",
-    "LOW": "Baixa",
+    "CRITICAL": "CRITICAL",
+    "HIGH": "HIGH",
+    "MEDIUM": "MEDIUM",
+    "LOW": "LOW",
+}
+ROLE_LABELS = {
+    "FUNCTIONAL_AUTHORITY": "Authority",
+    "TECHNICAL_CONTEXT": "Technical Context",
+    "IMPLEMENTATION_EVIDENCE": "Implementation",
+    "TEST_ASSET": "Test Asset",
+    "OTHER_SELECTED": "Other Selected",
 }
 
 
@@ -86,6 +92,40 @@ def render_steps(steps: list[dict[str, Any]]) -> str:
         '<th scope="col">#</th><th scope="col">A&ccedil;&atilde;o</th>'
         '<th scope="col">Resultado esperado</th></tr></thead>'
         f'<tbody>{"".join(rows)}</tbody></table></div>'
+    )
+
+
+def render_coverage_bar(represented: int, identified: int) -> str:
+    percent = round(100 * represented / identified) if identified else 100
+    return (
+        f'<div class="coverage-progress" aria-label="{represented} de {identified} claims representados">'
+        f'<div class="coverage-progress-fill" style="width:{percent}%"></div></div>'
+        f'<span class="coverage-percent">{percent}%</span>'
+    )
+
+
+def render_technical_details(context: dict[str, Any] | str) -> str:
+    if not isinstance(context, dict):
+        return f"<p>{esc(context)}</p>" if context else ""
+    roles = "".join(
+        f'<span class="badge role-badge">{esc(ROLE_LABELS.get(role, role))}</span>'
+        for role in context.get("roles", [])
+    )
+    chain = "<span class=\"trace-arrow\">&rarr;</span>".join(
+        f"<code>{esc(value)}</code>" for value in context.get("traceability", [])
+    )
+    rows = [
+        ("Primary RF", context.get("primary_group", "None")),
+        ("Related RFs", ", ".join(context.get("related_groups", [])) or "None"),
+        ("Source refs", ", ".join(context.get("source_refs", [])) or "None"),
+        ("Related findings", ", ".join(context.get("finding_ids", [])) or "None"),
+    ]
+    row_html = "".join(
+        f'<dt>{esc(label)}</dt><dd>{esc(value)}</dd>' for label, value in rows
+    )
+    return (
+        f'<div class="traceability" aria-label="Rastreabilidade">{chain}</div>'
+        f'<div class="role-badges">{roles}</div><dl class="technical-grid">{row_html}</dl>'
     )
 
 
@@ -217,7 +257,7 @@ def render_case(
     mermaid: str,
     requirement_group: str | None = None,
     related_groups: list[str] | None = None,
-    technical_context: str = "",
+    technical_context: dict[str, Any] | str = "",
     feature_flags: set[str] | None = None,
 ) -> str:
     status = case["status"]
@@ -233,16 +273,16 @@ def render_case(
             " ".join(related_groups or []),
         ]
     ).casefold()
-    technical = (
-        f'Requisitos: {", ".join(case["requirement_refs"])} | '
-        f'Cen&aacute;rios: {", ".join(case["scenario_refs"])} | '
-        f'Coverage Points: {", ".join(case["coverage_point_refs"])}'
-        + (f" | {technical_context}" if technical_context else "")
-    )
+    technical = render_technical_details(technical_context)
     group_badge = (
         f'<span class="badge requirement-group">{esc(requirement_group)}</span>'
         if requirement_group
         else ""
+    )
+    feature_badges = "".join(
+        f'<span class="badge feature-{esc(flag)}">{esc(flag.replace("-", " ").title())}</span>'
+        for flag in ("cross-rf", "multi-source", "findings", "duplicate-candidate")
+        if flag in feature_flags
     )
     related_html = (
         f'    <p class="related-requirements"><strong>Related requirements:</strong> {esc(", ".join(related_groups))}</p>\n'
@@ -265,7 +305,7 @@ def render_case(
 <details class="tc-card" data-status="{esc(status)}" data-priority="{esc(priority)}" data-rf="{esc(group_identifier(requirement_group or 'Unmapped'))}" data-features="{esc(' '.join(sorted(feature_flags)))}" data-search="{esc(search_text)}">
   <summary>
     <span class="tc-heading"><span class="tc-id">{esc(case['id'])}</span>{esc(case['title'])}</span>
-    <span class="badges">{group_badge}<span class="badge status-{esc(status.lower())}">{STATUS_LABELS[status]}</span><span class="badge priority">{PRIORITY_LABELS[priority]}</span></span>
+    <span class="badges">{group_badge}{feature_badges}<span class="badge status-{esc(status.lower())}">{STATUS_LABELS[status]}</span><span class="badge priority">{PRIORITY_LABELS[priority]}</span></span>
   </summary>
   <div class="tc-content">
     <section><h3>Objetivo</h3><p>{esc(case['objective'])}</p></section>
@@ -276,7 +316,7 @@ def render_case(
     <section><h3>Passos</h3>{render_steps(case['steps'])}</section>
     <section class="flow-section"><div class="flow-heading"><h3>Fluxo do Teste</h3>{expand_button}</div>{flow}</section>
     <section><h3>Artefatos</h3><div class="artifact-links">{artifacts}</div></section>
-    <details class="technical"><summary>Detalhes t&eacute;cnicos</summary><p>{technical}</p></details>
+    <details class="technical"><summary>Detalhes t&eacute;cnicos</summary>{technical}</details>
   </div>
 </details>"""
 
@@ -291,6 +331,15 @@ def render_question(question: dict[str, Any]) -> str:
   <p><strong>TCs impactados:</strong> {esc(cases)}</p>
   <details class="technical"><summary>Detalhes t&eacute;cnicos</summary><p>{esc(question['id'])} | {esc(', '.join(question['requirement_refs']))}</p></details>
 </article>"""
+
+
+def render_finding(finding: dict[str, Any]) -> str:
+    return (
+        f'<article class="finding-item finding-{esc(finding["type"].lower())}">'
+        f'<div class="finding-title"><span class="badge">{esc(finding["type"].replace("_", " "))}</span>'
+        f'<strong>{esc(finding["id"])}</strong></div><p>{esc(finding["statement"])}</p>'
+        f'<p class="requirement-source">Requirements: {esc(", ".join(finding["requirement_refs"]))}</p></article>'
+    )
 
 
 def render_coverage(
@@ -336,6 +385,7 @@ def render_coverage(
             f'{summaries[requirement["id"]]["test_cases"]} TC(s); '
             f'{summaries[requirement["id"]]["findings"]} finding(s); '
             f'{summaries[requirement["id"]]["questions"]} question(s).</p>'
+            f'{render_coverage_bar(summaries[requirement["id"]]["source_claims_represented"], summaries[requirement["id"]]["source_claims_identified"])}'
             f'<p class="requirement-source">{esc(requirement["source_refs"][0]["reference"])}</p>'
             f'<ul class="coverage-list">{"".join(items)}</ul></section>'
         )
@@ -367,10 +417,6 @@ def render_report(output_dir: Path, destination: Path | None = None) -> Path:
     entries_by_id = {entry["id"]: entry for entry in index["test_cases"]}
     questions_by_id = {question["id"]: question for question in questions}
     coverage_points = index["coverage_points"]
-    covered_count = sum(
-        bool(item["target_refs"]) or item["disposition"] == "OUT_OF_SCOPE"
-        for item in coverage_points
-    )
     blocking_count = sum(bool(question["blocking"]) for question in questions)
     warning = (
         f'<div class="alert"><strong>Aten&ccedil;&atilde;o:</strong> {blocking_count} pergunta(s) bloqueante(s) requerem decis&atilde;o.</div>'
@@ -380,7 +426,6 @@ def render_report(output_dir: Path, destination: Path | None = None) -> Path:
     groups = requirement_group_map(index["requirements"])
     summaries = per_requirement_summary(index, questions)
     source_roles = {item["path"]: item["role"] for item in index.get("sources", [])}
-    coverage_statements = {item["id"]: item["statement"] for item in coverage_points}
     roles_by_case = {
         case["id"]: {
             source_roles.get(ref.get("source"))
@@ -389,19 +434,20 @@ def render_report(output_dir: Path, destination: Path | None = None) -> Path:
         }
         for case in cases
     }
-    cross_audit = audit_cross_rf(
-        cases, groups, coverage_statements=coverage_statements, roles_by_case=roles_by_case
-    )
     duplicate_ids = {
-        case_id
-        for item in cross_audit["pairs"]
-        if item["classification"] == DUPLICATE_CANDIDATE
-        for case_id in item["test_case_ids"]
+        case["id"] for case in cases if "duplicate-candidate" in case.get("tags", [])
     }
     clauses_by_cp: dict[str, list[str]] = {}
     for clause in index.get("normative_clauses", []):
         if clause.get("destination_type") == "COVERAGE_POINT":
             clauses_by_cp.setdefault(clause.get("destination_id", ""), []).append(clause["id"])
+    finding_ids_by_requirement: dict[str, list[str]] = {}
+    for finding in index.get("findings", []):
+        for requirement_ref in finding.get("requirement_refs", []):
+            finding_ids_by_requirement.setdefault(requirement_ref, []).append(finding["id"])
+    question_case_ids = {
+        case_id for question in questions for case_id in question.get("related_test_cases", [])
+    }
     requirement_order = {
         requirement["id"]: position for position, requirement in enumerate(index["requirements"])
     }
@@ -428,16 +474,33 @@ def render_report(output_dir: Path, destination: Path | None = None) -> Path:
                 flags.add("multi-source")
             if case["id"] in duplicate_ids:
                 flags.add("duplicate-candidate")
-            if any(case["id"] in item.get("related_test_cases", []) for item in questions):
+            if case["id"] in question_case_ids:
                 flags.add("questions")
-            if any(case["id"] in cp.get("target_refs", []) and cp["requirement_ref"] in finding.get("requirement_refs", []) for cp in coverage_points for finding in index.get("findings", [])):
-                flags.add("findings")
-            technical = (
-                f'Clauses: {", ".join(clause_ids) or "None"} | '
-                f'Source roles: {", ".join(sorted(roles)) or "None"} | '
-                f'Source refs: {", ".join(ref.get("source", "") for ref in case.get("source_refs", []))} | '
-                f'Primary RF: {group} | Related RFs: {", ".join(related) or "None"}'
+            finding_ids = list(
+                dict.fromkeys(
+                    finding_id
+                    for requirement_ref in case.get("requirement_refs", [])
+                    for finding_id in finding_ids_by_requirement.get(requirement_ref, [])
+                )
             )
+            if finding_ids:
+                flags.add("findings")
+            traceability = list(dict.fromkeys([
+                group_identifier(group),
+                *case.get("requirement_refs", []),
+                *clause_ids,
+                *case.get("coverage_point_refs", []),
+                *case.get("scenario_refs", []),
+                case["id"],
+            ]))
+            technical = {
+                "traceability": traceability,
+                "roles": sorted(roles),
+                "source_refs": [ref.get("source", "") for ref in case.get("source_refs", [])],
+                "primary_group": group,
+                "related_groups": related,
+                "finding_ids": finding_ids,
+            }
             cards_parts.append(render_case(case, entry, mermaid_by_id[case["id"]], group, related, technical, flags))
         cards = "".join(cards_parts)
         member_req_ids = {ref for _, _, case, _ in members for ref in case.get("requirement_refs", [])}
@@ -445,13 +508,16 @@ def render_report(output_dir: Path, destination: Path | None = None) -> Path:
         group_represented = sum(summaries[ref]["source_claims_represented"] for ref in member_req_ids)
         group_gaps = sum(summaries[ref]["source_coverage_gaps"] for ref in member_req_ids)
         group_findings = sum(summaries[ref]["findings"] for ref in member_req_ids)
+        coverage_bar = render_coverage_bar(group_represented, group_claims)
+        body_id = f'rf-body-{group_identifier(group)}'
         case_groups.append(
             f'<section class="tc-group" id="rf-{esc(group_identifier(group))}" data-requirement-group="{esc(group)}">'
-            f'<div class="tc-group-title"><h3>{esc(group)}</h3><span>{len(members)} TCs &middot; {group_represented}/{group_claims} claims &middot; {group_gaps} gaps &middot; {group_findings} findings</span>'
-            f'<button type="button" class="group-toggle" aria-expanded="true">Recolher</button></div><div class="tc-group-body">{cards}</div></section>'
+            f'<div class="tc-group-title"><div><h3>{esc(group)}</h3><span>{group_represented}/{group_claims} claims &middot; {len(members)} TCs &middot; {group_gaps} gaps &middot; {group_findings} findings</span>{coverage_bar}</div>'
+            f'<button type="button" class="group-toggle" aria-expanded="true" aria-controls="{esc(body_id)}">Recolher</button></div><div class="tc-group-body" id="{esc(body_id)}">{cards}</div></section>'
         )
     case_html = "".join(case_groups)
     question_html = "".join(render_question(question) for question in questions)
+    finding_html = "".join(render_finding(finding) for finding in index.get("findings", []))
     coverage_html = render_coverage(
         index["requirements"], coverage_points, entries_by_id, questions_by_id, groups, summaries
     )
@@ -460,9 +526,12 @@ def render_report(output_dir: Path, destination: Path | None = None) -> Path:
         for label in dict.fromkeys(groups.values())
     )
     rf_navigation = "".join(
-        f'<a href="#rf-{esc(group_identifier(label))}">{esc(label)}</a>'
+        f'<a href="#rf-{esc(group_identifier(label))}" title="{esc(label)}">{esc(group_identifier(label))}</a>'
         for label in dict.fromkeys(groups.values())
     )
+    source_claim_count = sum(item["source_claims_identified"] for item in summaries.values())
+    source_gap_count = sum(item["source_coverage_gaps"] for item in summaries.values())
+    cross_rf_count = sum(len(case.get("requirement_refs", [])) > 1 for case in cases)
 
     report = f"""<!doctype html>
 <html lang="pt-BR">
@@ -471,13 +540,13 @@ def render_report(output_dir: Path, destination: Path | None = None) -> Path:
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Functional Test Report</title>
 <style>
-:root {{ --ink:#202427; --muted:#667078; --line:#d9dfe2; --surface:#fff; --soft:#f4f6f5; --accent:#087f5b; --warning:#9a6700; --danger:#b42318; }}
+:root {{ --ink:#182027; --muted:#5f6b73; --line:#d7dfe3; --surface:#fff; --soft:#f3f6f7; --accent:#087f5b; --accent-soft:#e6f5ef; --warning:#9a6700; --danger:#b42318; --shadow:0 8px 24px rgba(26,43,52,.07); }}
 * {{ box-sizing:border-box; }}
 body {{ margin:0; overflow-x:hidden; color:var(--ink); background:var(--soft); font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif; letter-spacing:0; }}
 body.modal-open {{ overflow:hidden; }}
 a {{ color:inherit; }}
 .shell {{ width:min(1180px,calc(100% - 32px)); margin:0 auto; }}
-header {{ background:#fff; border-bottom:1px solid var(--line); padding:28px 0 18px; }}
+header {{ position:sticky; top:0; z-index:20; background:rgba(255,255,255,.97); border-bottom:1px solid var(--line); padding:18px 0 10px; backdrop-filter:blur(8px); }}
 h1 {{ margin:0 0 4px; font-size:30px; }}
 .subtitle,.empty,.requirement-source {{ color:var(--muted); }}
 nav {{ display:flex; gap:8px; flex-wrap:wrap; margin-top:20px; }}
@@ -488,20 +557,26 @@ main>section {{ padding:20px 0; scroll-margin-top:12px; }}
 h2 {{ margin:0 0 16px; font-size:22px; }}
 h3 {{ margin:0 0 8px; font-size:15px; }}
 .metrics {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(135px,1fr)); gap:10px; }}
-.metric {{ background:#fff; border:1px solid var(--line); border-radius:6px; padding:14px; }}
+.metric {{ background:#fff; border:1px solid var(--line); border-radius:10px; padding:14px; box-shadow:var(--shadow); }}
 .metric strong {{ display:block; font-size:24px; }}
 .metric span {{ color:var(--muted); font-size:13px; }}
 .alert {{ margin-top:14px; padding:12px 14px; background:#fff6dd; border-left:4px solid var(--warning); }}
-.filters {{ display:grid; grid-template-columns:minmax(220px,1fr) repeat(4,minmax(140px,180px)); gap:10px; margin-bottom:14px; }}
+.filter-panel {{ padding:14px; border:1px solid var(--line); border-radius:10px; background:var(--surface); box-shadow:var(--shadow); margin-bottom:18px; }}
+.filters {{ display:grid; grid-template-columns:minmax(220px,1fr) repeat(4,minmax(140px,180px)); gap:10px; }}
+.bulk-controls {{ display:flex; justify-content:flex-end; gap:8px; margin:0 0 10px; }}
+.bulk-controls button {{ border:1px solid #aeb7bc; border-radius:5px; background:#fff; padding:7px 10px; font:inherit; cursor:pointer; }}
 .rf-navigation {{ display:flex; gap:8px; flex-wrap:wrap; margin:0 0 16px; }}
 .rf-navigation a {{ padding:5px 9px; border:1px solid var(--line); border-radius:999px; background:#fff; text-decoration:none; font-size:12px; }}
 input,select {{ width:100%; min-height:40px; border:1px solid #aeb7bc; border-radius:4px; background:#fff; padding:8px 10px; font:inherit; }}
-.tc-card {{ margin-bottom:10px; border:1px solid var(--line); border-radius:6px; background:#fff; }}
+.tc-card {{ margin-bottom:10px; border:1px solid var(--line); border-radius:8px; background:#fff; box-shadow:0 3px 12px rgba(26,43,52,.045); }}
 .tc-group {{ margin:18px 0 24px; }}
-.tc-group-title {{ display:flex; align-items:center; gap:12px; margin:0 0 10px; padding-bottom:7px; border-bottom:2px solid var(--accent); }}
+.tc-group-title {{ display:flex; align-items:center; gap:12px; margin:0 0 12px; padding:13px 14px; border:1px solid var(--line); border-left:4px solid var(--accent); border-radius:8px; background:#fff; box-shadow:var(--shadow); }}
 .tc-group-title h3 {{ margin:0; font-size:17px; }}
 .tc-group-title span {{ color:var(--muted); font-size:12px; }}
 .group-toggle {{ margin-left:auto; border:1px solid #aeb7bc; border-radius:4px; background:#fff; padding:5px 9px; cursor:pointer; }}
+.coverage-progress {{ display:inline-block; width:150px; height:7px; margin:7px 6px 0 0; overflow:hidden; border-radius:999px; background:#e2e8ea; vertical-align:middle; }}
+.coverage-progress-fill {{ height:100%; border-radius:inherit; background:var(--accent); }}
+.coverage-percent {{ color:var(--muted); font-size:11px; }}
 .requirement-group {{ color:#075e47; border-color:#9fd8c6; background:#eaf7f2; }}
 .related-requirements {{ color:var(--muted); font-size:13px; }}
 .tc-card>summary {{ display:flex; align-items:center; justify-content:space-between; gap:16px; min-height:58px; padding:12px 16px; cursor:pointer; font-weight:700; }}
@@ -512,14 +587,19 @@ input,select {{ width:100%; min-height:40px; border:1px solid #aeb7bc; border-ra
 .status-ready {{ color:#08633f; background:#eaf7f0; border-color:#b8dfc9; }}
 .status-needs_review {{ color:#765500; background:#fff6dd; border-color:#ead28e; }}
 .status-blocked {{ color:#8f1d14; background:#fff0ee; border-color:#efb8b2; }}
+.feature-cross-rf {{ color:#3949ab; border-color:#c5cae9; background:#f0f1ff; }}
+.feature-multi-source {{ color:#075e47; border-color:#9fd8c6; background:var(--accent-soft); }}
+.feature-findings,.feature-duplicate-candidate {{ color:#765500; border-color:#ead28e; background:#fff6dd; }}
 .tc-content {{ border-top:1px solid var(--line); padding:16px; }}
 .two-column {{ display:grid; grid-template-columns:1fr 1fr; gap:24px; }}
 ul {{ margin:6px 0 14px; padding-left:20px; }}
 .table-wrap {{ overflow-x:auto; }}
 table {{ width:100%; border-collapse:collapse; background:#fff; }}
-th,td {{ border:1px solid var(--line); padding:10px; text-align:left; vertical-align:top; }}
+th,td {{ border:1px solid var(--line); padding:11px 12px; text-align:left; vertical-align:top; overflow-wrap:anywhere; }}
 th {{ background:#f0f3f2; font-size:13px; }}
 .step-number {{ width:48px; text-align:center; font-weight:700; }}
+.steps th:nth-child(2),.steps td:nth-child(2) {{ width:43%; }}
+.steps th:nth-child(3),.steps td:nth-child(3) {{ width:52%; }}
 .flow-section {{ margin-top:18px; border:1px solid var(--line); border-radius:6px; background:#fbfcfc; padding:14px; }}
 .flow-heading {{ display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:10px; }}
 .flow-heading h3 {{ margin:0; }}
@@ -540,33 +620,47 @@ th {{ background:#f0f3f2; font-size:13px; }}
 .artifact-links a:hover {{ border-color:var(--accent); color:var(--accent); }}
 .technical {{ margin-top:12px; color:var(--muted); font-size:13px; }}
 .technical>summary {{ cursor:pointer; }}
-.question-item,.requirement-block {{ margin-bottom:10px; border:1px solid var(--line); border-radius:6px; background:#fff; padding:16px; }}
+.traceability {{ display:flex; align-items:center; gap:7px; flex-wrap:wrap; margin:12px 0; }}
+.traceability code {{ padding:3px 6px; border-radius:4px; background:#edf2f3; color:var(--ink); }}
+.trace-arrow {{ color:var(--accent); font-weight:800; }}
+.role-badges {{ display:flex; flex-wrap:wrap; gap:6px; margin:8px 0 12px; }}
+.role-badge {{ color:#344650; background:#edf2f3; }}
+.technical-grid {{ display:grid; grid-template-columns:max-content 1fr; gap:5px 12px; }}
+.technical-grid dt {{ color:var(--ink); font-weight:700; }} .technical-grid dd {{ margin:0; overflow-wrap:anywhere; }}
+.question-item,.finding-item,.requirement-block {{ margin-bottom:10px; border:1px solid var(--line); border-radius:8px; background:#fff; padding:16px; box-shadow:0 3px 12px rgba(26,43,52,.04); }}
 .question-item.blocking {{ border-left:4px solid var(--danger); }}
 .question-title {{ display:flex; justify-content:space-between; gap:14px; font-weight:750; }}
+.finding-item {{ border-left:4px solid var(--warning); }}
+.finding-source_conflict,.finding-implementation_divergence {{ border-left-color:var(--danger); }}
+.finding-title {{ display:flex; align-items:center; gap:8px; }}
 .coverage-list {{ list-style:none; padding:0; margin:12px 0 0; }}
 .coverage-list>li {{ display:flex; gap:10px; padding:10px 0; border-top:1px solid #edf0f1; }}
 .coverage-list span {{ display:block; color:var(--muted); }}
 .coverage-marker {{ flex:0 0 22px; color:var(--accent)!important; font-size:18px; font-weight:800; }}
 .needs-answer {{ color:var(--danger); font-weight:700; }}
 [hidden] {{ display:none!important; }}
+button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visible {{ outline:3px solid #5fbf9f; outline-offset:2px; }}
 @media (max-width:720px) {{ .shell {{ width:min(100% - 20px,1180px); }} .filters,.two-column {{ grid-template-columns:1fr; }} .tc-card>summary,.question-title {{ align-items:flex-start; flex-direction:column; }} .badges {{ justify-content:flex-start; }} .flow-section {{ padding:10px; }} .flow-heading {{ align-items:flex-start; flex-direction:column; }} .flow-modal {{ padding:8px; }} .flow-modal-panel {{ max-height:calc(100vh - 16px); }} .flow-modal-canvas {{ padding:10px; }} }}
+@media print {{ header {{ position:static; }} nav,.filter-panel,.group-toggle,.expand-flow,.flow-modal {{ display:none!important; }} body,main {{ background:#fff; }} .tc-card,.tc-group,.requirement-block,.finding-item {{ break-inside:avoid; box-shadow:none; }} .tc-group-body,.tc-card>.tc-content {{ display:block!important; }} a {{ text-decoration:none; }} }}
 </style>
 </head>
 <body>
-<header><div class="shell"><h1>Functional Test Report</h1><p class="subtitle">Casos manuais derivados das fontes explicitamente selecionadas.</p><nav aria-label="Relat&oacute;rio"><a href="#resumo">Resumo</a><a href="#test-cases">Test Cases</a><a href="#perguntas">Perguntas</a><a href="#cobertura">Cobertura</a></nav></div></header>
+<header><div class="shell"><h1>Functional Test Report</h1><p class="subtitle">Casos manuais derivados das fontes explicitamente selecionadas.</p><nav aria-label="Relat&oacute;rio"><a href="#resumo">Resumo</a><a href="#test-cases">Test Cases</a><a href="#findings">Findings</a><a href="#perguntas">Perguntas</a><a href="#cobertura">Cobertura</a></nav></div></header>
 <main class="shell">
 <section id="resumo"><h2>Resumo</h2><div class="metrics">
 <div class="metric"><strong>{len(cases)}</strong><span>Total de TCs</span></div>
 <div class="metric"><strong>{status_counts['READY']}</strong><span>READY</span></div>
 <div class="metric"><strong>{status_counts['NEEDS_REVIEW']}</strong><span>NEEDS REVIEW</span></div>
 <div class="metric"><strong>{status_counts['BLOCKED']}</strong><span>BLOCKED</span></div>
-<div class="metric"><strong>{len(questions)}</strong><span>Perguntas</span></div>
-<div class="metric"><strong>{len(index['requirements'])}</strong><span>Requisitos</span></div>
-<div class="metric"><strong>{len(index['scenarios'])}</strong><span>Cen&aacute;rios</span></div>
+<div class="metric"><strong>{len(set(groups.values()))}</strong><span>RFs/RNs</span></div>
+<div class="metric"><strong>{source_claim_count}</strong><span>Claims</span></div>
 <div class="metric"><strong>{len(coverage_points)}</strong><span>Coverage Points</span></div>
-<div class="metric"><strong>{covered_count}/{len(coverage_points)}</strong><span>Cobertura com destino</span></div>
+<div class="metric"><strong>{source_gap_count}</strong><span>Gaps</span></div>
+<div class="metric"><strong>{len(index.get('findings', []))}</strong><span>Findings</span></div>
+<div class="metric"><strong>{cross_rf_count}</strong><span>Cross-RF</span></div>
 </div>{warning}</section>
-<section id="test-cases"><h2>Test Cases</h2><nav class="rf-navigation" aria-label="Navega&ccedil;&atilde;o por requisito">{rf_navigation}</nav><div class="filters"><label>Buscar<input id="search" type="search" placeholder="T&iacute;tulo, objetivo ou tag"></label><label>Status<select id="status-filter"><option value="">Todos</option><option>READY</option><option>NEEDS_REVIEW</option><option>BLOCKED</option></select></label><label>Prioridade<select id="priority-filter"><option value="">Todas</option><option>CRITICAL</option><option>HIGH</option><option>MEDIUM</option><option>LOW</option></select></label><label>Requisito<select id="rf-filter"><option value="">Todos</option>{rf_options}</select></label><label>Caracter&iacute;stica<select id="feature-filter"><option value="">Todas</option><option value="cross-rf">Cross-RF</option><option value="findings">Com findings</option><option value="questions">Com questions</option><option value="single-step">1 step</option><option value="multi-step">M&uacute;ltiplos steps</option><option value="multi-source">Multi-source</option><option value="duplicate-candidate">Duplicate candidate</option></select></label></div><div id="case-list">{case_html}</div><p id="no-results" hidden>Nenhum Test Case corresponde aos filtros.</p></section>
+<section id="test-cases"><h2>Test Cases</h2><nav class="rf-navigation" aria-label="Navega&ccedil;&atilde;o por requisito">{rf_navigation}</nav><div class="filter-panel"><div class="bulk-controls"><button type="button" id="expand-all">Expandir todos</button><button type="button" id="collapse-all">Recolher todos</button></div><div class="filters"><label>Buscar<input id="search" type="search" placeholder="T&iacute;tulo, objetivo ou tag"></label><label>Status<select id="status-filter"><option value="">Todos</option><option>READY</option><option>NEEDS_REVIEW</option><option>BLOCKED</option></select></label><label>Prioridade<select id="priority-filter"><option value="">Todas</option><option>CRITICAL</option><option>HIGH</option><option>MEDIUM</option><option>LOW</option></select></label><label>Requisito<select id="rf-filter"><option value="">Todos</option>{rf_options}</select></label><label>Caracter&iacute;stica<select id="feature-filter"><option value="">Todas</option><option value="cross-rf">Cross-RF</option><option value="findings">Com findings</option><option value="questions">Com questions</option><option value="single-step">1 step</option><option value="multi-step">M&uacute;ltiplos steps</option><option value="multi-source">Multi-source</option><option value="duplicate-candidate">Duplicate candidate</option></select></label></div></div><div id="case-list">{case_html}</div><p id="no-results" hidden>Nenhum Test Case corresponde aos filtros.</p></section>
+<section id="findings"><h2>Findings</h2>{finding_html or '<p class="empty">Nenhum finding.</p>'}</section>
 <section id="perguntas"><h2>Perguntas</h2>{question_html or '<p class="empty">Nenhuma pergunta pendente.</p>'}</section>
 <section id="cobertura"><h2>Cobertura</h2>{coverage_html}</section>
 </main>
@@ -581,6 +675,8 @@ const search=document.getElementById('search');const statusFilter=document.getEl
 function applyFilters(){{const term=search.value.trim().toLocaleLowerCase();let visible=0;cards.forEach(card=>{{const features=card.dataset.features.split(' ');const show=(!term||card.dataset.search.includes(term))&&(!statusFilter.value||card.dataset.status===statusFilter.value)&&(!priorityFilter.value||card.dataset.priority===priorityFilter.value)&&(!rfFilter.value||card.dataset.rf===rfFilter.value)&&(!featureFilter.value||features.includes(featureFilter.value));card.hidden=!show;if(show)visible+=1;}});groups.forEach(group=>{{group.hidden=![...group.querySelectorAll('.tc-card')].some(card=>!card.hidden);}});noResults.hidden=visible!==0;}}
 [search,statusFilter,priorityFilter,rfFilter,featureFilter].forEach(control=>control.addEventListener(control===search?'input':'change',applyFilters));
 document.querySelectorAll('.group-toggle').forEach(button=>button.addEventListener('click',()=>{{const body=button.closest('.tc-group').querySelector('.tc-group-body');const expanded=button.getAttribute('aria-expanded')==='true';button.setAttribute('aria-expanded',String(!expanded));button.textContent=expanded?'Expandir':'Recolher';body.hidden=expanded;}}));
+function setAll(expanded){{document.querySelectorAll('.tc-group-body').forEach(body=>body.hidden=!expanded);document.querySelectorAll('.group-toggle').forEach(button=>{{button.setAttribute('aria-expanded',String(expanded));button.textContent=expanded?'Recolher':'Expandir';}});cards.forEach(card=>card.open=expanded);}}
+document.getElementById('expand-all').addEventListener('click',()=>setAll(true));document.getElementById('collapse-all').addEventListener('click',()=>setAll(false));
 const flowModal=document.getElementById('flow-modal');const flowCanvas=document.getElementById('flow-modal-canvas');const flowClose=flowModal.querySelector('.modal-close');let flowTrigger=null;
 function closeFlowModal(){{if(flowModal.hidden)return;flowModal.hidden=true;flowCanvas.replaceChildren();document.body.classList.remove('modal-open');if(flowTrigger)flowTrigger.focus();}}
 document.querySelectorAll('.expand-flow').forEach(button=>button.addEventListener('click',()=>{{const source=document.getElementById(button.dataset.flowTarget);const svg=source&&source.querySelector('svg');if(!svg)return;flowTrigger=button;flowCanvas.replaceChildren(svg.cloneNode(true));flowModal.hidden=false;document.body.classList.add('modal-open');flowClose.focus();}}));

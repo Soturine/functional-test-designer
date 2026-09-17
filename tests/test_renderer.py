@@ -124,6 +124,24 @@ class RendererTests(unittest.TestCase):
         self.assertNotIn("jsdelivr", report)
         self.assertNotIn("mermaid.min.js", report)
 
+    def test_professional_offline_features_are_derived_without_semantic_runtime(self) -> None:
+        report = RENDERER.render_report(self.output).read_text(encoding="utf-8")
+        renderer_source = (ROOT / "scripts/render_report.py").read_text(encoding="utf-8")
+
+        self.assertIn('class="coverage-progress"', report)
+        self.assertIn('id="expand-all"', report)
+        self.assertIn('id="collapse-all"', report)
+        self.assertIn('class="role-badges"', report)
+        self.assertIn("Authority", report)
+        self.assertIn('class="traceability"', report)
+        self.assertIn("@media print", report)
+        self.assertIn('aria-controls="rf-body-', report)
+        self.assertIn('id="findings"', report)
+        self.assertNotIn("audit_cross_rf", renderer_source)
+        self.assertNotIn("audit_source_claims", renderer_source)
+        self.assertNotIn('src="http', report)
+        self.assertNotIn('href="http', report)
+
     def test_invalid_flow_uses_local_fallback(self) -> None:
         flow, expandable = RENDERER.render_flow("flowchart TD\n    broken", "flow-broken")
 
