@@ -46,7 +46,7 @@ Classify every selected source in `test-cases.json`:
 - `TECHNICAL_CONTEXT`: selected ADR, API description, or technical documentation.
 - `OTHER_SELECTED`: selected evidence that fits none of the above.
 
-Functional authority defines normative expected behavior. Implementation evidence may improve executable context or reveal divergence, but never silently replaces a normative expected result. Existing Test Cases are artifacts to audit, not automatic truth. Test plans and scripts are coverage evidence. Technical documents are context unless the user explicitly establishes them as authority.
+Functional authority defines normative expected behavior, but it is not the only useful design evidence. Technical context can explain how to reach and observe a behavior. Implementation evidence can make execution concrete and reveal branches or divergence. Existing Test Cases are artifacts to audit for setup, regressions, edge cases, and coverage, not automatic truth. All selected roles may enrich Test Design; only appropriate authority can establish mandatory business behavior.
 
 When selected sources disagree, record a finding with traceability and keep the authoritative oracle. If no functional authority exists and the task audits implementation, label derived behavior as implementation evidence. Never invent messages, statuses, fields, states, side effects, permissions, or recovery behavior. Use only synthetic, non-sensitive test data.
 
@@ -82,9 +82,9 @@ After the initial extraction, make a short second pass over each authorized norm
 
 Every clause has exactly one destination: Coverage Point, Question, explicitly justified Out of Scope/Not Testable, or an appropriate conflict Finding. Every Coverage Point has exactly one disposition: `TEST_CASE`, `QUESTION`, or an explicitly justified `OUT_OF_SCOPE`. `unmapped_normative_clauses` is zero only after this clause-level audit; the existence of any CP for a Requirement proves nothing about its other clauses. Never use `OUT_OF_SCOPE` to hide a gap.
 
-### 4. Evaluate Testability and Questions
+### 4. Evaluate Testability and Candidate Questions
 
-Check actor, starting state, trigger, normative rule, and observable result. A missing oracle becomes a focused Question that asks only for absent information and does not repeat known outcomes. Create a `BLOCKED` case only when useful executable structure remains but the missing decision prevents a correct Pass/Fail result.
+Check actor, starting state, trigger, normative rule, and observable result. Record candidate gaps, but finalize Questions only after Evidence Enrichment searches all pertinent selected sources. A missing oracle becomes a focused Question that asks only for absent information and does not repeat known outcomes. Create a `BLOCKED` case only when useful executable structure remains but the missing decision prevents a correct Pass/Fail result.
 
 ### 5. Apply Test Design Selectively
 
@@ -96,7 +96,17 @@ Use techniques to improve coverage and reduce redundant combinations. Pairwise s
 
 Create atomic candidate scenarios from atomic Coverage Points, then remove only genuine semantic duplicates before materializing TCs. Two candidates are duplicates only when behavior, relevant setup, essential action, expected result, oracle, and required evidence are all the same. Keep them separate when any difference changes an independent Pass/Fail result, including actor, permission, input, boundary, state, transition, error, recovery, retry, finalization, reversal, or cancellation. Assign stable `SCN-001`, `SCN-002`, ... IDs only after deduplication. Do not optimize for a lower TC count.
 
-### 7. Generate Independent Test Cases
+### 7. Enrich Evidence and Synthesize Execution Paths
+
+Read [references/evidence-enrichment.md](references/evidence-enrichment.md) when selected technical context, implementation evidence, or QA assets can contribute execution detail, data, observability, branches, or prior coverage. For every final scenario, consult the compact in-scope evidence map and assemble an internal Evidence Pack before materialization. Do not create a new public artifact or reopen every file per TC.
+
+Keep the normative oracle anchored to functional authority while using genuinely contributing selected evidence for preconditions, concrete local test data, ordered actions, intermediate observations, opportunity analysis, Findings, and minimal Questions. Add those contributing sources to the TC's `source_refs`; never add decorative provenance.
+
+Synthesize a reproducible path from legitimate preconditions through dependent actions to the scenario trigger and observable result. Atomicity does not imply one step. Preserve a legitimate one-step case when one supported action reaches the result; preserve multiple steps when each depends on prior state. Do not inflate steps or invent UI/API details when no selected source supports them.
+
+Evidence Enrichment normally changes execution fields and presentation, never valid normative normalization, clauses, CPs, scenario identity, TC independence, oracle, status, or disposition. Treat such a change as a regression unless it fixes a demonstrated pre-existing defect.
+
+### 8. Generate Independent Test Cases
 
 Assign stable `TC-001`, `TC-002`, ... IDs. Independent scenario means independent TC. Before adding an action as another step, ask: "Can this action be executed and evaluated without the previous steps in this TC?" If yes and it has its own verifiable result, create another TC. Keep multiple steps only when later actions depend on state produced by earlier actions in one sequential flow.
 
@@ -113,7 +123,7 @@ For every step:
 - use `expected_result: null` and `needs_clarification: true` when unsupported;
 - link every clarification-pending step to a Question.
 
-### 8. Write, Validate, and Render
+### 9. Write, Validate, and Render
 
 Finish semantic generation for all TCs in memory before writing. The `json_write` stage performs deterministic serialization only: aggregate JSON, individual JSON, byte/file counts. Do not reopen sources, call external reasoning, or regenerate each TC during this stage. Write final contract artifacts directly; do not create per-run generator scripts or temporary source copies. Read schemas only if a validator failure is unclear.
 
@@ -138,7 +148,7 @@ python scripts/render_report.py <artifact_root>/output
 
 The Markdown renderer reads validated JSON and changes no JSON. The HTML renderer reads each corresponding Markdown Mermaid block and displays that same linear flow. Fix all errors before completion.
 
-### 9. Summarize
+### 10. Summarize
 
 Report selected scope roots, resolved files, files opened outside scope, source rereads, temporary files, requirements, Coverage Points, findings, scenarios, TCs, steps, statuses, Questions, Markdown count, validator result, and HTML result. Files opened outside scope must be zero; any nonzero value is a scope violation.
 
@@ -154,6 +164,9 @@ When diagnostics are explicitly requested, follow [references/diagnostics.md](re
 - Scenario candidates were deduplicated before TC generation.
 - Test design improved coverage without inflating output.
 - Every TC is independently reportable; coherent flows use ordered steps.
+- Each TC is executable at the detail supported by selected evidence; no documented path is collapsed into an abstract action.
+- TC source refs include every source role that actually contributed and no decorative sources.
+- Evidence Enrichment did not silently redefine valid normative coverage or scenario identity.
 - JSON contains neither `subtests` nor `automation_candidate`.
 - JSON validated before Markdown; Markdown existed before HTML.
 - JSON, Markdown, and HTML cards correspond 1:1 by TC ID.

@@ -16,6 +16,7 @@ if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
 from validate_output import validate  # noqa: E402
+from requirement_groups import case_group, requirement_group_map  # noqa: E402
 
 
 def read_json(path: Path) -> dict[str, Any]:
@@ -116,7 +117,12 @@ def extract_mermaid(markdown: str) -> str:
     return match.group(1)
 
 
-def render_case(case: dict[str, Any], json_path: str) -> str:
+def render_case(
+    case: dict[str, Any],
+    json_path: str,
+    requirement_group: str | None = None,
+    related_groups: list[str] | None = None,
+) -> str:
     test_data = [f"- **{item['name']}:** {item['description']}" for item in case["test_data"]]
     steps = ["| # | Action | Expected result | Clarification |", "|---:|---|---|:---:|"]
     for step in case["steps"]:
@@ -143,6 +149,11 @@ def render_case(case: dict[str, Any], json_path: str) -> str:
         f"## JSON Artifact\n`{json_path}`",
         "## Fluxo do Teste\n```mermaid\n" + mermaid_source(case) + "\n```",
     ]
+    if requirement_group:
+        group_lines = f"**Requirement group:** {requirement_group}"
+        if related_groups:
+            group_lines += "  \n**Related requirements:** " + ", ".join(related_groups)
+        sections.insert(2, group_lines)
     return "\n\n".join(sections) + "\n"
 
 
@@ -153,19 +164,24 @@ def render_markdown(output_dir: Path) -> list[Path]:
         raise ValueError("Output validation failed:\n- " + "\n- ".join(errors))
 
     index = read_json(output_dir / "test-cases.json")
+    groups = requirement_group_map(index["requirements"])
+    requirement_order = {
+        requirement["id"]: position for position, requirement in enumerate(index["requirements"])
+    }
     markdown_dir = output_dir / "test-cases-md"
     markdown_dir.mkdir(parents=True, exist_ok=True)
     expected_paths: set[Path] = set()
     rendered: list[Path] = []
     for entry in index["test_cases"]:
         case = read_json(output_dir / entry["file"])
+        group, related, _ = case_group(case, groups, requirement_order)
         destination = (output_dir / entry["markdown_file"]).resolve()
         try:
             destination.relative_to(markdown_dir.resolve())
         except ValueError as exc:
             raise ValueError(f"Markdown path escapes test-cases-md: {entry['markdown_file']}") from exc
         with destination.open("w", encoding="utf-8", newline="\n") as handle:
-            handle.write(render_case(case, entry["file"]))
+            handle.write(render_case(case, entry["file"], group, related))
         expected_paths.add(destination)
         rendered.append(destination)
 

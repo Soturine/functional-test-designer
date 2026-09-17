@@ -19,6 +19,7 @@ if str(SCRIPT_DIR) not in sys.path:
 
 from validate_output import validate  # noqa: E402
 from render_markdown import extract_mermaid, mermaid_source  # noqa: E402
+from requirement_groups import case_group, requirement_group_map  # noqa: E402
 
 
 STATUS_LABELS = {
@@ -204,16 +205,39 @@ def render_flow(source: str, flow_id: str) -> tuple[str, bool]:
     return body + f'<pre class="mermaid-source" hidden>{esc(source)}</pre>', expandable
 
 
-def render_case(case: dict[str, Any], entry: dict[str, Any], mermaid: str) -> str:
+def render_case(
+    case: dict[str, Any],
+    entry: dict[str, Any],
+    mermaid: str,
+    requirement_group: str | None = None,
+    related_groups: list[str] | None = None,
+) -> str:
     status = case["status"]
     priority = case["priority"]
     search_text = " ".join(
-        [case["id"], case["title"], case["objective"], " ".join(case.get("tags", []))]
+        [
+            case["id"],
+            case["title"],
+            case["objective"],
+            " ".join(case.get("tags", [])),
+            requirement_group or "",
+            " ".join(related_groups or []),
+        ]
     ).casefold()
     technical = (
         f'Requisitos: {", ".join(case["requirement_refs"])} | '
         f'Cen&aacute;rios: {", ".join(case["scenario_refs"])} | '
         f'Coverage Points: {", ".join(case["coverage_point_refs"])}'
+    )
+    group_badge = (
+        f'<span class="badge requirement-group">{esc(requirement_group)}</span>'
+        if requirement_group
+        else ""
+    )
+    related_html = (
+        f'    <p class="related-requirements"><strong>Related requirements:</strong> {esc(", ".join(related_groups))}</p>\n'
+        if related_groups
+        else ""
     )
     artifacts = (
         f'<a href="{esc(entry["file"])}">JSON</a>'
@@ -231,11 +255,11 @@ def render_case(case: dict[str, Any], entry: dict[str, Any], mermaid: str) -> st
 <details class="tc-card" data-status="{esc(status)}" data-priority="{esc(priority)}" data-search="{esc(search_text)}">
   <summary>
     <span class="tc-heading"><span class="tc-id">{esc(case['id'])}</span>{esc(case['title'])}</span>
-    <span class="badges"><span class="badge status-{esc(status.lower())}">{STATUS_LABELS[status]}</span><span class="badge priority">{PRIORITY_LABELS[priority]}</span></span>
+    <span class="badges">{group_badge}<span class="badge status-{esc(status.lower())}">{STATUS_LABELS[status]}</span><span class="badge priority">{PRIORITY_LABELS[priority]}</span></span>
   </summary>
   <div class="tc-content">
     <section><h3>Objetivo</h3><p>{esc(case['objective'])}</p></section>
-    <div class="two-column">
+{related_html}    <div class="two-column">
       <section><h3>Pr&eacute;-condi&ccedil;&otilde;es</h3>{render_list(case.get('preconditions', []))}</section>
       <section><h3>Dados</h3>{render_data(case.get('test_data', []))}</section>
     </div>
@@ -333,10 +357,25 @@ def render_report(output_dir: Path, destination: Path | None = None) -> Path:
         if blocking_count or status_counts["BLOCKED"]
         else ""
     )
-    case_html = "".join(
-        render_case(case, entry, mermaid_by_id[case["id"]])
-        for entry, case in zip(index["test_cases"], cases)
-    )
+    groups = requirement_group_map(index["requirements"])
+    requirement_order = {
+        requirement["id"]: position for position, requirement in enumerate(index["requirements"])
+    }
+    grouped_cases: dict[str, list[tuple[tuple[int, str], dict[str, Any], dict[str, Any], list[str]]]] = {}
+    for entry, case in zip(index["test_cases"], cases):
+        group, related, sort_key = case_group(case, groups, requirement_order)
+        grouped_cases.setdefault(group, []).append((sort_key, entry, case, related))
+    case_groups = []
+    for group, members in sorted(grouped_cases.items(), key=lambda item: min(member[0] for member in item[1])):
+        cards = "".join(
+            render_case(case, entry, mermaid_by_id[case["id"]], group, related)
+            for _, entry, case, related in sorted(members, key=lambda member: member[0])
+        )
+        case_groups.append(
+            f'<section class="tc-group" data-requirement-group="{esc(group)}">'
+            f'<h3 class="tc-group-title">{esc(group)}</h3>{cards}</section>'
+        )
+    case_html = "".join(case_groups)
     question_html = "".join(render_question(question) for question in questions)
     coverage_html = render_coverage(
         index["requirements"], coverage_points, entries_by_id, questions_by_id
@@ -373,6 +412,10 @@ h3 {{ margin:0 0 8px; font-size:15px; }}
 .filters {{ display:grid; grid-template-columns:minmax(220px,1fr) 180px 180px; gap:10px; margin-bottom:14px; }}
 input,select {{ width:100%; min-height:40px; border:1px solid #aeb7bc; border-radius:4px; background:#fff; padding:8px 10px; font:inherit; }}
 .tc-card {{ margin-bottom:10px; border:1px solid var(--line); border-radius:6px; background:#fff; }}
+.tc-group {{ margin:18px 0 24px; }}
+.tc-group-title {{ margin:0 0 10px; padding-bottom:7px; border-bottom:2px solid var(--accent); font-size:17px; }}
+.requirement-group {{ color:#075e47; border-color:#9fd8c6; background:#eaf7f2; }}
+.related-requirements {{ color:var(--muted); font-size:13px; }}
 .tc-card>summary {{ display:flex; align-items:center; justify-content:space-between; gap:16px; min-height:58px; padding:12px 16px; cursor:pointer; font-weight:700; }}
 .tc-heading {{ display:flex; gap:10px; align-items:baseline; }}
 .tc-id {{ color:var(--muted); font-size:13px; white-space:nowrap; }}
@@ -446,8 +489,8 @@ th {{ background:#f0f3f2; font-size:13px; }}
   </div>
 </div>
 <script>
-const search=document.getElementById('search');const statusFilter=document.getElementById('status-filter');const priorityFilter=document.getElementById('priority-filter');const cards=[...document.querySelectorAll('.tc-card')];const noResults=document.getElementById('no-results');
-function applyFilters(){{const term=search.value.trim().toLocaleLowerCase();let visible=0;cards.forEach(card=>{{const show=(!term||card.dataset.search.includes(term))&&(!statusFilter.value||card.dataset.status===statusFilter.value)&&(!priorityFilter.value||card.dataset.priority===priorityFilter.value);card.hidden=!show;if(show)visible+=1;}});noResults.hidden=visible!==0;}}
+const search=document.getElementById('search');const statusFilter=document.getElementById('status-filter');const priorityFilter=document.getElementById('priority-filter');const cards=[...document.querySelectorAll('.tc-card')];const groups=[...document.querySelectorAll('.tc-group')];const noResults=document.getElementById('no-results');
+function applyFilters(){{const term=search.value.trim().toLocaleLowerCase();let visible=0;cards.forEach(card=>{{const show=(!term||card.dataset.search.includes(term))&&(!statusFilter.value||card.dataset.status===statusFilter.value)&&(!priorityFilter.value||card.dataset.priority===priorityFilter.value);card.hidden=!show;if(show)visible+=1;}});groups.forEach(group=>{{group.hidden=![...group.querySelectorAll('.tc-card')].some(card=>!card.hidden);}});noResults.hidden=visible!==0;}}
 [search,statusFilter,priorityFilter].forEach(control=>control.addEventListener(control===search?'input':'change',applyFilters));
 const flowModal=document.getElementById('flow-modal');const flowCanvas=document.getElementById('flow-modal-canvas');const flowClose=flowModal.querySelector('.modal-close');let flowTrigger=null;
 function closeFlowModal(){{if(flowModal.hidden)return;flowModal.hidden=true;flowCanvas.replaceChildren();document.body.classList.remove('modal-open');if(flowTrigger)flowTrigger.focus();}}

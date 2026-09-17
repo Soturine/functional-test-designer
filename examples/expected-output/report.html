@@ -29,6 +29,10 @@ h3 { margin:0 0 8px; font-size:15px; }
 .filters { display:grid; grid-template-columns:minmax(220px,1fr) 180px 180px; gap:10px; margin-bottom:14px; }
 input,select { width:100%; min-height:40px; border:1px solid #aeb7bc; border-radius:4px; background:#fff; padding:8px 10px; font:inherit; }
 .tc-card { margin-bottom:10px; border:1px solid var(--line); border-radius:6px; background:#fff; }
+.tc-group { margin:18px 0 24px; }
+.tc-group-title { margin:0 0 10px; padding-bottom:7px; border-bottom:2px solid var(--accent); font-size:17px; }
+.requirement-group { color:#075e47; border-color:#9fd8c6; background:#eaf7f2; }
+.related-requirements { color:var(--muted); font-size:13px; }
 .tc-card>summary { display:flex; align-items:center; justify-content:space-between; gap:16px; min-height:58px; padding:12px 16px; cursor:pointer; font-weight:700; }
 .tc-heading { display:flex; gap:10px; align-items:baseline; }
 .tc-id { color:var(--muted); font-size:13px; white-space:nowrap; }
@@ -91,11 +95,11 @@ th { background:#f0f3f2; font-size:13px; }
 <div class="metric"><strong>24</strong><span>Coverage Points</span></div>
 <div class="metric"><strong>24/24</strong><span>Cobertura com destino</span></div>
 </div><div class="alert"><strong>Aten&ccedil;&atilde;o:</strong> 2 pergunta(s) bloqueante(s) requerem decis&atilde;o.</div></section>
-<section id="test-cases"><h2>Test Cases</h2><div class="filters"><label>Buscar<input id="search" type="search" placeholder="T&iacute;tulo, objetivo ou tag"></label><label>Status<select id="status-filter"><option value="">Todos</option><option>READY</option><option>NEEDS_REVIEW</option><option>BLOCKED</option></select></label><label>Prioridade<select id="priority-filter"><option value="">Todas</option><option>CRITICAL</option><option>HIGH</option><option>MEDIUM</option><option>LOW</option></select></label></div><div id="case-list">
-<details class="tc-card" data-status="READY" data-priority="HIGH" data-search="tc-001 create a draft order confirm that an authorized customer can create an order with a visible reference in draft state. order creation happy-path">
+<section id="test-cases"><h2>Test Cases</h2><div class="filters"><label>Buscar<input id="search" type="search" placeholder="T&iacute;tulo, objetivo ou tag"></label><label>Status<select id="status-filter"><option value="">Todos</option><option>READY</option><option>NEEDS_REVIEW</option><option>BLOCKED</option></select></label><label>Prioridade<select id="priority-filter"><option value="">Todas</option><option>CRITICAL</option><option>HIGH</option><option>MEDIUM</option><option>LOW</option></select></label></div><div id="case-list"><section class="tc-group" data-requirement-group="REQ-001"><h3 class="tc-group-title">REQ-001</h3>
+<details class="tc-card" data-status="READY" data-priority="HIGH" data-search="tc-001 create a draft order confirm that an authorized customer can create an order with a visible reference in draft state. order creation happy-path req-001 ">
   <summary>
     <span class="tc-heading"><span class="tc-id">TC-001</span>Create a draft order</span>
-    <span class="badges"><span class="badge status-ready">READY</span><span class="badge priority">Alta</span></span>
+    <span class="badges"><span class="badge requirement-group">REQ-001</span><span class="badge status-ready">READY</span><span class="badge priority">Alta</span></span>
   </summary>
   <div class="tc-content">
     <section><h3>Objetivo</h3><p>Confirm that an authorized customer can create an order with a visible reference in DRAFT state.</p></section>
@@ -125,11 +129,11 @@ th { background:#f0f3f2; font-size:13px; }
     <section><h3>Artefatos</h3><div class="artifact-links"><a href="test-cases/TC-001.json">JSON</a><a href="test-cases-md/TC-001.md">Markdown</a></div></section>
     <details class="technical"><summary>Detalhes t&eacute;cnicos</summary><p>Requisitos: REQ-001 | Cen&aacute;rios: SCN-001 | Coverage Points: CP-001, CP-002, CP-003</p></details>
   </div>
-</details>
-<details class="tc-card" data-status="READY" data-priority="MEDIUM" data-search="tc-002 accept the minimum quantity confirm that the documented minimum quantity is accepted. order quantity boundary">
+</details></section><section class="tc-group" data-requirement-group="REQ-002"><h3 class="tc-group-title">REQ-002</h3>
+<details class="tc-card" data-status="READY" data-priority="MEDIUM" data-search="tc-002 accept the minimum quantity confirm that the documented minimum quantity is accepted. order quantity boundary req-002 ">
   <summary>
     <span class="tc-heading"><span class="tc-id">TC-002</span>Accept the minimum quantity</span>
-    <span class="badges"><span class="badge status-ready">READY</span><span class="badge priority">M&eacute;dia</span></span>
+    <span class="badges"><span class="badge requirement-group">REQ-002</span><span class="badge status-ready">READY</span><span class="badge priority">M&eacute;dia</span></span>
   </summary>
   <div class="tc-content">
     <section><h3>Objetivo</h3><p>Confirm that the documented minimum quantity is accepted.</p></section>
@@ -158,10 +162,10 @@ th { background:#f0f3f2; font-size:13px; }
     <details class="technical"><summary>Detalhes t&eacute;cnicos</summary><p>Requisitos: REQ-002 | Cen&aacute;rios: SCN-002 | Coverage Points: CP-004</p></details>
   </div>
 </details>
-<details class="tc-card" data-status="READY" data-priority="MEDIUM" data-search="tc-003 accept the maximum quantity confirm that the documented maximum quantity is accepted. order quantity boundary">
+<details class="tc-card" data-status="READY" data-priority="MEDIUM" data-search="tc-003 accept the maximum quantity confirm that the documented maximum quantity is accepted. order quantity boundary req-002 ">
   <summary>
     <span class="tc-heading"><span class="tc-id">TC-003</span>Accept the maximum quantity</span>
-    <span class="badges"><span class="badge status-ready">READY</span><span class="badge priority">M&eacute;dia</span></span>
+    <span class="badges"><span class="badge requirement-group">REQ-002</span><span class="badge status-ready">READY</span><span class="badge priority">M&eacute;dia</span></span>
   </summary>
   <div class="tc-content">
     <section><h3>Objetivo</h3><p>Confirm that the documented maximum quantity is accepted.</p></section>
@@ -190,10 +194,10 @@ th { background:#f0f3f2; font-size:13px; }
     <details class="technical"><summary>Detalhes t&eacute;cnicos</summary><p>Requisitos: REQ-002 | Cen&aacute;rios: SCN-003 | Coverage Points: CP-005</p></details>
   </div>
 </details>
-<details class="tc-card" data-status="READY" data-priority="MEDIUM" data-search="tc-004 reject a quantity below the minimum confirm that a quantity immediately below the permitted range is rejected without changing the existing quantity. order quantity boundary negative">
+<details class="tc-card" data-status="READY" data-priority="MEDIUM" data-search="tc-004 reject a quantity below the minimum confirm that a quantity immediately below the permitted range is rejected without changing the existing quantity. order quantity boundary negative req-002 ">
   <summary>
     <span class="tc-heading"><span class="tc-id">TC-004</span>Reject a quantity below the minimum</span>
-    <span class="badges"><span class="badge status-ready">READY</span><span class="badge priority">M&eacute;dia</span></span>
+    <span class="badges"><span class="badge requirement-group">REQ-002</span><span class="badge status-ready">READY</span><span class="badge priority">M&eacute;dia</span></span>
   </summary>
   <div class="tc-content">
     <section><h3>Objetivo</h3><p>Confirm that a quantity immediately below the permitted range is rejected without changing the existing quantity.</p></section>
@@ -222,10 +226,10 @@ th { background:#f0f3f2; font-size:13px; }
     <details class="technical"><summary>Detalhes t&eacute;cnicos</summary><p>Requisitos: REQ-002 | Cen&aacute;rios: SCN-004 | Coverage Points: CP-006, CP-007</p></details>
   </div>
 </details>
-<details class="tc-card" data-status="READY" data-priority="MEDIUM" data-search="tc-005 reject a quantity above the maximum confirm that a quantity immediately above the permitted range is rejected without changing the existing quantity. order quantity boundary negative">
+<details class="tc-card" data-status="READY" data-priority="MEDIUM" data-search="tc-005 reject a quantity above the maximum confirm that a quantity immediately above the permitted range is rejected without changing the existing quantity. order quantity boundary negative req-002 ">
   <summary>
     <span class="tc-heading"><span class="tc-id">TC-005</span>Reject a quantity above the maximum</span>
-    <span class="badges"><span class="badge status-ready">READY</span><span class="badge priority">M&eacute;dia</span></span>
+    <span class="badges"><span class="badge requirement-group">REQ-002</span><span class="badge status-ready">READY</span><span class="badge priority">M&eacute;dia</span></span>
   </summary>
   <div class="tc-content">
     <section><h3>Objetivo</h3><p>Confirm that a quantity immediately above the permitted range is rejected without changing the existing quantity.</p></section>
@@ -253,11 +257,11 @@ th { background:#f0f3f2; font-size:13px; }
     <section><h3>Artefatos</h3><div class="artifact-links"><a href="test-cases/TC-005.json">JSON</a><a href="test-cases-md/TC-005.md">Markdown</a></div></section>
     <details class="technical"><summary>Detalhes t&eacute;cnicos</summary><p>Requisitos: REQ-002 | Cen&aacute;rios: SCN-005 | Coverage Points: CP-008, CP-009</p></details>
   </div>
-</details>
-<details class="tc-card" data-status="READY" data-priority="HIGH" data-search="tc-006 submit a draft order confirm the valid transition from draft to submitted. order submit state-transition">
+</details></section><section class="tc-group" data-requirement-group="REQ-003"><h3 class="tc-group-title">REQ-003</h3>
+<details class="tc-card" data-status="READY" data-priority="HIGH" data-search="tc-006 submit a draft order confirm the valid transition from draft to submitted. order submit state-transition req-003 ">
   <summary>
     <span class="tc-heading"><span class="tc-id">TC-006</span>Submit a draft order</span>
-    <span class="badges"><span class="badge status-ready">READY</span><span class="badge priority">Alta</span></span>
+    <span class="badges"><span class="badge requirement-group">REQ-003</span><span class="badge status-ready">READY</span><span class="badge priority">Alta</span></span>
   </summary>
   <div class="tc-content">
     <section><h3>Objetivo</h3><p>Confirm the valid transition from DRAFT to SUBMITTED.</p></section>
@@ -286,10 +290,10 @@ th { background:#f0f3f2; font-size:13px; }
     <details class="technical"><summary>Detalhes t&eacute;cnicos</summary><p>Requisitos: REQ-003 | Cen&aacute;rios: SCN-006 | Coverage Points: CP-010, CP-011</p></details>
   </div>
 </details>
-<details class="tc-card" data-status="READY" data-priority="MEDIUM" data-search="tc-007 reject edits to a submitted order confirm that an edit attempt in submitted state is rejected without changing order data. order edit state-transition negative">
+<details class="tc-card" data-status="READY" data-priority="MEDIUM" data-search="tc-007 reject edits to a submitted order confirm that an edit attempt in submitted state is rejected without changing order data. order edit state-transition negative req-003 ">
   <summary>
     <span class="tc-heading"><span class="tc-id">TC-007</span>Reject edits to a submitted order</span>
-    <span class="badges"><span class="badge status-ready">READY</span><span class="badge priority">M&eacute;dia</span></span>
+    <span class="badges"><span class="badge requirement-group">REQ-003</span><span class="badge status-ready">READY</span><span class="badge priority">M&eacute;dia</span></span>
   </summary>
   <div class="tc-content">
     <section><h3>Objetivo</h3><p>Confirm that an edit attempt in SUBMITTED state is rejected without changing order data.</p></section>
@@ -317,11 +321,11 @@ th { background:#f0f3f2; font-size:13px; }
     <section><h3>Artefatos</h3><div class="artifact-links"><a href="test-cases/TC-007.json">JSON</a><a href="test-cases-md/TC-007.md">Markdown</a></div></section>
     <details class="technical"><summary>Detalhes t&eacute;cnicos</summary><p>Requisitos: REQ-003 | Cen&aacute;rios: SCN-007 | Coverage Points: CP-012, CP-013</p></details>
   </div>
-</details>
-<details class="tc-card" data-status="READY" data-priority="CRITICAL" data-search="tc-008 deny order creation without permission confirm that order creation is denied without order_edit and creates no order data. order permission creation negative">
+</details></section><section class="tc-group" data-requirement-group="REQ-004"><h3 class="tc-group-title">REQ-004</h3>
+<details class="tc-card" data-status="READY" data-priority="CRITICAL" data-search="tc-008 deny order creation without permission confirm that order creation is denied without order_edit and creates no order data. order permission creation negative req-004 ">
   <summary>
     <span class="tc-heading"><span class="tc-id">TC-008</span>Deny order creation without permission</span>
-    <span class="badges"><span class="badge status-ready">READY</span><span class="badge priority">Cr&iacute;tica</span></span>
+    <span class="badges"><span class="badge requirement-group">REQ-004</span><span class="badge status-ready">READY</span><span class="badge priority">Cr&iacute;tica</span></span>
   </summary>
   <div class="tc-content">
     <section><h3>Objetivo</h3><p>Confirm that order creation is denied without ORDER_EDIT and creates no order data.</p></section>
@@ -350,10 +354,10 @@ th { background:#f0f3f2; font-size:13px; }
     <details class="technical"><summary>Detalhes t&eacute;cnicos</summary><p>Requisitos: REQ-004 | Cen&aacute;rios: SCN-008 | Coverage Points: CP-014, CP-015</p></details>
   </div>
 </details>
-<details class="tc-card" data-status="READY" data-priority="CRITICAL" data-search="tc-009 deny order editing without permission confirm that order editing is denied without order_edit and leaves order data unchanged. order permission edit negative">
+<details class="tc-card" data-status="READY" data-priority="CRITICAL" data-search="tc-009 deny order editing without permission confirm that order editing is denied without order_edit and leaves order data unchanged. order permission edit negative req-004 ">
   <summary>
     <span class="tc-heading"><span class="tc-id">TC-009</span>Deny order editing without permission</span>
-    <span class="badges"><span class="badge status-ready">READY</span><span class="badge priority">Cr&iacute;tica</span></span>
+    <span class="badges"><span class="badge requirement-group">REQ-004</span><span class="badge status-ready">READY</span><span class="badge priority">Cr&iacute;tica</span></span>
   </summary>
   <div class="tc-content">
     <section><h3>Objetivo</h3><p>Confirm that order editing is denied without ORDER_EDIT and leaves order data unchanged.</p></section>
@@ -381,11 +385,11 @@ th { background:#f0f3f2; font-size:13px; }
     <section><h3>Artefatos</h3><div class="artifact-links"><a href="test-cases/TC-009.json">JSON</a><a href="test-cases-md/TC-009.md">Markdown</a></div></section>
     <details class="technical"><summary>Detalhes t&eacute;cnicos</summary><p>Requisitos: REQ-004 | Cen&aacute;rios: SCN-009 | Coverage Points: CP-016, CP-017</p></details>
   </div>
-</details>
-<details class="tc-card" data-status="NEEDS_REVIEW" data-priority="HIGH" data-search="tc-010 handle billing unavailability during submission confirm the defined failure and retry behavior when billing is unavailable while exposing the undefined post-failure state. order billing recovery clarification-required">
+</details></section><section class="tc-group" data-requirement-group="REQ-006"><h3 class="tc-group-title">REQ-006</h3>
+<details class="tc-card" data-status="NEEDS_REVIEW" data-priority="HIGH" data-search="tc-010 handle billing unavailability during submission confirm the defined failure and retry behavior when billing is unavailable while exposing the undefined post-failure state. order billing recovery clarification-required req-006 ">
   <summary>
     <span class="tc-heading"><span class="tc-id">TC-010</span>Handle billing unavailability during submission</span>
-    <span class="badges"><span class="badge status-needs_review">NEEDS REVIEW</span><span class="badge priority">Alta</span></span>
+    <span class="badges"><span class="badge requirement-group">REQ-006</span><span class="badge status-needs_review">NEEDS REVIEW</span><span class="badge priority">Alta</span></span>
   </summary>
   <div class="tc-content">
     <section><h3>Objetivo</h3><p>Confirm the defined failure and retry behavior when billing is unavailable while exposing the undefined post-failure state.</p></section>
@@ -413,26 +417,30 @@ th { background:#f0f3f2; font-size:13px; }
     <section><h3>Artefatos</h3><div class="artifact-links"><a href="test-cases/TC-010.json">JSON</a><a href="test-cases-md/TC-010.md">Markdown</a></div></section>
     <details class="technical"><summary>Detalhes t&eacute;cnicos</summary><p>Requisitos: REQ-006 | Cen&aacute;rios: SCN-010 | Coverage Points: CP-019, CP-020</p></details>
   </div>
-</details>
-<details class="tc-card" data-status="READY" data-priority="HIGH" data-search="tc-011 finalize a submitted order confirm that finalization reaches finalized state and provides the required visible confirmation. order finalize state-transition implementation-gap">
+</details></section><section class="tc-group" data-requirement-group="REQ-008"><h3 class="tc-group-title">REQ-008</h3>
+<details class="tc-card" data-status="READY" data-priority="HIGH" data-search="tc-011 finalize a submitted order confirm that finalization reaches finalized state and provides the required visible confirmation. order finalize state-transition implementation-gap req-008 ">
   <summary>
     <span class="tc-heading"><span class="tc-id">TC-011</span>Finalize a submitted order</span>
-    <span class="badges"><span class="badge status-ready">READY</span><span class="badge priority">Alta</span></span>
+    <span class="badges"><span class="badge requirement-group">REQ-008</span><span class="badge status-ready">READY</span><span class="badge priority">Alta</span></span>
   </summary>
   <div class="tc-content">
     <section><h3>Objetivo</h3><p>Confirm that finalization reaches FINALIZED state and provides the required visible confirmation.</p></section>
     <div class="two-column">
       <section><h3>Pr&eacute;-condi&ccedil;&otilde;es</h3><ul><li>A synthetic order exists in SUBMITTED state.</li></ul></section>
-      <section><h3>Dados</h3><ul><li><strong>submitted order</strong>: A synthetic order currently shown in SUBMITTED state.</li></ul></section>
+      <section><h3>Dados</h3><ul><li><strong>order reference</strong>: &lt;existing synthetic order reference for an order in SUBMITTED state&gt;</li></ul></section>
     </div>
-    <section><h3>Passos</h3><div class="table-wrap"><table class="steps"><thead><tr><th scope="col">#</th><th scope="col">A&ccedil;&atilde;o</th><th scope="col">Resultado esperado</th></tr></thead><tbody><tr><td class="step-number">1</td><td>Finalize the SUBMITTED order.</td><td>The order state changes to FINALIZED and a visible confirmation is shown.</td></tr></tbody></table></div></section>
-    <section class="flow-section"><div class="flow-heading"><h3>Fluxo do Teste</h3><button type="button" class="expand-flow" data-flow-target="flow-TC-011" aria-label="Ampliar fluxo do TC-011">Ampliar fluxo</button></div><div class="mermaid-container" id="flow-TC-011"><svg class="mermaid-svg" viewBox="0 0 720 412" role="img" aria-label="Fluxo linear do teste" xmlns="http://www.w3.org/2000/svg"><defs><marker id="arrow-flow-TC-011" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#64748b" /></marker></defs><line x1="360" y1="74" x2="360" y2="101" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow-flow-TC-011)" /><line x1="360" y1="180" x2="360" y2="207" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow-flow-TC-011)" /><line x1="360" y1="304" x2="360" y2="331" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow-flow-TC-011)" /><g class="mermaid-node mermaid-terminal" data-node-id="S"><rect x="280" y="24" width="160" height="50" rx="25" fill="#f8fafc" stroke="#475569" stroke-width="1.5" /><text x="360" y="49" text-anchor="middle" fill="#0f172a" font-family="system-ui, sans-serif" font-size="14"><tspan x="360" dy="0">Start</tspan></text></g><g class="mermaid-node mermaid-action" data-node-id="A1"><rect x="60" y="108" width="600" height="72" rx="8" fill="#eff6ff" stroke="#2563eb" stroke-width="1.5" /><text x="360" y="134" text-anchor="middle" fill="#0f172a" font-family="system-ui, sans-serif" font-size="14"><tspan x="360" dy="0" class="node-label-title">1 - Action</tspan><tspan x="360" dy="20">Finalize the SUBMITTED order.</tspan></text></g><g class="mermaid-node mermaid-expected" data-node-id="R1"><rect x="60" y="214" width="600" height="90" rx="8" fill="#f0fdf4" stroke="#16a34a" stroke-width="1.5" /><text x="360" y="239" text-anchor="middle" fill="#14532d" font-family="system-ui, sans-serif" font-size="14"><tspan x="360" dy="0" class="node-label-title">Expected result</tspan><tspan x="360" dy="20">The order state changes to FINALIZED and a visible</tspan><tspan x="360" dy="20">confirmation is shown.</tspan></text></g><g class="mermaid-node mermaid-terminal" data-node-id="F"><rect x="280" y="338" width="160" height="50" rx="25" fill="#f8fafc" stroke="#475569" stroke-width="1.5" /><text x="360" y="363" text-anchor="middle" fill="#0f172a" font-family="system-ui, sans-serif" font-size="14"><tspan x="360" dy="0">End</tspan></text></g></svg></div><pre class="mermaid-source" hidden>flowchart TD
+    <section><h3>Passos</h3><div class="table-wrap"><table class="steps"><thead><tr><th scope="col">#</th><th scope="col">A&ccedil;&atilde;o</th><th scope="col">Resultado esperado</th></tr></thead><tbody><tr><td class="step-number">1</td><td>From Orders, open Search and locate the order using its test reference.</td><td>A matching order row is displayed.</td></tr><tr><td class="step-number">2</td><td>Open the matching order and review its items and current state.</td><td>The order details are displayed with the order in SUBMITTED state.</td></tr><tr><td class="step-number">3</td><td>Select Finalize.</td><td>The order state changes to FINALIZED and a visible confirmation is shown.</td></tr></tbody></table></div></section>
+    <section class="flow-section"><div class="flow-heading"><h3>Fluxo do Teste</h3><button type="button" class="expand-flow" data-flow-target="flow-TC-011" aria-label="Ampliar fluxo do TC-011">Ampliar fluxo</button></div><div class="mermaid-container" id="flow-TC-011"><svg class="mermaid-svg" viewBox="0 0 720 890" role="img" aria-label="Fluxo linear do teste" xmlns="http://www.w3.org/2000/svg"><defs><marker id="arrow-flow-TC-011" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#64748b" /></marker></defs><line x1="360" y1="74" x2="360" y2="101" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow-flow-TC-011)" /><line x1="360" y1="198" x2="360" y2="225" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow-flow-TC-011)" /><line x1="360" y1="304" x2="360" y2="331" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow-flow-TC-011)" /><line x1="360" y1="428" x2="360" y2="455" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow-flow-TC-011)" /><line x1="360" y1="552" x2="360" y2="579" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow-flow-TC-011)" /><line x1="360" y1="658" x2="360" y2="685" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow-flow-TC-011)" /><line x1="360" y1="782" x2="360" y2="809" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow-flow-TC-011)" /><g class="mermaid-node mermaid-terminal" data-node-id="S"><rect x="280" y="24" width="160" height="50" rx="25" fill="#f8fafc" stroke="#475569" stroke-width="1.5" /><text x="360" y="49" text-anchor="middle" fill="#0f172a" font-family="system-ui, sans-serif" font-size="14"><tspan x="360" dy="0">Start</tspan></text></g><g class="mermaid-node mermaid-action" data-node-id="A1"><rect x="60" y="108" width="600" height="90" rx="8" fill="#eff6ff" stroke="#2563eb" stroke-width="1.5" /><text x="360" y="133" text-anchor="middle" fill="#0f172a" font-family="system-ui, sans-serif" font-size="14"><tspan x="360" dy="0" class="node-label-title">1 - Action</tspan><tspan x="360" dy="20">From Orders, open Search and locate the order using its test</tspan><tspan x="360" dy="20">reference.</tspan></text></g><g class="mermaid-node mermaid-expected" data-node-id="R1"><rect x="60" y="232" width="600" height="72" rx="8" fill="#f0fdf4" stroke="#16a34a" stroke-width="1.5" /><text x="360" y="258" text-anchor="middle" fill="#14532d" font-family="system-ui, sans-serif" font-size="14"><tspan x="360" dy="0" class="node-label-title">Expected result</tspan><tspan x="360" dy="20">A matching order row is displayed.</tspan></text></g><g class="mermaid-node mermaid-action" data-node-id="A2"><rect x="60" y="338" width="600" height="90" rx="8" fill="#eff6ff" stroke="#2563eb" stroke-width="1.5" /><text x="360" y="363" text-anchor="middle" fill="#0f172a" font-family="system-ui, sans-serif" font-size="14"><tspan x="360" dy="0" class="node-label-title">2 - Action</tspan><tspan x="360" dy="20">Open the matching order and review its items and current</tspan><tspan x="360" dy="20">state.</tspan></text></g><g class="mermaid-node mermaid-expected" data-node-id="R2"><rect x="60" y="462" width="600" height="90" rx="8" fill="#f0fdf4" stroke="#16a34a" stroke-width="1.5" /><text x="360" y="487" text-anchor="middle" fill="#14532d" font-family="system-ui, sans-serif" font-size="14"><tspan x="360" dy="0" class="node-label-title">Expected result</tspan><tspan x="360" dy="20">The order details are displayed with the order in SUBMITTED</tspan><tspan x="360" dy="20">state.</tspan></text></g><g class="mermaid-node mermaid-action" data-node-id="A3"><rect x="60" y="586" width="600" height="72" rx="8" fill="#eff6ff" stroke="#2563eb" stroke-width="1.5" /><text x="360" y="612" text-anchor="middle" fill="#0f172a" font-family="system-ui, sans-serif" font-size="14"><tspan x="360" dy="0" class="node-label-title">3 - Action</tspan><tspan x="360" dy="20">Select Finalize.</tspan></text></g><g class="mermaid-node mermaid-expected" data-node-id="R3"><rect x="60" y="692" width="600" height="90" rx="8" fill="#f0fdf4" stroke="#16a34a" stroke-width="1.5" /><text x="360" y="717" text-anchor="middle" fill="#14532d" font-family="system-ui, sans-serif" font-size="14"><tspan x="360" dy="0" class="node-label-title">Expected result</tspan><tspan x="360" dy="20">The order state changes to FINALIZED and a visible</tspan><tspan x="360" dy="20">confirmation is shown.</tspan></text></g><g class="mermaid-node mermaid-terminal" data-node-id="F"><rect x="280" y="816" width="160" height="50" rx="25" fill="#f8fafc" stroke="#475569" stroke-width="1.5" /><text x="360" y="841" text-anchor="middle" fill="#0f172a" font-family="system-ui, sans-serif" font-size="14"><tspan x="360" dy="0">End</tspan></text></g></svg></div><pre class="mermaid-source" hidden>flowchart TD
     S([Start])
-    A1[&quot;1 - Action&lt;br/&gt;Finalize the SUBMITTED order.&quot;]
-    R1[&quot;Expected result&lt;br/&gt;The order state changes to FINALIZED and a visible&lt;br/&gt;confirmation is shown.&quot;]
+    A1[&quot;1 - Action&lt;br/&gt;From Orders, open Search and locate the order using its test&lt;br/&gt;reference.&quot;]
+    R1[&quot;Expected result&lt;br/&gt;A matching order row is displayed.&quot;]
+    A2[&quot;2 - Action&lt;br/&gt;Open the matching order and review its items and current&lt;br/&gt;state.&quot;]
+    R2[&quot;Expected result&lt;br/&gt;The order details are displayed with the order in SUBMITTED&lt;br/&gt;state.&quot;]
+    A3[&quot;3 - Action&lt;br/&gt;Select Finalize.&quot;]
+    R3[&quot;Expected result&lt;br/&gt;The order state changes to FINALIZED and a visible&lt;br/&gt;confirmation is shown.&quot;]
     F([End])
 
-    S --&gt; A1 --&gt; R1 --&gt; F
+    S --&gt; A1 --&gt; R1 --&gt; A2 --&gt; R2 --&gt; A3 --&gt; R3 --&gt; F
 
     classDef startEnd fill:#f8fafc,stroke:#475569,stroke-width:1.5px,color:#0f172a;
     classDef action fill:#eff6ff,stroke:#2563eb,stroke-width:1.5px,color:#0f172a;
@@ -440,12 +448,12 @@ th { background:#f0f3f2; font-size:13px; }
     classDef clarification fill:#fff7ed,stroke:#ea580c,stroke-width:1.5px,color:#7c2d12,stroke-dasharray:4 3;
 
     class S,F startEnd;
-    class A1 action;
-    class R1 expected;</pre></section>
+    class A1,A2,A3 action;
+    class R1,R2,R3 expected;</pre></section>
     <section><h3>Artefatos</h3><div class="artifact-links"><a href="test-cases/TC-011.json">JSON</a><a href="test-cases-md/TC-011.md">Markdown</a></div></section>
     <details class="technical"><summary>Detalhes t&eacute;cnicos</summary><p>Requisitos: REQ-008 | Cen&aacute;rios: SCN-011 | Coverage Points: CP-023, CP-024</p></details>
   </div>
-</details></div><p id="no-results" hidden>Nenhum Test Case corresponde aos filtros.</p></section>
+</details></section></div><p id="no-results" hidden>Nenhum Test Case corresponde aos filtros.</p></section>
 <section id="perguntas"><h2>Perguntas</h2>
 <article class="question-item blocking">
   <div class="question-title"><span>What observable result and final order state confirm a successful cancellation before invoicing?</span><span class="badge">Bloqueante: Sim</span></div>
@@ -474,8 +482,8 @@ th { background:#f0f3f2; font-size:13px; }
   </div>
 </div>
 <script>
-const search=document.getElementById('search');const statusFilter=document.getElementById('status-filter');const priorityFilter=document.getElementById('priority-filter');const cards=[...document.querySelectorAll('.tc-card')];const noResults=document.getElementById('no-results');
-function applyFilters(){const term=search.value.trim().toLocaleLowerCase();let visible=0;cards.forEach(card=>{const show=(!term||card.dataset.search.includes(term))&&(!statusFilter.value||card.dataset.status===statusFilter.value)&&(!priorityFilter.value||card.dataset.priority===priorityFilter.value);card.hidden=!show;if(show)visible+=1;});noResults.hidden=visible!==0;}
+const search=document.getElementById('search');const statusFilter=document.getElementById('status-filter');const priorityFilter=document.getElementById('priority-filter');const cards=[...document.querySelectorAll('.tc-card')];const groups=[...document.querySelectorAll('.tc-group')];const noResults=document.getElementById('no-results');
+function applyFilters(){const term=search.value.trim().toLocaleLowerCase();let visible=0;cards.forEach(card=>{const show=(!term||card.dataset.search.includes(term))&&(!statusFilter.value||card.dataset.status===statusFilter.value)&&(!priorityFilter.value||card.dataset.priority===priorityFilter.value);card.hidden=!show;if(show)visible+=1;});groups.forEach(group=>{group.hidden=![...group.querySelectorAll('.tc-card')].some(card=>!card.hidden);});noResults.hidden=visible!==0;}
 [search,statusFilter,priorityFilter].forEach(control=>control.addEventListener(control===search?'input':'change',applyFilters));
 const flowModal=document.getElementById('flow-modal');const flowCanvas=document.getElementById('flow-modal-canvas');const flowClose=flowModal.querySelector('.modal-close');let flowTrigger=null;
 function closeFlowModal(){if(flowModal.hidden)return;flowModal.hidden=true;flowCanvas.replaceChildren();document.body.classList.remove('modal-open');if(flowTrigger)flowTrigger.focus();}

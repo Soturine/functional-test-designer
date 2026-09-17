@@ -67,8 +67,8 @@ class ValidatorTests(unittest.TestCase):
 
         self.assertEqual("COVERAGE_GAP", finding["type"])
         self.assertEqual(["CP-023", "CP-024"], case["coverage_point_refs"])
-        self.assertIn("FINALIZED", case["steps"][0]["expected_result"])
-        self.assertIn("visible confirmation", case["steps"][0]["expected_result"])
+        self.assertIn("FINALIZED", case["steps"][-1]["expected_result"])
+        self.assertIn("visible confirmation", case["steps"][-1]["expected_result"])
 
     def test_test_data_is_local_to_each_case(self) -> None:
         index = self.read("test-cases.json")

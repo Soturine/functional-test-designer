@@ -3,6 +3,7 @@
   "generated_at": "2026-09-16T12:00:00Z",
   "sources": [
     {"path": "examples/requirements.md", "role": "FUNCTIONAL_AUTHORITY"},
+    {"path": "examples/selected-source/user-guide.md", "role": "TECHNICAL_CONTEXT"},
     {"path": "examples/selected-source/order_service.py", "role": "IMPLEMENTATION_EVIDENCE"}
   ],
   "requirements": [

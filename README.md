@@ -8,6 +8,8 @@ Transformar requisitos, documentação, código selecionado e artefatos de QA em
 
 A skill foi feita para ser simples de usar: o usuário informa o que quer analisar e quais fontes entram no escopo; a skill cuida do restante.
 
+Autoridade funcional define o comportamento obrigatório. Outras evidências explicitamente selecionadas podem enriquecer caminhos de execução, dados, observabilidade e desenho de cenários sem se tornarem verdade normativa. Um TC pode conter vários steps ordenados quando um único cenário independente exige uma sequência para alcançar o resultado.
+
 Cada cenário com execução e Pass/Fail independentes gera seu próprio TC. Vários steps pertencem ao mesmo TC somente quando formam um fluxo sequencial e os passos posteriores dependem do estado produzido pelos anteriores.
 
 ## Como funciona

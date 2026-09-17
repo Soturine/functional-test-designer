@@ -70,6 +70,8 @@ Source roles are `FUNCTIONAL_AUTHORITY`, `IMPLEMENTATION_EVIDENCE`, `TEST_ASSET`
 
 Functional authority owns normative expected results. Other selected sources can add evidence and execution context. They cannot silently change the oracle.
 
+TC `source_refs` list every selected source that materially contributed to its oracle, preconditions, test data, steps, observability, or relevant branch analysis, and omit sources that did not contribute. Execution enrichment may add operational intermediate expected results supported by those refs; it does not create new normative behavior.
+
 ## Coverage Points
 
 Each Coverage Point represents one independently meaningful behavior and has one disposition:
@@ -115,11 +117,15 @@ Use `READY`, `NEEDS_REVIEW`, or `BLOCKED` for status and `CRITICAL`, `HIGH`, `ME
 
 `## Fluxo do Teste` is the final section. Its final fenced `mermaid` block is a linear action-to-expected-result flow in step order. It does not invent branches or results. A missing result is labeled as requiring clarification.
 
+Markdown derives a `Requirement group` label from an original `RF...` identifier in requirement source refs, falling back to `REQ-XXX`. It does not add that label to JSON.
+
 ## HTML
 
 `report.html` is offline and has Summary, Test Cases, Questions, and Coverage navigation. Each TC card shows objective, preconditions, test data, steps, the visual flow extracted from that TC's Markdown, links to the exact JSON and Markdown artifacts, and technical traceability. The renderer converts the verified Mermaid source into deterministic inline SVG; it does not bundle or claim to use Mermaid.js. It loads no CDN and shows no raw JSON by default.
 
 The flow section follows the steps, remains locally scrollable on narrow screens, and offers an accessible `Ampliar fluxo` modal that closes by button, overlay, or `Esc`. A local rendering failure leaves the steps and Markdown link available.
+
+The Test Cases section groups cards by the same derived functional requirement label. A multi-requirement TC appears once under the first normative requirement in source order and lists the other labels as related. A case explicitly tagged `e2e`, `end-to-end`, or `cross-rf` may appear once under `Cross-RF / End-to-End`. Grouping never changes JSON IDs, paths, counts, or links.
 
 For N indexed cases there must be exactly N JSON files, N Markdown files, and N HTML cards, all aligned by TC ID and step content.
 

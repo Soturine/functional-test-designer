@@ -11,12 +11,15 @@
   "coverage_point_refs": ["CP-023", "CP-024"],
   "source_refs": [
     {"source": "examples/requirements.md", "reference": "ORD-008"},
+    {"source": "examples/selected-source/user-guide.md", "reference": "Finalize an order"},
     {"source": "examples/selected-source/order_service.py", "reference": "finalize_order"}
   ],
   "preconditions": ["A synthetic order exists in SUBMITTED state."],
-  "test_data": [{"name": "submitted order", "description": "A synthetic order currently shown in SUBMITTED state."}],
+  "test_data": [{"name": "order reference", "description": "<existing synthetic order reference for an order in SUBMITTED state>"}],
   "steps": [
-    {"step": 1, "action": "Finalize the SUBMITTED order.", "expected_result": "The order state changes to FINALIZED and a visible confirmation is shown.", "needs_clarification": false}
+    {"step": 1, "action": "From Orders, open Search and locate the order using its test reference.", "expected_result": "A matching order row is displayed.", "needs_clarification": false},
+    {"step": 2, "action": "Open the matching order and review its items and current state.", "expected_result": "The order details are displayed with the order in SUBMITTED state.", "needs_clarification": false},
+    {"step": 3, "action": "Select Finalize.", "expected_result": "The order state changes to FINALIZED and a visible confirmation is shown.", "needs_clarification": false}
   ],
   "postconditions": ["The synthetic order is in FINALIZED state."],
   "cleanup": ["Remove the synthetic order using an approved test-environment procedure."],
