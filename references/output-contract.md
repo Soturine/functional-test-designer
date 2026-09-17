@@ -127,7 +127,7 @@ The flow section follows the steps, remains locally scrollable on narrow screens
 
 The Test Cases section groups cards by the same derived functional requirement label. A multi-requirement TC appears once under the first normative requirement in source order and lists the other labels as related. A case explicitly tagged `e2e`, `end-to-end`, or `cross-rf` may appear once under `Cross-RF / End-to-End`. Grouping never changes JSON IDs, paths, counts, or links.
 
-The offline report may derive per-group source-coverage summaries, quick navigation, filters, and advisory Cross-RF indicators from existing JSON. These are presentation projections, not new contract fields or authority.
+The offline report may derive per-group source-coverage summaries, CSS coverage bars, quick navigation, filters, traceability, source-role labels, findings, and Cross-RF labels from existing JSON. These are deterministic presentation projections, not new contract fields or authority. Rendering does not execute semantic audits or reopen selected sources.
 
 For N indexed cases there must be exactly N JSON files, N Markdown files, and N HTML cards, all aligned by TC ID and step content.
 

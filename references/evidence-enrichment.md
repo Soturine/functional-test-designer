@@ -43,6 +43,10 @@ Start from legitimate preconditions, follow the supported path to the trigger, a
 - Operational expected results may describe a supported intermediate screen, modal, response, or state. They remain observed execution evidence, not new business requirements.
 - If no path is supported, use only the defensible level of action. Never invent a menu, button, route, field, endpoint, or payload. Create a focused Question or `NEEDS_REVIEW` case only when the missing path prevents execution.
 
+Use natural step granularity. One step is valid when one coherent action reaches the result from the preconditions. Split a documented sequence when order, intermediate state, or distinct failure points matter; do not compress `open, select, enter, confirm` into one action. Conversely, do not inflate cursor movement, individual keystrokes, or obvious mechanics into steps. There is no target number of steps.
+
+Build each selected source entry and scenario-family Evidence Pack once in the run-local evidence map. Reuse shared actor, setup, navigation, constraints, observability, and source refs across related TCs, then specialize only scenario-specific parts. Reopen a source only for truncation, unresolved ambiguity, or a verification detail not retained in the map. Batch design by RF/scenario family while validating every TC independently.
+
 ## Test Data
 
 Use concrete synthetic values when selected constraints make them defensible: explicit boundaries, lengths, enums, states, and formats. Apply BVA/EP selectively and record a technique tag only when it materially shaped the case.

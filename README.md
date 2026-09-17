@@ -123,6 +123,8 @@ Quando `Diagnostic: true` é usado, métricas separadas são escritas em `diagno
 
 Antes da finalização, uma auditoria source-first por RF/RN procura claims normativos omitidos independentemente do mapeamento clause→CP; uma única recuperação passa novamente pelo pipeline completo. A análise Cross-RF apenas sinaliza sobreposição e possíveis duplicatas para revisão, sem mesclar ou remover TCs automaticamente.
 
+Claims preservam efeitos e alternativas observáveis de forma atômica, inclusive regras RN/CU explicitamente aplicáveis e disponíveis no escopo. Steps seguem a complexidade natural do caminho documentado, enquanto o relatório offline permanece uma projeção determinística e leve do JSON validado.
+
 Subtests encontrados em artefatos legados são normalizados: condições independentes viram TCs e ações sequenciais dependentes viram steps. O output final nunca contém `subtests`.
 
 ## Validar e renderizar

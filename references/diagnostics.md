@@ -32,9 +32,9 @@ Use 1-5 short `--done` entries. Record metrics only when observable; never estim
 6. `testability_and_questions`
 7. `test_design_and_scenarios`
 8. `early_deduplication`
-9. `test_case_generation`
-10. `evidence_enrichment`
-11. `execution_path_synthesis`
+9. `evidence_enrichment`
+10. `execution_path_synthesis`
+11. `test_case_generation`
 12. `source_coverage_audit`
 13. `source_coverage_recovery`
 14. `source_coverage_verification`
@@ -84,12 +84,29 @@ Record these when naturally observable:
 - `source_claims_represented`
 - `source_coverage_gaps`
 - `recovered_source_gaps`
+- `atomic_source_claims_identified`
+- `compound_source_items_split`
+- `possible_compound_claim_warnings`
+- `referenced_normative_rules`
+- `referenced_rules_resolved_in_scope`
+- `referenced_rules_unresolved`
+- `applicable_rule_claims`
+- `applicable_rule_claims_represented`
+- `evidence_map_hits`
+- `evidence_map_misses`
+- `source_files_opened_once`
+- `source_files_reopened`
+- `tc_generation_reuse_hits`
+- `varied_execution_paths_available`
 
 The finish helper derives these objective metrics from final JSON; do not record them again in a stage:
 
 - `test_cases_with_one_step`
 - `test_cases_with_multiple_steps`
 - `average_steps_per_test_case`
+- `step_count_histogram`
+- `multi_action_step_warnings`
+- `possible_step_template_bias`
 - `test_cases_with_execution_enrichment`
 - `test_cases_with_multiple_source_roles`
 - `test_cases_with_concrete_test_data`
@@ -114,6 +131,8 @@ The finish helper derives these objective metrics from final JSON; do not record
 Aggregation is explicit per metric: event counters such as reads and real validator executions use `sum`; generated artifact/state counts use the last authoritative stage; roots and paths use ordered set/array aggregation; destination fields use the last resolved value. Do not repeat `test_cases_generated` in `json_write`; record `individual_json_files_written` there. A summary that reads a validation result does not increment `validator_runs`. The helper rejects unknown metrics until an aggregation strategy is defined and verifies that scope values in `totals` and `scope_proof` match by value and type.
 
 The helper derives step distribution, selected-role contributions, multi-role provenance, execution enrichment, concrete-data signals, abstract-action signals, and execution-path Questions from final JSON. Role contribution counts only TCs that actually cite a source with that role. When the evidence map objectively contains detailed execution paths, record `detailed_execution_evidence_available=true`; if at least 80% of a suite with five or more cases still has one step, the helper adds the non-blocking `POSSIBLE_EXECUTION_UNDER_SPECIFICATION` warning. This is not a quality score and does not force extra steps.
+
+Compound-claim and multi-action heuristics are advisory and never rewrite output. Record `varied_execution_paths_available=true` only when selected evidence actually contains paths of different supported complexity; a uniform distribution then adds `POSSIBLE_STEP_TEMPLATE_BIAS`. Evidence-map counters measure real cache events, not estimated savings.
 
 ## Finish
 

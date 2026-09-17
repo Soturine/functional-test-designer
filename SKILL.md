@@ -58,7 +58,7 @@ Resolve the user's selected roots and inventory paths/metadata before opening co
 
 ### 2. Extract Clauses, Then Normalize Evidence
 
-Extract atomic normative clauses before summarizing them into logical Requirements. A clause is one observable or verifiable claim. Preserve every clause's source ref even when several clauses belong to one `REQ-XXX`.
+Extract atomic normative clauses before summarizing them into logical Requirements, starting from atomic normative source claims. A bullet or sentence may contain one or many claims. Split `and` outcomes, `or` alternatives, and enumerated effects when one could be wrong while another remains correct; do not split inseparable representations mechanically. Preserve every claim and clause source ref even when several belong to one `REQ-XXX`.
 
 - Assign stable `REQ-001`, `REQ-002`, ... IDs in source order.
 - Preserve original identifiers and locations in `source_refs`.
@@ -98,11 +98,13 @@ Create atomic candidate scenarios from atomic Coverage Points, then remove only 
 
 ### 7. Enrich Evidence and Synthesize Execution Paths
 
-Read [references/evidence-enrichment.md](references/evidence-enrichment.md) when selected technical context, implementation evidence, or QA assets can contribute execution detail, data, observability, branches, or prior coverage. For every final scenario, consult the compact in-scope evidence map and assemble an internal Evidence Pack before materialization. Do not create a new public artifact or reopen every file per TC.
+Read [references/evidence-enrichment.md](references/evidence-enrichment.md) when selected technical context, implementation evidence, or QA assets can contribute execution detail, data, observability, branches, or prior coverage. Build each selected-source entry and shared scenario-family Evidence Pack once, then reuse it during generation, enrichment, and audits. For every final scenario, consult this compact in-scope evidence map before materialization. Do not create a public cache or reopen every file per TC.
 
 Keep the normative oracle anchored to functional authority while using genuinely contributing selected evidence for preconditions, concrete local test data, ordered actions, intermediate observations, opportunity analysis, Findings, and minimal Questions. Add those contributing sources to the TC's `source_refs`; never add decorative provenance.
 
 Synthesize a reproducible path from legitimate preconditions through dependent actions to the scenario trigger and observable result. Atomicity does not imply one step. Preserve a legitimate one-step case when one supported action reaches the result; preserve multiple steps when each depends on prior state. Do not inflate steps or invent UI/API details when no selected source supports them.
+
+Use natural step granularity, never a fixed step template. Split a documented operational sequence when order, intermediate state, or separate failure points matter. Keep one coherent action together and never split cursor movement or keystrokes merely to increase the count.
 
 Evidence Enrichment normally changes execution fields and presentation, never valid normative normalization, clauses, CPs, scenario identity, TC independence, oracle, status, or disposition. Treat such a change as a regression unless it fixes a demonstrated pre-existing defect.
 
@@ -126,6 +128,8 @@ For every step:
 ### 9. Audit Source Coverage and Cross-Requirement Overlap
 
 Read [references/source-coverage-audit.md](references/source-coverage-audit.md). After the candidate suite exists, perform one source-first per-RF/RN audit, one bounded recovery pass through the full design pipeline, and one verification pass. Do not treat complete clause mapping as proof that every source claim was extracted.
+
+When a selected normative source explicitly declares applicable RN/CU/related requirements, read [references/normative-applicability.md](references/normative-applicability.md). Include resolved in-scope claims in the owning RF/RN audit, record unresolved references without leaving scope, deduplicate equivalent claims with provenance, and turn authority conflicts into Findings.
 
 Then read [references/cross-rf-audit.md](references/cross-rf-audit.md) and run one advisory semantic comparison over the stable suite. Report multi-RF coverage, duplicate candidates, and similar-but-distinct cases; never merge or remove automatically.
 
@@ -158,7 +162,7 @@ The Markdown renderer reads validated JSON and changes no JSON. The HTML rendere
 
 ### 11. Summarize
 
-Report selected scope roots, resolved files, files opened outside scope, source rereads, temporary files, requirements, Coverage Points, findings, scenarios, TCs, steps, statuses, Questions, Markdown count, validator result, and HTML result. Files opened outside scope must be zero; any nonzero value is a scope violation.
+Derive the final summary from run state, diagnostics, and final JSON; do not reopen sources or repeat semantic analysis. Report selected scope roots, resolved files, files opened outside scope, source rereads, temporary files, requirements, Coverage Points, findings, scenarios, TCs, steps, statuses, Questions, Markdown count, validator result, and HTML result. Files opened outside scope must be zero; any nonzero value is a scope violation.
 
 When diagnostics are explicitly requested, follow [references/diagnostics.md](references/diagnostics.md). Begin each stage before its reasoning starts, materialize its result while the timer is active, and end it afterward. Record real observations only and no sensitive content.
 
@@ -176,6 +180,9 @@ When diagnostics are explicitly requested, follow [references/diagnostics.md](re
 - TC source refs include every source role that actually contributed and no decorative sources.
 - Evidence Enrichment did not silently redefine valid normative coverage or scenario identity.
 - Source-first coverage was audited independently of clause mapping, recovered once, and verified once.
+- Every explicitly applicable in-scope RN/CU contributed its claims; unresolved references did not expand scope.
+- Step counts reflect supported path complexity rather than a fixed template.
+- Evidence and shared scenario-family setup were reused without reducing coverage.
 - Cross-RF analysis was advisory; no TC was automatically merged or removed.
 - JSON contains neither `subtests` nor `automation_candidate`.
 - JSON validated before Markdown; Markdown existed before HTML.
