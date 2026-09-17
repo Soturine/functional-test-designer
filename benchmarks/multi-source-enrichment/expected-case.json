@@ -1,0 +1,28 @@
+{
+  "schema_version": "1.2",
+  "id": "TC-001",
+  "title": "Finalize a submitted order",
+  "status": "READY",
+  "priority": "HIGH",
+  "type": "FUNCTIONAL",
+  "objective": "Confirm that finalizing a submitted order reaches FINALIZED state.",
+  "requirement_refs": ["REQ-001"],
+  "scenario_refs": ["SCN-001"],
+  "coverage_point_refs": ["CP-001"],
+  "source_refs": [
+    {"source": "requirements.md", "reference": "RF003"},
+    {"source": "user-guide.md", "reference": "Finalize an order"},
+    {"source": "service.py", "reference": "finalize"}
+  ],
+  "preconditions": ["A synthetic order exists in SUBMITTED state."],
+  "test_data": [{"name": "order reference", "description": "<existing test order reference>"}],
+  "steps": [
+    {"step": 1, "action": "From Orders, open Search and locate the submitted order.", "expected_result": "A matching order is displayed.", "needs_clarification": false},
+    {"step": 2, "action": "Open the matching order and review its items.", "expected_result": "The selected order details are displayed.", "needs_clarification": false},
+    {"step": 3, "action": "Select Finalize.", "expected_result": "The order state changes to FINALIZED.", "needs_clarification": false}
+  ],
+  "postconditions": ["The synthetic order is in FINALIZED state."],
+  "cleanup": ["Use an approved isolated test environment for the finalized order."],
+  "tags": ["order", "state-transition"],
+  "notes": ["Selected implementation evidence returns PROCESSING and therefore diverges from RF003."]
+}

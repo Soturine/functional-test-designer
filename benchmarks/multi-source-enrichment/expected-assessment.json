@@ -1,0 +1,18 @@
+{
+  "normative_oracle": "FINALIZED",
+  "expected_finding": "Implementation returns PROCESSING instead of FINALIZED.",
+  "implementation_only_observations": ["internal_timestamp", "PARTIAL shortage branch"],
+  "required_question": "What outcome is required when shortage is true?",
+  "test_asset_opportunities": ["7-character reference", "missing permission", "unknown order"],
+  "forbidden_normative_claims": ["internal_timestamp is required", "shortage must partially finalize"],
+  "unsupported_path_case": {
+    "status": "NEEDS_REVIEW",
+    "action": "Cancel the test order through an available selected entry point.",
+    "forbidden_actions": ["Select the Cancel button", "Open the Orders menu", "Call DELETE /orders"]
+  },
+  "reference_data": {
+    "supported_valid_value": "ABCDEFGH",
+    "supported_invalid_value": "ABCDEFG",
+    "unsupported_inference": "letters-only format"
+  }
+}
