@@ -7,12 +7,14 @@ import re
 from typing import Any
 
 
-RF_PATTERN = re.compile(r"(?<![A-Z0-9])RF[\s_-]*([0-9]+)(?![A-Z0-9])", re.IGNORECASE)
+FUNCTIONAL_ID_PATTERN = re.compile(
+    r"(?<![A-Z0-9])(RF|RN)[\s_-]*([0-9]+)(?![A-Z0-9])", re.IGNORECASE
+)
 E2E_TAGS = {"e2e", "end-to-end", "cross-rf"}
 
 
 def original_rf_identifier(requirement: dict[str, Any]) -> str | None:
-    """Return the first source-grounded RF identifier without inventing one."""
+    """Return the first source-grounded RF/RN identifier without inventing one."""
     candidates = [
         ref.get("reference", "")
         for ref in requirement.get("source_refs", [])
@@ -20,15 +22,43 @@ def original_rf_identifier(requirement: dict[str, Any]) -> str | None:
     ]
     candidates.append(requirement.get("statement", ""))
     for candidate in candidates:
-        match = RF_PATTERN.search(str(candidate))
+        match = FUNCTIONAL_ID_PATTERN.search(str(candidate))
         if match:
-            return "RF" + match.group(1)
+            return match.group(1).upper() + match.group(2)
     return None
+
+
+def official_requirement_title(requirement: dict[str, Any], identifier: str) -> str | None:
+    """Extract only a title explicitly attached to the original RF/RN reference."""
+    for ref in requirement.get("source_refs", []):
+        if not isinstance(ref, dict):
+            continue
+        reference = str(ref.get("reference", "")).strip()
+        match = FUNCTIONAL_ID_PATTERN.search(reference)
+        if not match or match.group(1).upper() + match.group(2) != identifier:
+            continue
+        suffix = reference[match.end() :].strip()
+        suffix = re.sub(r"^[\s:;|\-\u2013\u2014]+", "", suffix).strip()
+        if suffix:
+            return suffix
+    return None
+
+
+def requirement_group_label(requirement: dict[str, Any]) -> str:
+    identifier = original_rf_identifier(requirement)
+    if not identifier:
+        return requirement["id"]
+    return f"{identifier} \u2014 {official_requirement_title(requirement, identifier) or 'Sem t\u00edtulo extra\u00eddo'}"
+
+
+def group_identifier(label: str) -> str:
+    """Return the stable RF/RN code used by filters and anchors."""
+    return label.split(" \u2014 ", 1)[0]
 
 
 def requirement_group_map(requirements: list[dict[str, Any]]) -> dict[str, str]:
     return {
-        requirement["id"]: original_rf_identifier(requirement) or requirement["id"]
+        requirement["id"]: requirement_group_label(requirement)
         for requirement in requirements
     }
 

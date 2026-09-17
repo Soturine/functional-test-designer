@@ -13,6 +13,15 @@ from pathlib import Path
 from typing import Any
 
 
+SCRIPT_DIR = Path(__file__).resolve().parent
+if str(SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPT_DIR))
+
+from cross_rf_audit import audit_cross_rf  # noqa: E402
+from requirement_groups import requirement_group_map  # noqa: E402
+from source_coverage_audit import per_requirement_summary  # noqa: E402
+
+
 STAGE_NAMES = (
     "scope_resolution",
     "source_read",
@@ -23,6 +32,12 @@ STAGE_NAMES = (
     "test_design_and_scenarios",
     "early_deduplication",
     "test_case_generation",
+    "evidence_enrichment",
+    "execution_path_synthesis",
+    "source_coverage_audit",
+    "source_coverage_recovery",
+    "source_coverage_verification",
+    "cross_rf_audit",
     "json_write",
     "validation",
     "validation_fixes",
@@ -71,6 +86,10 @@ AGGREGATION_STRATEGIES = {
     "diagnostics_path": "last",
     "artifact_root_source": "last",
     "detailed_execution_evidence_available": "last",
+    "source_claims_identified": "last",
+    "source_claims_represented": "last",
+    "source_coverage_gaps": "last",
+    "recovered_source_gaps": "last",
 }
 
 ABSTRACT_ACTION_PATTERNS = (
@@ -284,6 +303,25 @@ def output_totals(output_dir: Path | None) -> dict[str, Any]:
         for question in questions
         if isinstance(question, dict)
     )
+    groups = requirement_group_map(index.get("requirements", []))
+    coverage_statements = {
+        item["id"]: item.get("statement", "") for item in index.get("coverage_points", [])
+    }
+    roles_by_case = {
+        case["id"]: roles for case, roles in zip(cases, case_roles)
+    }
+    cross_rf = audit_cross_rf(
+        cases,
+        groups,
+        coverage_statements=coverage_statements,
+        roles_by_case=roles_by_case,
+    )
+    requirement_summaries = per_requirement_summary(index, questions)
+    source_gaps = sum(item["source_coverage_gaps"] for item in requirement_summaries.values())
+    gap_counts_by_group: dict[str, int] = {}
+    for requirement_id, summary in requirement_summaries.items():
+        label = groups.get(requirement_id, requirement_id)
+        gap_counts_by_group[label] = gap_counts_by_group.get(label, 0) + summary["source_coverage_gaps"]
     return {
         "requirements": len(index.get("requirements", [])),
         "coverage_points": len(index.get("coverage_points", [])),
@@ -309,6 +347,23 @@ def output_totals(output_dir: Path | None) -> dict[str, Any]:
         "technical_context_contributions": sum("TECHNICAL_CONTEXT" in roles for roles in case_roles),
         "implementation_evidence_contributions": sum("IMPLEMENTATION_EVIDENCE" in roles for roles in case_roles),
         "test_asset_contributions": sum("TEST_ASSET" in roles for roles in case_roles),
+        "rf_groups": len(set(groups.values())),
+        "source_claims_identified": sum(
+            item["source_claims_identified"] for item in requirement_summaries.values()
+        ),
+        "source_claims_represented": sum(
+            item["source_claims_represented"] for item in requirement_summaries.values()
+        ),
+        "source_coverage_gaps": source_gaps,
+        "recovered_source_gaps": 0,
+        "rf_groups_with_zero_gaps": sum(value == 0 for value in gap_counts_by_group.values()),
+        "rf_groups_with_gaps": sum(value > 0 for value in gap_counts_by_group.values()),
+        "cross_rf_tcs": len(cross_rf["same_multi_rf_coverage"]),
+        "same_multi_rf_coverage": len(cross_rf["same_multi_rf_coverage"]),
+        "duplicate_candidates": cross_rf["duplicate_candidates"],
+        "similar_but_distinct": cross_rf["similar_but_distinct"],
+        "automatic_merges": 0,
+        "automatic_removals": 0,
     }
 
 

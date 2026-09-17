@@ -58,6 +58,19 @@ class RequirementGroupingTests(unittest.TestCase):
 
         self.assertEqual({"REQ-001": "REQ-001"}, GROUPS.requirement_group_map([requirement]))
 
+    def test_official_title_and_missing_title_are_presentational(self) -> None:
+        titled = {
+            "id": "REQ-001", "statement": "Finalize.",
+            "source_refs": [{"reference": "RF006 — Inventory operations"}],
+        }
+        untitled = {
+            "id": "REQ-002", "statement": "Audit.",
+            "source_refs": [{"reference": "RN012"}],
+        }
+
+        self.assertEqual("RF006 — Inventory operations", GROUPS.requirement_group_label(titled))
+        self.assertEqual("RN012 — Sem título extraído", GROUPS.requirement_group_label(untitled))
+
     def test_markdown_and_html_show_rf_group_without_changing_json_or_paths(self) -> None:
         index = self.read("test-cases.json")
         before = json.dumps(index, sort_keys=True)
@@ -69,8 +82,14 @@ class RequirementGroupingTests(unittest.TestCase):
         markdown = (self.output / "test-cases-md" / "TC-001.md").read_text(encoding="utf-8")
         after = self.read("test-cases.json")
 
-        self.assertIn("**Requirement group:** RF003", markdown)
-        self.assertIn('data-requirement-group="RF003"', report)
+        self.assertIn("**Requirement group:** RF003 — Create order", markdown)
+        self.assertIn('data-requirement-group="RF003 — Create order"', report)
+        self.assertIn('id="rf-RF003"', report)
+        self.assertIn('id="rf-filter"', report)
+        self.assertIn('class="rf-navigation"', report)
+        self.assertIn('class="group-toggle"', report)
+        self.assertIn('Source claims:', report)
+        self.assertIn('id="feature-filter"', report)
         self.assertEqual(len(after["test_cases"]), report.count('class="tc-card"'))
         self.assertEqual(
             [entry["file"] for entry in json.loads(before)["test_cases"]],
@@ -87,8 +106,8 @@ class RequirementGroupingTests(unittest.TestCase):
 
         primary, related, _ = GROUPS.case_group(case, groups, {"REQ-001": 0, "REQ-002": 1})
 
-        self.assertEqual("RF002", primary)
-        self.assertEqual(["RF004"], related)
+        self.assertEqual("RF002 — Sem título extraído", primary)
+        self.assertEqual(["RF004 — Sem título extraído"], related)
 
     def test_explicit_e2e_case_uses_cross_rf_group_once(self) -> None:
         groups = {"REQ-001": "RF002", "REQ-002": "RF004"}

@@ -19,7 +19,13 @@ if str(SCRIPT_DIR) not in sys.path:
 
 from validate_output import validate  # noqa: E402
 from render_markdown import extract_mermaid, mermaid_source  # noqa: E402
-from requirement_groups import case_group, requirement_group_map  # noqa: E402
+from cross_rf_audit import DUPLICATE_CANDIDATE, audit_cross_rf  # noqa: E402
+from requirement_groups import (  # noqa: E402
+    case_group,
+    group_identifier,
+    requirement_group_map,
+)
+from source_coverage_audit import per_requirement_summary  # noqa: E402
 
 
 STATUS_LABELS = {
@@ -211,9 +217,12 @@ def render_case(
     mermaid: str,
     requirement_group: str | None = None,
     related_groups: list[str] | None = None,
+    technical_context: str = "",
+    feature_flags: set[str] | None = None,
 ) -> str:
     status = case["status"]
     priority = case["priority"]
+    feature_flags = feature_flags or set()
     search_text = " ".join(
         [
             case["id"],
@@ -228,6 +237,7 @@ def render_case(
         f'Requisitos: {", ".join(case["requirement_refs"])} | '
         f'Cen&aacute;rios: {", ".join(case["scenario_refs"])} | '
         f'Coverage Points: {", ".join(case["coverage_point_refs"])}'
+        + (f" | {technical_context}" if technical_context else "")
     )
     group_badge = (
         f'<span class="badge requirement-group">{esc(requirement_group)}</span>'
@@ -252,7 +262,7 @@ def render_case(
         else ""
     )
     return f"""
-<details class="tc-card" data-status="{esc(status)}" data-priority="{esc(priority)}" data-search="{esc(search_text)}">
+<details class="tc-card" data-status="{esc(status)}" data-priority="{esc(priority)}" data-rf="{esc(group_identifier(requirement_group or 'Unmapped'))}" data-features="{esc(' '.join(sorted(feature_flags)))}" data-search="{esc(search_text)}">
   <summary>
     <span class="tc-heading"><span class="tc-id">{esc(case['id'])}</span>{esc(case['title'])}</span>
     <span class="badges">{group_badge}<span class="badge status-{esc(status.lower())}">{STATUS_LABELS[status]}</span><span class="badge priority">{PRIORITY_LABELS[priority]}</span></span>
@@ -288,6 +298,8 @@ def render_coverage(
     coverage_points: list[dict[str, Any]],
     entries_by_id: dict[str, dict[str, Any]],
     questions_by_id: dict[str, dict[str, Any]],
+    groups: dict[str, str],
+    summaries: dict[str, dict[str, int]],
 ) -> str:
     by_requirement: dict[str, list[dict[str, Any]]] = {}
     for coverage_point in coverage_points:
@@ -315,7 +327,15 @@ def render_coverage(
                 f'<details class="technical"><summary>Detalhes t&eacute;cnicos</summary><p>{esc(coverage_point["id"])}</p></details></div></li>'
             )
         blocks.append(
-            f'<section class="requirement-block"><h3>{esc(requirement["statement"])}</h3>'
+            f'<section class="requirement-block"><h3>{esc(groups[requirement["id"]])}</h3>'
+            f'<p>{esc(requirement["statement"])}</p>'
+            f'<p class="coverage-summary"><strong>Source claims:</strong> '
+            f'{summaries[requirement["id"]]["source_claims_represented"]}/'
+            f'{summaries[requirement["id"]]["source_claims_identified"]} represented; '
+            f'{summaries[requirement["id"]]["source_coverage_gaps"]} gap(s); '
+            f'{summaries[requirement["id"]]["test_cases"]} TC(s); '
+            f'{summaries[requirement["id"]]["findings"]} finding(s); '
+            f'{summaries[requirement["id"]]["questions"]} question(s).</p>'
             f'<p class="requirement-source">{esc(requirement["source_refs"][0]["reference"])}</p>'
             f'<ul class="coverage-list">{"".join(items)}</ul></section>'
         )
@@ -358,6 +378,30 @@ def render_report(output_dir: Path, destination: Path | None = None) -> Path:
         else ""
     )
     groups = requirement_group_map(index["requirements"])
+    summaries = per_requirement_summary(index, questions)
+    source_roles = {item["path"]: item["role"] for item in index.get("sources", [])}
+    coverage_statements = {item["id"]: item["statement"] for item in coverage_points}
+    roles_by_case = {
+        case["id"]: {
+            source_roles.get(ref.get("source"))
+            for ref in case.get("source_refs", [])
+            if source_roles.get(ref.get("source"))
+        }
+        for case in cases
+    }
+    cross_audit = audit_cross_rf(
+        cases, groups, coverage_statements=coverage_statements, roles_by_case=roles_by_case
+    )
+    duplicate_ids = {
+        case_id
+        for item in cross_audit["pairs"]
+        if item["classification"] == DUPLICATE_CANDIDATE
+        for case_id in item["test_case_ids"]
+    }
+    clauses_by_cp: dict[str, list[str]] = {}
+    for clause in index.get("normative_clauses", []):
+        if clause.get("destination_type") == "COVERAGE_POINT":
+            clauses_by_cp.setdefault(clause.get("destination_id", ""), []).append(clause["id"])
     requirement_order = {
         requirement["id"]: position for position, requirement in enumerate(index["requirements"])
     }
@@ -367,18 +411,57 @@ def render_report(output_dir: Path, destination: Path | None = None) -> Path:
         grouped_cases.setdefault(group, []).append((sort_key, entry, case, related))
     case_groups = []
     for group, members in sorted(grouped_cases.items(), key=lambda item: min(member[0] for member in item[1])):
-        cards = "".join(
-            render_case(case, entry, mermaid_by_id[case["id"]], group, related)
-            for _, entry, case, related in sorted(members, key=lambda member: member[0])
-        )
+        cards_parts = []
+        for _, entry, case, related in sorted(members, key=lambda member: member[0]):
+            roles = roles_by_case[case["id"]]
+            clause_ids = [
+                clause_id
+                for cp_id in case.get("coverage_point_refs", [])
+                for clause_id in clauses_by_cp.get(cp_id, [])
+            ]
+            flags = {
+                "single-step" if len(case.get("steps", [])) == 1 else "multi-step",
+            }
+            if len(case.get("requirement_refs", [])) > 1:
+                flags.add("cross-rf")
+            if len(roles) > 1:
+                flags.add("multi-source")
+            if case["id"] in duplicate_ids:
+                flags.add("duplicate-candidate")
+            if any(case["id"] in item.get("related_test_cases", []) for item in questions):
+                flags.add("questions")
+            if any(case["id"] in cp.get("target_refs", []) and cp["requirement_ref"] in finding.get("requirement_refs", []) for cp in coverage_points for finding in index.get("findings", [])):
+                flags.add("findings")
+            technical = (
+                f'Clauses: {", ".join(clause_ids) or "None"} | '
+                f'Source roles: {", ".join(sorted(roles)) or "None"} | '
+                f'Source refs: {", ".join(ref.get("source", "") for ref in case.get("source_refs", []))} | '
+                f'Primary RF: {group} | Related RFs: {", ".join(related) or "None"}'
+            )
+            cards_parts.append(render_case(case, entry, mermaid_by_id[case["id"]], group, related, technical, flags))
+        cards = "".join(cards_parts)
+        member_req_ids = {ref for _, _, case, _ in members for ref in case.get("requirement_refs", [])}
+        group_claims = sum(summaries[ref]["source_claims_identified"] for ref in member_req_ids)
+        group_represented = sum(summaries[ref]["source_claims_represented"] for ref in member_req_ids)
+        group_gaps = sum(summaries[ref]["source_coverage_gaps"] for ref in member_req_ids)
+        group_findings = sum(summaries[ref]["findings"] for ref in member_req_ids)
         case_groups.append(
-            f'<section class="tc-group" data-requirement-group="{esc(group)}">'
-            f'<h3 class="tc-group-title">{esc(group)}</h3>{cards}</section>'
+            f'<section class="tc-group" id="rf-{esc(group_identifier(group))}" data-requirement-group="{esc(group)}">'
+            f'<div class="tc-group-title"><h3>{esc(group)}</h3><span>{len(members)} TCs &middot; {group_represented}/{group_claims} claims &middot; {group_gaps} gaps &middot; {group_findings} findings</span>'
+            f'<button type="button" class="group-toggle" aria-expanded="true">Recolher</button></div><div class="tc-group-body">{cards}</div></section>'
         )
     case_html = "".join(case_groups)
     question_html = "".join(render_question(question) for question in questions)
     coverage_html = render_coverage(
-        index["requirements"], coverage_points, entries_by_id, questions_by_id
+        index["requirements"], coverage_points, entries_by_id, questions_by_id, groups, summaries
+    )
+    rf_options = "".join(
+        f'<option value="{esc(group_identifier(label))}">{esc(label)}</option>'
+        for label in dict.fromkeys(groups.values())
+    )
+    rf_navigation = "".join(
+        f'<a href="#rf-{esc(group_identifier(label))}">{esc(label)}</a>'
+        for label in dict.fromkeys(groups.values())
     )
 
     report = f"""<!doctype html>
@@ -409,11 +492,16 @@ h3 {{ margin:0 0 8px; font-size:15px; }}
 .metric strong {{ display:block; font-size:24px; }}
 .metric span {{ color:var(--muted); font-size:13px; }}
 .alert {{ margin-top:14px; padding:12px 14px; background:#fff6dd; border-left:4px solid var(--warning); }}
-.filters {{ display:grid; grid-template-columns:minmax(220px,1fr) 180px 180px; gap:10px; margin-bottom:14px; }}
+.filters {{ display:grid; grid-template-columns:minmax(220px,1fr) repeat(4,minmax(140px,180px)); gap:10px; margin-bottom:14px; }}
+.rf-navigation {{ display:flex; gap:8px; flex-wrap:wrap; margin:0 0 16px; }}
+.rf-navigation a {{ padding:5px 9px; border:1px solid var(--line); border-radius:999px; background:#fff; text-decoration:none; font-size:12px; }}
 input,select {{ width:100%; min-height:40px; border:1px solid #aeb7bc; border-radius:4px; background:#fff; padding:8px 10px; font:inherit; }}
 .tc-card {{ margin-bottom:10px; border:1px solid var(--line); border-radius:6px; background:#fff; }}
 .tc-group {{ margin:18px 0 24px; }}
-.tc-group-title {{ margin:0 0 10px; padding-bottom:7px; border-bottom:2px solid var(--accent); font-size:17px; }}
+.tc-group-title {{ display:flex; align-items:center; gap:12px; margin:0 0 10px; padding-bottom:7px; border-bottom:2px solid var(--accent); }}
+.tc-group-title h3 {{ margin:0; font-size:17px; }}
+.tc-group-title span {{ color:var(--muted); font-size:12px; }}
+.group-toggle {{ margin-left:auto; border:1px solid #aeb7bc; border-radius:4px; background:#fff; padding:5px 9px; cursor:pointer; }}
 .requirement-group {{ color:#075e47; border-color:#9fd8c6; background:#eaf7f2; }}
 .related-requirements {{ color:var(--muted); font-size:13px; }}
 .tc-card>summary {{ display:flex; align-items:center; justify-content:space-between; gap:16px; min-height:58px; padding:12px 16px; cursor:pointer; font-weight:700; }}
@@ -478,7 +566,7 @@ th {{ background:#f0f3f2; font-size:13px; }}
 <div class="metric"><strong>{len(coverage_points)}</strong><span>Coverage Points</span></div>
 <div class="metric"><strong>{covered_count}/{len(coverage_points)}</strong><span>Cobertura com destino</span></div>
 </div>{warning}</section>
-<section id="test-cases"><h2>Test Cases</h2><div class="filters"><label>Buscar<input id="search" type="search" placeholder="T&iacute;tulo, objetivo ou tag"></label><label>Status<select id="status-filter"><option value="">Todos</option><option>READY</option><option>NEEDS_REVIEW</option><option>BLOCKED</option></select></label><label>Prioridade<select id="priority-filter"><option value="">Todas</option><option>CRITICAL</option><option>HIGH</option><option>MEDIUM</option><option>LOW</option></select></label></div><div id="case-list">{case_html}</div><p id="no-results" hidden>Nenhum Test Case corresponde aos filtros.</p></section>
+<section id="test-cases"><h2>Test Cases</h2><nav class="rf-navigation" aria-label="Navega&ccedil;&atilde;o por requisito">{rf_navigation}</nav><div class="filters"><label>Buscar<input id="search" type="search" placeholder="T&iacute;tulo, objetivo ou tag"></label><label>Status<select id="status-filter"><option value="">Todos</option><option>READY</option><option>NEEDS_REVIEW</option><option>BLOCKED</option></select></label><label>Prioridade<select id="priority-filter"><option value="">Todas</option><option>CRITICAL</option><option>HIGH</option><option>MEDIUM</option><option>LOW</option></select></label><label>Requisito<select id="rf-filter"><option value="">Todos</option>{rf_options}</select></label><label>Caracter&iacute;stica<select id="feature-filter"><option value="">Todas</option><option value="cross-rf">Cross-RF</option><option value="findings">Com findings</option><option value="questions">Com questions</option><option value="single-step">1 step</option><option value="multi-step">M&uacute;ltiplos steps</option><option value="multi-source">Multi-source</option><option value="duplicate-candidate">Duplicate candidate</option></select></label></div><div id="case-list">{case_html}</div><p id="no-results" hidden>Nenhum Test Case corresponde aos filtros.</p></section>
 <section id="perguntas"><h2>Perguntas</h2>{question_html or '<p class="empty">Nenhuma pergunta pendente.</p>'}</section>
 <section id="cobertura"><h2>Cobertura</h2>{coverage_html}</section>
 </main>
@@ -489,9 +577,10 @@ th {{ background:#f0f3f2; font-size:13px; }}
   </div>
 </div>
 <script>
-const search=document.getElementById('search');const statusFilter=document.getElementById('status-filter');const priorityFilter=document.getElementById('priority-filter');const cards=[...document.querySelectorAll('.tc-card')];const groups=[...document.querySelectorAll('.tc-group')];const noResults=document.getElementById('no-results');
-function applyFilters(){{const term=search.value.trim().toLocaleLowerCase();let visible=0;cards.forEach(card=>{{const show=(!term||card.dataset.search.includes(term))&&(!statusFilter.value||card.dataset.status===statusFilter.value)&&(!priorityFilter.value||card.dataset.priority===priorityFilter.value);card.hidden=!show;if(show)visible+=1;}});groups.forEach(group=>{{group.hidden=![...group.querySelectorAll('.tc-card')].some(card=>!card.hidden);}});noResults.hidden=visible!==0;}}
-[search,statusFilter,priorityFilter].forEach(control=>control.addEventListener(control===search?'input':'change',applyFilters));
+const search=document.getElementById('search');const statusFilter=document.getElementById('status-filter');const priorityFilter=document.getElementById('priority-filter');const rfFilter=document.getElementById('rf-filter');const featureFilter=document.getElementById('feature-filter');const cards=[...document.querySelectorAll('.tc-card')];const groups=[...document.querySelectorAll('.tc-group')];const noResults=document.getElementById('no-results');
+function applyFilters(){{const term=search.value.trim().toLocaleLowerCase();let visible=0;cards.forEach(card=>{{const features=card.dataset.features.split(' ');const show=(!term||card.dataset.search.includes(term))&&(!statusFilter.value||card.dataset.status===statusFilter.value)&&(!priorityFilter.value||card.dataset.priority===priorityFilter.value)&&(!rfFilter.value||card.dataset.rf===rfFilter.value)&&(!featureFilter.value||features.includes(featureFilter.value));card.hidden=!show;if(show)visible+=1;}});groups.forEach(group=>{{group.hidden=![...group.querySelectorAll('.tc-card')].some(card=>!card.hidden);}});noResults.hidden=visible!==0;}}
+[search,statusFilter,priorityFilter,rfFilter,featureFilter].forEach(control=>control.addEventListener(control===search?'input':'change',applyFilters));
+document.querySelectorAll('.group-toggle').forEach(button=>button.addEventListener('click',()=>{{const body=button.closest('.tc-group').querySelector('.tc-group-body');const expanded=button.getAttribute('aria-expanded')==='true';button.setAttribute('aria-expanded',String(!expanded));button.textContent=expanded?'Expandir':'Recolher';body.hidden=expanded;}}));
 const flowModal=document.getElementById('flow-modal');const flowCanvas=document.getElementById('flow-modal-canvas');const flowClose=flowModal.querySelector('.modal-close');let flowTrigger=null;
 function closeFlowModal(){{if(flowModal.hidden)return;flowModal.hidden=true;flowCanvas.replaceChildren();document.body.classList.remove('modal-open');if(flowTrigger)flowTrigger.focus();}}
 document.querySelectorAll('.expand-flow').forEach(button=>button.addEventListener('click',()=>{{const source=document.getElementById(button.dataset.flowTarget);const svg=source&&source.querySelector('svg');if(!svg)return;flowTrigger=button;flowCanvas.replaceChildren(svg.cloneNode(true));flowModal.hidden=false;document.body.classList.add('modal-open');flowClose.focus();}}));

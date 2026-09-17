@@ -78,10 +78,14 @@ class DiagnosticsTests(unittest.TestCase):
         self.assertEqual([], VALIDATOR.validate(self.output))
 
     def test_v12_stage_order_has_audit_deduplication_and_markdown(self) -> None:
-        self.assertEqual(15, len(DIAGNOSTICS.STAGE_NAMES))
+        self.assertEqual(21, len(DIAGNOSTICS.STAGE_NAMES))
         self.assertIn("coverage_extraction_audit", DIAGNOSTICS.STAGE_NAMES)
         self.assertIn("early_deduplication", DIAGNOSTICS.STAGE_NAMES)
         self.assertIn("markdown_render", DIAGNOSTICS.STAGE_NAMES)
+        self.assertIn("source_coverage_audit", DIAGNOSTICS.STAGE_NAMES)
+        self.assertIn("source_coverage_recovery", DIAGNOSTICS.STAGE_NAMES)
+        self.assertIn("source_coverage_verification", DIAGNOSTICS.STAGE_NAMES)
+        self.assertIn("cross_rf_audit", DIAGNOSTICS.STAGE_NAMES)
         self.assertNotIn("test_data_design", DIAGNOSTICS.STAGE_NAMES)
 
     def test_stage_timer_wraps_work_between_begin_and_end(self) -> None:
@@ -216,6 +220,9 @@ class DiagnosticsTests(unittest.TestCase):
         self.assertEqual(1, totals["technical_context_contributions"])
         self.assertEqual(2, totals["implementation_evidence_contributions"])
         self.assertEqual(0, totals["test_asset_contributions"])
+        self.assertEqual(23, totals["source_claims_identified"])
+        self.assertEqual(0, totals["automatic_merges"])
+        self.assertEqual(0, totals["automatic_removals"])
 
     def test_detailed_evidence_single_step_distribution_adds_non_blocking_warning(self) -> None:
         index = DIAGNOSTICS.read_document(self.output / "test-cases.json")
