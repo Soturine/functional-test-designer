@@ -121,6 +121,8 @@ O JSON continua sendo a fonte de verdade. Markdown e HTML apenas apresentam o me
 
 Quando `Diagnostic: true` é usado, métricas separadas são escritas em `diagnostics/`, com tempos, contagens, escopo analisado, releituras e overhead, sem copiar o conteúdo das fontes.
 
+Antes da finalização, uma auditoria source-first por RF/RN procura claims normativos omitidos independentemente do mapeamento clause→CP; uma única recuperação passa novamente pelo pipeline completo. A análise Cross-RF apenas sinaliza sobreposição e possíveis duplicatas para revisão, sem mesclar ou remover TCs automaticamente.
+
 Subtests encontrados em artefatos legados são normalizados: condições independentes viram TCs e ações sequenciais dependentes viram steps. O output final nunca contém `subtests`.
 
 ## Validar e renderizar

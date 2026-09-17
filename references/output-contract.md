@@ -117,7 +117,7 @@ Use `READY`, `NEEDS_REVIEW`, or `BLOCKED` for status and `CRITICAL`, `HIGH`, `ME
 
 `## Fluxo do Teste` is the final section. Its final fenced `mermaid` block is a linear action-to-expected-result flow in step order. It does not invent branches or results. A missing result is labeled as requiring clarification.
 
-Markdown derives a `Requirement group` label from an original `RF...` identifier in requirement source refs, falling back to `REQ-XXX`. It does not add that label to JSON.
+Markdown derives a `Requirement group` label from an original `RF...` or `RN...` identifier and official title in requirement source refs. It renders `RF001 — Official title`, uses `RF001 — Sem título extraído` when only the identifier is available, and otherwise falls back to `REQ-XXX`. It does not add that label to JSON.
 
 ## HTML
 
@@ -126,6 +126,8 @@ Markdown derives a `Requirement group` label from an original `RF...` identifier
 The flow section follows the steps, remains locally scrollable on narrow screens, and offers an accessible `Ampliar fluxo` modal that closes by button, overlay, or `Esc`. A local rendering failure leaves the steps and Markdown link available.
 
 The Test Cases section groups cards by the same derived functional requirement label. A multi-requirement TC appears once under the first normative requirement in source order and lists the other labels as related. A case explicitly tagged `e2e`, `end-to-end`, or `cross-rf` may appear once under `Cross-RF / End-to-End`. Grouping never changes JSON IDs, paths, counts, or links.
+
+The offline report may derive per-group source-coverage summaries, quick navigation, filters, and advisory Cross-RF indicators from existing JSON. These are presentation projections, not new contract fields or authority.
 
 For N indexed cases there must be exactly N JSON files, N Markdown files, and N HTML cards, all aligned by TC ID and step content.
 

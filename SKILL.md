@@ -123,7 +123,15 @@ For every step:
 - use `expected_result: null` and `needs_clarification: true` when unsupported;
 - link every clarification-pending step to a Question.
 
-### 9. Write, Validate, and Render
+### 9. Audit Source Coverage and Cross-Requirement Overlap
+
+Read [references/source-coverage-audit.md](references/source-coverage-audit.md). After the candidate suite exists, perform one source-first per-RF/RN audit, one bounded recovery pass through the full design pipeline, and one verification pass. Do not treat complete clause mapping as proof that every source claim was extracted.
+
+Then read [references/cross-rf-audit.md](references/cross-rf-audit.md) and run one advisory semantic comparison over the stable suite. Report multi-RF coverage, duplicate candidates, and similar-but-distinct cases; never merge or remove automatically.
+
+Derive presentation names from official source references as `RF001 — Official title` or `RN001 — Official title`. When the identifier is present without an extractable title, use `RF001 — Sem título extraído`; otherwise fall back to the normalized `REQ-XXX`. These names are presentation only and do not change JSON.
+
+### 10. Write, Validate, and Render
 
 Finish semantic generation for all TCs in memory before writing. The `json_write` stage performs deterministic serialization only: aggregate JSON, individual JSON, byte/file counts. Do not reopen sources, call external reasoning, or regenerate each TC during this stage. Write final contract artifacts directly; do not create per-run generator scripts or temporary source copies. Read schemas only if a validator failure is unclear.
 
@@ -148,7 +156,7 @@ python scripts/render_report.py <artifact_root>/output
 
 The Markdown renderer reads validated JSON and changes no JSON. The HTML renderer reads each corresponding Markdown Mermaid block and displays that same linear flow. Fix all errors before completion.
 
-### 10. Summarize
+### 11. Summarize
 
 Report selected scope roots, resolved files, files opened outside scope, source rereads, temporary files, requirements, Coverage Points, findings, scenarios, TCs, steps, statuses, Questions, Markdown count, validator result, and HTML result. Files opened outside scope must be zero; any nonzero value is a scope violation.
 
@@ -167,6 +175,8 @@ When diagnostics are explicitly requested, follow [references/diagnostics.md](re
 - Each TC is executable at the detail supported by selected evidence; no documented path is collapsed into an abstract action.
 - TC source refs include every source role that actually contributed and no decorative sources.
 - Evidence Enrichment did not silently redefine valid normative coverage or scenario identity.
+- Source-first coverage was audited independently of clause mapping, recovered once, and verified once.
+- Cross-RF analysis was advisory; no TC was automatically merged or removed.
 - JSON contains neither `subtests` nor `automation_candidate`.
 - JSON validated before Markdown; Markdown existed before HTML.
 - JSON, Markdown, and HTML cards correspond 1:1 by TC ID.

@@ -33,12 +33,18 @@ Use 1-5 short `--done` entries. Record metrics only when observable; never estim
 7. `test_design_and_scenarios`
 8. `early_deduplication`
 9. `test_case_generation`
-10. `json_write`
-11. `validation`
-12. `validation_fixes`
-13. `markdown_render`
-14. `html_render`
-15. `final_summary`
+10. `evidence_enrichment`
+11. `execution_path_synthesis`
+12. `source_coverage_audit`
+13. `source_coverage_recovery`
+14. `source_coverage_verification`
+15. `cross_rf_audit`
+16. `json_write`
+17. `validation`
+18. `validation_fixes`
+19. `markdown_render`
+20. `html_render`
+21. `final_summary`
 
 Test data is generated with each TC, not timed as a separate phase.
 
@@ -74,6 +80,10 @@ Record these when naturally observable:
 - `diagnostics_path`
 - `artifact_root_source`
 - `detailed_execution_evidence_available`
+- `source_claims_identified`
+- `source_claims_represented`
+- `source_coverage_gaps`
+- `recovered_source_gaps`
 
 The finish helper derives these objective metrics from final JSON; do not record them again in a stage:
 
@@ -89,6 +99,15 @@ The finish helper derives these objective metrics from final JSON; do not record
 - `technical_context_contributions`
 - `implementation_evidence_contributions`
 - `test_asset_contributions`
+- `rf_groups`
+- `rf_groups_with_zero_gaps`
+- `rf_groups_with_gaps`
+- `cross_rf_tcs`
+- `same_multi_rf_coverage`
+- `duplicate_candidates`
+- `similar_but_distinct`
+- `automatic_merges` (always zero)
+- `automatic_removals` (always zero)
 
 `selected_scope_roots` and `resolved_scope_paths` are arrays of normalized paths. Destination metrics are strings; other metrics should normally be counts. Never record source text, client names, payloads, credentials, production data, or confidential identifiers.
 
