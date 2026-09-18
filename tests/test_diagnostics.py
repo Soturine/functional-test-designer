@@ -168,6 +168,48 @@ class DiagnosticsTests(unittest.TestCase):
             {warning["code"] for warning in document["warnings"]},
         )
 
+    def test_unexplained_candidate_reduction_is_rejected(self) -> None:
+        DIAGNOSTICS.start_run(self.metrics)
+        DIAGNOSTICS.begin_stage(self.metrics, "test_design_and_scenarios")
+        DIAGNOSTICS.end_stage(
+            self.metrics,
+            "test_design_and_scenarios",
+            ["Recorded an inconsistent synthetic reduction."],
+            {
+                "testable_coverage_points": 5,
+                "scenario_candidates_before_merge": 5,
+                "scenario_merges_applied": 0,
+                "scenarios_after_merge": 3,
+            },
+        )
+        for name in DIAGNOSTICS.STAGE_NAMES:
+            if name != "test_design_and_scenarios":
+                DIAGNOSTICS.skip_stage(self.metrics, name, ["Not needed for consistency test."])
+
+        with self.assertRaisesRegex(ValueError, "candidate-to-scenario reduction is inconsistent"):
+            DIAGNOSTICS.finish_run(self.metrics)
+
+    def test_fewer_candidates_than_testable_points_is_rejected(self) -> None:
+        DIAGNOSTICS.start_run(self.metrics)
+        DIAGNOSTICS.begin_stage(self.metrics, "test_design_and_scenarios")
+        DIAGNOSTICS.end_stage(
+            self.metrics,
+            "test_design_and_scenarios",
+            ["Recorded missing synthetic candidates."],
+            {
+                "testable_coverage_points": 5,
+                "scenario_candidates_before_merge": 4,
+                "scenario_merges_applied": 0,
+                "scenarios_after_merge": 4,
+            },
+        )
+        for name in DIAGNOSTICS.STAGE_NAMES:
+            if name != "test_design_and_scenarios":
+                DIAGNOSTICS.skip_stage(self.metrics, name, ["Not needed for consistency test."])
+
+        with self.assertRaisesRegex(ValueError, "lower than testable_coverage_points"):
+            DIAGNOSTICS.finish_run(self.metrics)
+
     def test_finish_requires_every_stage_to_be_addressed(self) -> None:
         DIAGNOSTICS.start_run(self.metrics)
 
@@ -257,6 +299,7 @@ class DiagnosticsTests(unittest.TestCase):
         self.assertEqual({"1": 9, "2": 1, "3": 1}, totals["step_count_histogram"])
         self.assertEqual(23, totals["atomic_source_claims_identified"])
         self.assertEqual(9, totals["multi_cp_scenarios"])
+        self.assertEqual(0, totals["possible_step_underspecification_warnings"])
 
     def test_detailed_evidence_single_step_distribution_adds_non_blocking_warning(self) -> None:
         index = DIAGNOSTICS.read_document(self.output / "test-cases.json")

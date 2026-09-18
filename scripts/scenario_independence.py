@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from dataclasses import dataclass
 from typing import Any
 
 
@@ -22,6 +23,22 @@ FORBIDDEN_MERGE_REASONS = {
     "FEWER_TESTS",
     "PERFORMANCE_OPTIMIZATION",
 }
+
+
+@dataclass(frozen=True)
+class TestIdentity:
+    """Immutable WHAT-to-test boundary passed to execution synthesis."""
+
+    id: str
+    title: str
+    scenario_ref: str
+    scenario_type: str
+    requirement_refs: tuple[str, ...]
+    coverage_point_refs: tuple[str, ...]
+    normative_source_refs: tuple[tuple[str, str], ...]
+    normative_oracle: str
+
+
 IDENTITY_FIELDS = (
     "actor",
     "setup",
@@ -31,6 +48,7 @@ IDENTITY_FIELDS = (
     "behavior",
     "input_partition",
     "oracle",
+    "normative_oracle",
     "expected_result",
     "execution_evidence",
     "reporting_purpose",
@@ -46,6 +64,7 @@ SHARED_BOUNDARY_FIELDS = (
     "trigger",
     "objective",
     "oracle",
+    "normative_oracle",
     "execution_evidence",
     "reporting_purpose",
     "pass_fail_boundary",
@@ -62,7 +81,12 @@ def candidate_from_coverage_point(
     candidate.setdefault("id", f"CAND-{coverage_point['id']}")
     candidate["coverage_point_refs"] = [coverage_point["id"]]
     candidate.setdefault("requirement_refs", [coverage_point["requirement_ref"]])
-    candidate.setdefault("source_refs", deepcopy(coverage_point.get("source_refs", [])))
+    normative_refs = deepcopy(coverage_point.get("source_refs", []))
+    contributed_refs = candidate.get("source_refs", [])
+    candidate["normative_source_refs"] = normative_refs
+    candidate["source_refs"] = normative_refs + [
+        ref for ref in contributed_refs if ref not in normative_refs
+    ]
     candidate.setdefault("claim_refs", [])
     candidate.setdefault("clause_refs", deepcopy(coverage_point.get("clause_refs", [])))
     candidate.setdefault("can_fail_independently", True)
@@ -127,6 +151,7 @@ def merge_candidates(candidates: list[dict[str, Any]]) -> tuple[list[dict[str, A
                 "coverage_point_refs",
                 "requirement_refs",
                 "source_refs",
+                "normative_source_refs",
                 "claim_refs",
                 "clause_refs",
                 "observations",
@@ -185,4 +210,85 @@ def metrics(
             item["reason"] == "TRUE_SEMANTIC_DUPLICATE" for item in decisions
         ),
         "test_cases_generated": len(scenarios),
+    }
+
+
+def build_scenario_pipeline(
+    coverage_points: list[dict[str, Any]],
+    profiles_by_coverage_point: dict[str, dict[str, Any] | list[dict[str, Any]]],
+) -> dict[str, Any]:
+    """Run the production CP -> candidate -> merge -> frozen identity boundary."""
+    testable = [item for item in coverage_points if item.get("disposition") == "TEST_CASE"]
+    candidates: list[dict[str, Any]] = []
+    for coverage_point in testable:
+        cp_id = coverage_point["id"]
+        raw_profiles = profiles_by_coverage_point.get(cp_id)
+        if raw_profiles is None:
+            raise ValueError(f"Testable Coverage Point {cp_id} has no scenario candidate profile")
+        profiles = raw_profiles if isinstance(raw_profiles, list) else [raw_profiles]
+        if not profiles:
+            raise ValueError(f"Testable Coverage Point {cp_id} has no scenario candidate profile")
+        for number, profile in enumerate(profiles, 1):
+            candidate = candidate_from_coverage_point(coverage_point, profile)
+            if len(profiles) > 1:
+                candidate["id"] = f"CAND-{cp_id}-{number:02d}"
+            candidates.append(candidate)
+
+    represented = {
+        cp_id for candidate in candidates for cp_id in candidate.get("coverage_point_refs", [])
+    }
+    missing = {item["id"] for item in testable} - represented
+    if missing:
+        raise ValueError(
+            "Testable Coverage Points disappeared before candidate review: "
+            + ", ".join(sorted(missing))
+        )
+    if len(candidates) < len(testable):
+        raise ValueError("Scenario candidate count is lower than testable Coverage Point count")
+
+    scenarios, decisions = merge_candidates(candidates)
+    reduction = len(candidates) - len(scenarios)
+    if reduction != len(decisions):
+        raise ValueError(
+            "Candidate-to-scenario reduction is not explained by explicit merge decisions"
+        )
+
+    identities: list[TestIdentity] = []
+    for number, scenario in enumerate(scenarios, 1):
+        scenario_id = f"SCN-{number:03d}"
+        tc_id = f"TC-{number:03d}"
+        scenario["id"] = scenario_id
+        scenario["title"] = scenario.get("title") or scenario.get("behavior") or scenario_id
+        scenario["type"] = scenario.get("scenario_type", "HAPPY_PATH")
+        oracle = scenario.get("normative_oracle")
+        if not isinstance(oracle, str) or not oracle.strip():
+            raise ValueError(f"{scenario_id} has no normative oracle")
+        source_refs = tuple(
+            (str(ref["source"]), str(ref["reference"]))
+            for ref in scenario.get("normative_source_refs", [])
+        )
+        identities.append(
+            TestIdentity(
+                id=tc_id,
+                title=str(scenario["title"]),
+                scenario_ref=scenario_id,
+                scenario_type=str(scenario["type"]),
+                requirement_refs=tuple(scenario.get("requirement_refs", [])),
+                coverage_point_refs=tuple(scenario.get("coverage_point_refs", [])),
+                normative_source_refs=source_refs,
+                normative_oracle=oracle,
+            )
+        )
+
+    warnings = audit_multi_cp_scenarios(scenarios)
+    observed = metrics(len(coverage_points), candidates, scenarios, decisions)
+    observed["testable_coverage_points"] = len(testable)
+    observed["possible_scenario_overcompression_warnings"] = len(warnings)
+    return {
+        "candidates": candidates,
+        "merge_decisions": decisions,
+        "scenarios": scenarios,
+        "test_identities": identities,
+        "warnings": warnings,
+        "metrics": observed,
     }

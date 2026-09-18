@@ -71,6 +71,7 @@ AGGREGATION_STRATEGIES = {
     "normative_clauses_mapped": "last",
     "unmapped_normative_clauses": "last",
     "coverage_points": "last",
+    "testable_coverage_points": "last",
     "scenario_candidates": "last",
     "scenario_candidates_before_merge": "last",
     "scenario_merge_candidates": "last",
@@ -111,6 +112,7 @@ AGGREGATION_STRATEGIES = {
     "source_files_reopened": "sum",
     "tc_generation_reuse_hits": "sum",
     "varied_execution_paths_available": "last",
+    "possible_step_underspecification_warnings": "last",
 }
 
 ABSTRACT_ACTION_PATTERNS = (
@@ -446,6 +448,20 @@ def finish_run(
     document["aggregation_strategies"] = {
         key: AGGREGATION_STRATEGIES[key] for key in observed
     }
+    testable_points = document["totals"].get("testable_coverage_points")
+    candidate_count = document["totals"].get("scenario_candidates_before_merge")
+    merge_reduction = document["totals"].get("scenario_merges_applied")
+    final_scenarios = document["totals"].get("scenarios_after_merge")
+    if isinstance(testable_points, int) and isinstance(candidate_count, int):
+        if candidate_count < testable_points:
+            raise ValueError(
+                "scenario_candidates_before_merge is lower than testable_coverage_points"
+            )
+    if all(isinstance(value, int) for value in (candidate_count, merge_reduction, final_scenarios)):
+        if candidate_count - merge_reduction != final_scenarios:
+            raise ValueError(
+                "candidate-to-scenario reduction is inconsistent with scenario_merges_applied"
+            )
     measured = [
         item
         for item in document["stages"]
