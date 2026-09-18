@@ -229,6 +229,15 @@ class ParallelEvidenceTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "not evidence"):
             analyze_source_inspection_plan(plan, {instruction.source}, lambda _: [])
 
+    def test_plan_cannot_silently_omit_a_selected_evidence_source(self) -> None:
+        plan = SourceInspectionPlan(groups=((self.assignments[0],),))
+        with self.assertRaisesRegex(ValueError, "requires one analysis owner"):
+            analyze_source_inspection_plan(
+                plan,
+                {self.assignments[0].source, self.assignments[1].source},
+                lambda _: [],
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

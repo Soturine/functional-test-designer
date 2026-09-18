@@ -184,6 +184,16 @@ class ParallelProceduralTests(unittest.TestCase):
 
 
 class AdditiveFeedbackTests(unittest.TestCase):
+    def test_feedback_without_an_approved_candidate_cannot_reduce_suite(self) -> None:
+        ready = procedural_worker(
+            identity(), pack(actions=[{"action": "Confirm the order."}])
+        )
+
+        reconciled = reconcile_additive_feedback([ready.case], (ready,))
+
+        self.assertEqual([ready.case], reconciled["test_cases"])
+        self.assertEqual(0, reconciled["metrics"]["new_tcs_appended"])
+
     def test_late_authorized_branch_appends_without_changing_existing_case(self) -> None:
         original_result = procedural_worker(
             identity(), pack(actions=[{"action": "Confirm the order."}])
@@ -218,7 +228,10 @@ class AdditiveFeedbackTests(unittest.TestCase):
 
     def test_automation_audit_returns_objective_classification(self) -> None:
         result = procedural_worker(
-            identity(), pack(actions=[{"action": "Confirm the order."}])
+            identity(), pack(
+                actions=[{"action": "Confirm the order."}],
+                test_data=[{"description": "2"}],
+            )
         )
         audit = automation_execution_audit(result.case, identity())
 

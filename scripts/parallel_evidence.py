@@ -230,6 +230,12 @@ def analyze_source_inspection_plan(
             "explicitly classified: "
             + ", ".join(instruction_as_evidence)
         )
+    unassigned = sorted(selected_sources - instructions - set(assigned_paths))
+    if unassigned:
+        raise ValueError(
+            "Every selected evidence source requires one analysis owner: "
+            + ", ".join(unassigned)
+        )
 
     began = time.perf_counter()
     records: list[EvidenceRecord] = []

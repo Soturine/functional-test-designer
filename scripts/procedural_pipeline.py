@@ -340,10 +340,18 @@ def automation_execution_audit(case: dict[str, Any], identity: TestIdentity) -> 
     reasons = []
     if case.get("status") != "READY":
         reasons.append("STATUS_NOT_READY")
+    if not identity.execution_boundary:
+        reasons.append("MISSING_EXECUTION_BOUNDARY")
     if not case.get("preconditions"):
         reasons.append("MISSING_DETERMINISTIC_SETUP")
     if not case.get("test_data"):
         reasons.append("MISSING_TEST_DATA")
+    elif any(
+        "<" in str(item.get("description", ""))
+        for item in case.get("test_data", [])
+        if isinstance(item, dict)
+    ):
+        reasons.append("PLACEHOLDER_TEST_DATA")
     if any(step.get("needs_clarification") for step in case.get("steps", [])):
         reasons.append("UNSUPPORTED_STEP")
     if hidden_subtest_warnings([case]):
