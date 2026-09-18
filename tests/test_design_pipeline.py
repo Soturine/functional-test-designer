@@ -214,6 +214,19 @@ class FullPipelineE2ETests(unittest.TestCase):
             self.assertEqual(2, diagnostic["totals"]["scenario_merges_applied"])
             self.assertEqual(3, diagnostic["totals"]["scenarios_after_merge"])
             self.assertEqual(0, diagnostic["scope_proof"]["files_opened_outside_scope"])
+            self.assertEqual(3, diagnostic["totals"]["source_items"])
+            self.assertEqual(5, diagnostic["totals"]["atomic_source_claims_identified"])
+            self.assertEqual(1, diagnostic["totals"]["compound_source_items_split"])
+            self.assertEqual(1, diagnostic["totals"]["compound_claims_reviewed"])
+            self.assertEqual(1, diagnostic["totals"]["compound_claims_split"])
+            self.assertEqual(0, diagnostic["totals"]["compound_claims_kept_atomic"])
+            self.assertEqual(5, diagnostic["totals"]["normative_clauses_extracted"])
+            self.assertEqual(5, diagnostic["totals"]["coverage_points"])
+            self.assertEqual(0, diagnostic["totals"]["possible_compound_claim_warnings"])
+            self.assertEqual(
+                ["CP-001", "CP-002", "CP-003"],
+                result["cases"][0]["coverage_point_refs"],
+            )
 
 
 if __name__ == "__main__":

@@ -15,6 +15,11 @@ from resolve_artifacts import resolve_artifact_paths
 from render_markdown import render_markdown
 from render_report import render_report
 from scenario_independence import build_scenario_pipeline
+from source_coverage_audit import (
+    audit_atomic_chain,
+    materialize_atomic_coverage,
+    review_source_items,
+)
 from validate_output import validate
 
 
@@ -153,20 +158,43 @@ def run(artifact_root: Path) -> dict[str, Any]:
         "Read each selected synthetic source once.",
         lambda values: {"source_reads": len(values), "source_rereads": 0},
     )
-    timed(metrics_path, "evidence_normalization", lambda: fixture["normative_clauses"], "Normalized atomic source claims.")
-    timed(
+    inventory = timed(
+        metrics_path,
+        "evidence_normalization",
+        lambda: review_source_items(fixture["source_items"]),
+        "Reviewed Source Items and materialized atomic source claims.",
+        lambda value: {
+            key: value[key]
+            for key in (
+                "source_items",
+                "atomic_source_claims_identified",
+                "compound_source_items_split",
+                "possible_compound_claim_warnings",
+                "compound_claims_reviewed",
+                "compound_claims_split",
+                "compound_claims_kept_atomic",
+            )
+        },
+    )
+    chain = timed(
         metrics_path,
         "coverage_point_extraction",
-        lambda: fixture["coverage_points"],
-        "Materialized atomic Coverage Points.",
-        lambda points: {"coverage_points": len(points), "normative_clauses_extracted": len(points)},
+        lambda: materialize_atomic_coverage(inventory),
+        "Materialized one Clause and Coverage Point per unique atomic behavior.",
+        lambda value: value["metrics"],
     )
-    timed(metrics_path, "coverage_extraction_audit", lambda: None, "Verified every synthetic clause has a destination.")
+    timed(
+        metrics_path,
+        "coverage_extraction_audit",
+        lambda: audit_atomic_chain(inventory, chain),
+        "Verified source-first Claim to Clause to Coverage Point lineage.",
+        lambda value: value,
+    )
     timed(metrics_path, "testability_and_questions", lambda: None, "Confirmed every benchmark Coverage Point is testable.")
     design = timed(
         metrics_path,
         "test_design_and_scenarios",
-        lambda: build_scenario_pipeline(fixture["coverage_points"], fixture["profiles"]),
+        lambda: build_scenario_pipeline(chain["coverage_points"], fixture["profiles"]),
         "Ran candidate-first independence review and froze Test Case identities.",
         lambda result: result["metrics"],
     )
@@ -187,13 +215,35 @@ def run(artifact_root: Path) -> dict[str, Any]:
         lambda values: {"steps_generated": sum(len(case["steps"]) for case in values)},
     )
     timed(metrics_path, "test_case_generation", lambda: cases, "Materialized frozen identities as schema-1.2 Test Cases.", lambda values: {"test_cases_generated": len(values)})
-    for name in ("source_coverage_audit", "source_coverage_recovery", "source_coverage_verification", "cross_rf_audit"):
-        diagnostics.skip_stage(metrics_path, name, ["Covered by existing focused regression tests; no recovery was needed."])
+    timed(
+        metrics_path,
+        "source_coverage_audit",
+        lambda: audit_atomic_chain(inventory, chain),
+        "Compared the independent source-first inventory with materialized coverage.",
+        lambda value: value,
+    )
+    diagnostics.skip_stage(
+        metrics_path,
+        "source_coverage_recovery",
+        ["No source coverage gap required the bounded recovery pass."],
+    )
+    timed(
+        metrics_path,
+        "source_coverage_verification",
+        lambda: audit_atomic_chain(inventory, chain),
+        "Verified source-first lineage after the no-op recovery decision.",
+        lambda value: value,
+    )
+    diagnostics.skip_stage(
+        metrics_path,
+        "cross_rf_audit",
+        ["No cross-requirement overlap exists in this focused synthetic fixture."],
+    )
 
     cases_by_cp = {
         cp_id: case["id"] for case in cases for cp_id in case["coverage_point_refs"]
     }
-    coverage_points = json.loads(json.dumps(fixture["coverage_points"]))
+    coverage_points = json.loads(json.dumps(chain["coverage_points"]))
     for point in coverage_points:
         point["target_refs"] = [cases_by_cp[point["id"]]]
     scenarios = [
@@ -220,7 +270,7 @@ def run(artifact_root: Path) -> dict[str, Any]:
         "generated_at": "2026-01-01T00:00:00Z",
         "sources": fixture["sources"],
         "requirements": fixture["requirements"],
-        "normative_clauses": fixture["normative_clauses"],
+        "normative_clauses": chain["normative_clauses"],
         "findings": fixture["findings"],
         "coverage_points": coverage_points,
         "scenarios": scenarios,

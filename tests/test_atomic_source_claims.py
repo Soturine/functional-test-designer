@@ -57,6 +57,133 @@ class AtomicSourceClaimTests(unittest.TestCase):
         self.assertEqual("POSSIBLE_COMPOUND_NORMATIVE_CLAIM", warnings[0]["code"])
         self.assertEqual("Show status and record history.", clause["normalized_claim"])
 
+    def test_raw_source_items_are_reviewed_before_claims_are_materialized(self) -> None:
+        source_items = json.loads(
+            (ROOT / "benchmarks/source-atomicity/source-items.json").read_text(encoding="utf-8")
+        )
+
+        inventory = AUDIT.review_source_items(source_items)
+        chain = AUDIT.materialize_atomic_coverage(inventory)
+        audit = AUDIT.audit_atomic_chain(inventory, chain)
+
+        claims_by_requirement = {}
+        for claim in inventory["claims"]:
+            claims_by_requirement.setdefault(claim["requirement_ref"], []).append(claim)
+        self.assertEqual(
+            {"REQ-001": 2, "REQ-002": 3, "REQ-003": 2, "REQ-004": 4,
+             "REQ-005": 3, "REQ-006": 3, "REQ-007": 3, "REQ-008": 2,
+             "REQ-009": 2, "REQ-010": 1},
+            {key: len(value) for key, value in claims_by_requirement.items()},
+        )
+        self.assertEqual(25, inventory["atomic_source_claims_identified"])
+        self.assertEqual(24, len(chain["normative_clauses"]))
+        self.assertEqual(24, len(chain["coverage_points"]))
+        self.assertEqual(1, chain["metrics"]["atomic_claims_deduplicated"])
+        self.assertEqual(25, audit["source_claims_represented"])
+
+    def test_suspicious_source_item_cannot_bypass_explicit_review(self) -> None:
+        item = {
+            "id": "SRC-001", "requirement_ref": "REQ-001",
+            "source_text": "The system shows an alert and blocks confirmation.",
+            "source_refs": [{"source": "requirements.md", "reference": "R1"}],
+        }
+
+        with self.assertRaisesRegex(ValueError, "explicit atomicity_review"):
+            AUDIT.review_source_items([item])
+
+    def test_compound_keep_atomic_requires_a_valid_semantic_reason(self) -> None:
+        item = {
+            "id": "SRC-001", "requirement_ref": "REQ-001",
+            "source_text": "The system shows an alert and blocks confirmation.",
+            "source_refs": [{"source": "requirements.md", "reference": "R1"}],
+            "atomicity_review": {
+                "decision": "KEEP_ATOMIC", "reason": "SAME_EVENT",
+                "claims": [{"normalized_claim": "The system shows an alert and blocks confirmation."}],
+            },
+        }
+
+        with self.assertRaisesRegex(ValueError, "forbidden KEEP_ATOMIC reason"):
+            AUDIT.review_source_items([item])
+
+    def test_inseparable_value_can_be_kept_with_an_explicit_reason(self) -> None:
+        item = json.loads(
+            (ROOT / "benchmarks/source-atomicity/source-items.json").read_text(encoding="utf-8")
+        )[-1]
+
+        inventory = AUDIT.review_source_items([item])
+
+        self.assertEqual(1, inventory["atomic_source_claims_identified"])
+        self.assertEqual("INSEPARABLE_VALUE", item["atomicity_review"]["reason"])
+
+    def test_compound_detection_covers_effects_alternatives_dimensions_and_limits(self) -> None:
+        items = json.loads(
+            (ROOT / "benchmarks/source-atomicity/source-items.json").read_text(encoding="utf-8")
+        )
+        texts = {item["id"]: item["source_text"] for item in items}
+
+        for item_id in ("SRC-A", "SRC-B", "SRC-C", "SRC-D", "SRC-E", "SRC-F", "SRC-G", "SRC-H"):
+            with self.subTest(item=item_id):
+                self.assertTrue(AUDIT.compound_signals(texts[item_id]))
+
+    def test_semantic_equivalence_preserves_both_source_refs(self) -> None:
+        items = json.loads(
+            (ROOT / "benchmarks/source-atomicity/source-items.json").read_text(encoding="utf-8")
+        )
+        inventory = AUDIT.review_source_items([item for item in items if item["id"].startswith("SRC-I")])
+        chain = AUDIT.materialize_atomic_coverage(inventory)
+
+        self.assertEqual(1, len(chain["normative_clauses"]))
+        self.assertEqual(2, len(chain["normative_clauses"][0]["source_refs"]))
+
+    def test_atomic_chain_gate_rejects_a_missing_claim_destination(self) -> None:
+        source_items = json.loads(
+            (ROOT / "benchmarks/source-atomicity/source-items.json").read_text(encoding="utf-8")
+        )[:1]
+        inventory = AUDIT.review_source_items(source_items)
+        chain = AUDIT.materialize_atomic_coverage(inventory)
+        chain["claim_destinations"].pop("CLAIM-002")
+
+        with self.assertRaisesRegex(ValueError, "Atomic claims disappeared"):
+            AUDIT.audit_atomic_chain(inventory, chain)
+
+    def test_split_cannot_leave_a_residual_compound_claim_unreviewed(self) -> None:
+        item = {
+            "id": "SRC-001", "requirement_ref": "REQ-001",
+            "source_text": "The system shows an alert, blocks confirmation, and records an audit entry.",
+            "source_refs": [{"source": "requirements.md", "reference": "R1"}],
+            "atomicity_review": {
+                "decision": "SPLIT",
+                "claims": [
+                    {"normalized_claim": "The system shows an alert and blocks confirmation."},
+                    {"normalized_claim": "The system records an audit entry."},
+                ],
+            },
+        }
+
+        with self.assertRaisesRegex(ValueError, "remains compound after SPLIT"):
+            AUDIT.review_source_items([item])
+
+    def test_non_testable_claim_keeps_an_explicit_destination_without_a_coverage_point(self) -> None:
+        item = {
+            "id": "SRC-001", "requirement_ref": "REQ-001",
+            "source_text": "The archival period is configurable.",
+            "source_refs": [{"source": "requirements.md", "reference": "R1"}],
+            "atomicity_review": {
+                "decision": "KEEP_ATOMIC", "reason": "SINGLE_OBSERVABLE_OUTCOME",
+                "claims": [{
+                    "normalized_claim": "The archival period is configurable.",
+                    "destination_type": "QUESTION", "destination_id": "Q-001",
+                }],
+            },
+        }
+
+        inventory = AUDIT.review_source_items([item])
+        chain = AUDIT.materialize_atomic_coverage(inventory)
+
+        self.assertEqual([], chain["coverage_points"])
+        self.assertEqual("QUESTION", chain["normative_clauses"][0]["destination_type"])
+        self.assertEqual(1, AUDIT.audit_atomic_chain(inventory, chain)["source_claims_represented"])
+
 
 if __name__ == "__main__":
     unittest.main()
