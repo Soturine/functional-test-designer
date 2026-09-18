@@ -10,7 +10,19 @@ A skill foi feita para ser simples de usar: o usuário informa o que quer analis
 
 Autoridade funcional define o comportamento obrigatório. Outras evidências explicitamente selecionadas podem enriquecer caminhos de execução, dados, observabilidade e desenho de cenários sem se tornarem verdade normativa. Um TC pode conter vários steps ordenados quando um único cenário independente exige uma sequência para alcançar o resultado.
 
-Cada cenário com execução e Pass/Fail independentes gera seu próprio TC. Vários steps pertencem ao mesmo TC somente quando formam um fluxo sequencial e os passos posteriores dependem do estado produzido pelos anteriores.
+Claims e Coverage Points permanecem atômicos, enquanto um TC representa uma execução independentemente repetível. Várias assertions observáveis da mesma execução podem compartilhar um TC; triggers, inputs, estados, branches, permissões ou plataformas independentes continuam separados. Vários steps pertencem ao mesmo TC somente quando formam um fluxo sequencial e os passos posteriores dependem do estado produzido pelos anteriores. O output nunca usa subtests.
+
+```text
+confirmar uma operação uma vez
+→ verificar estado
+→ verificar saldo
+→ verificar auditoria
+= 1 TC com múltiplas assertions
+
+finalizar / reverter / cancelar
+= 3 execuções independentes
+= 3 TCs
+```
 
 ## Como funciona
 
@@ -19,19 +31,23 @@ Fontes selecionadas pelo usuário
             ↓
         Scope Lock
             ↓
-Entendimento do papel de cada fonte
+Coleta/análise de evidência
+(paralela quando seguro,
+ ordenada quando solicitado)
             ↓
-      Coverage Points
+       Evidence Barrier
             ↓
-         Cenários
+  Autoridade semântica central
             ↓
-  Test Cases independentes
+ Atomic Claims → Clauses → CPs
             ↓
-      Validação JSON
+      Scenario Cohesion
             ↓
- Markdown + Mermaid por TC
+     Test Cases → Freeze
             ↓
-     Relatório HTML offline
+ Enriquecimento procedural
+            ↓
+ JSON / Markdown / HTML offline
 ```
 
 Uma pasta selecionada pode ser analisada recursivamente apenas dentro dela. Imports, links, dependências, arquivos vizinhos e outras áreas do projeto não expandem o escopo automaticamente.
@@ -80,6 +96,48 @@ Diagnostic: true.
 
 A skill pode analisar, quando explicitamente selecionados, requisitos, especificações, documentação funcional/técnica, código-fonte, configuração, Test Cases existentes, planos de teste e outros artefatos relevantes à tarefa.
 
+Quando várias fontes são selecionadas, a skill pode analisá-las em paralelo quando não existe dependência entre elas. Se o usuário informar uma ordem no pedido ou em um arquivo de instruções, essa ordem é respeitada. Fontes colocadas juntas continuam podendo ser processadas simultaneamente; etapas explicitamente posteriores aguardam as anteriores. A ordem de leitura controla somente quando coletar evidência: ela não altera o papel nem a prioridade normativa de nenhuma fonte.
+
+Sem ordem explícita:
+
+```text
+Use a functional-test-designer.
+
+Analise somente:
+- docs/requirements;
+- src/orders;
+- docs/operator.
+
+Gere os Test Cases e aponte divergências.
+```
+
+Com ordem natural no pedido:
+
+```text
+Analise somente docs/requirements, src/orders e docs/operator.
+
+Primeiro analise os requisitos.
+Depois o código de orders.
+Por último consulte a documentação do operador.
+```
+
+Grupos também podem ser descritos naturalmente:
+
+```text
+Primeiro analise PRD e ADR.
+Depois analise o código.
+Por último consulte manual e configuração.
+```
+
+Uma instrução também pode vir em arquivo:
+
+```text
+Use as fontes selecionadas para gerar os Test Cases.
+Siga a ordem de análise descrita em analysis-order.txt.
+```
+
+Nesse caso, `analysis-order.txt` orienta o trabalho e não vira requisito funcional automaticamente. A ordem nunca adiciona uma fonte que não esteja no escopo selecionado.
+
 ## Saída
 
 Os artefatos são salvos no destino exato informado pelo usuário ou, na ausência dele, em um workspace confiável. A pasta da skill e o projeto analisado nunca são usados automaticamente como destino, e nenhuma pasta extra chamada `functional-test-designer` é acrescentada ao caminho escolhido.
@@ -123,7 +181,7 @@ Quando `Diagnostic: true` é usado, métricas separadas são escritas em `diagno
 
 Antes da finalização, uma auditoria source-first por RF/RN procura claims normativos omitidos independentemente do mapeamento clause→CP; uma única recuperação passa novamente pelo pipeline completo. A análise Cross-RF apenas sinaliza sobreposição e possíveis duplicatas para revisão, sem mesclar ou remover TCs automaticamente.
 
-Claims preservam efeitos e alternativas observáveis de forma atômica, inclusive regras RN/CU explicitamente aplicáveis e disponíveis no escopo. Cada CP testável passa por um candidate independente e toda redução candidate→Scenario exige uma decisão explícita antes que a identidade do TC seja congelada. Depois desse freeze, Evidence Packs enriquecem somente preconditions, dados, caminho, Steps e observabilidade; o Expected final continua pertencendo à autoridade normativa.
+Claims preservam efeitos e alternativas observáveis de forma atômica, inclusive regras RN/CU explicitamente aplicáveis e disponíveis no escopo. Cada CP testável passa por um candidate independente e toda redução candidate→Scenario exige uma decisão explícita antes que a identidade do TC seja congelada. Depois desse freeze, Evidence Packs enriquecem somente preconditions, dados, caminho, Steps, provenance e observabilidade; o Expected final continua pertencendo à autoridade normativa. O Test Design define o que testar e congela a identidade do TC antes que evidência técnica ou de interface detalhe como uma pessoa executa o caso. Uma lacuna de procedimento permanece visível como Question/`NEEDS_REVIEW`, sem menus, botões ou endpoints inventados.
 
 Steps seguem a complexidade natural do caminho documentado: navegação, busca, seleção, trigger e observação permanecem ações operacionais separadas quando a sequência suportada exige isso, enquanto um comportamento de uma única ação pode continuar com um Step. O relatório offline permanece uma projeção determinística e leve do JSON validado.
 
@@ -169,6 +227,8 @@ scripts/render_report.py       Relatório HTML offline
 scripts/diagnostics.py         Diagnóstico opcional de execução
 scripts/scenario_independence.py  Candidate-first e freeze da identidade
 scripts/procedural_execution.py   Síntese procedural pós-freeze
+scripts/parallel_evidence.py      Coleta paralela e grupos ordenados
+scripts/procedural_pipeline.py    Workers procedurais e feedback aditivo
 examples/                      Exemplo sintético multi-source
 tests/                         Testes de escopo, contrato e renderização
 ```

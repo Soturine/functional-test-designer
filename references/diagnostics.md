@@ -110,6 +110,32 @@ Record these when naturally observable:
 - `source_files_reopened`
 - `tc_generation_reuse_hits`
 - `varied_execution_paths_available`
+- `source_analysis_workers_started`
+- `source_analysis_workers_completed`
+- `source_analysis_max_concurrency`
+- `source_analysis_groups`
+- `source_analysis_group_barriers`
+- `source_analysis_order_constraints`
+- `source_analysis_parallel_groups`
+- `source_analysis_serialized_groups`
+- `evidence_records_generated`
+- `evidence_records_by_role`
+- `stage_wall_clock_seconds`
+- `aggregate_worker_seconds`
+- `procedural_tasks_enqueued`
+- `procedural_tasks_completed`
+- `procedural_max_concurrency`
+- `procedure_ready`
+- `procedure_gaps`
+- `procedural_ambiguities`
+- `procedural_divergences`
+- `independent_branches_detected`
+- `unsupported_steps`
+- `new_tc_candidates`
+- `new_tcs_appended`
+- `pending_additive_follow_up`
+- `procedural_wall_clock_seconds`
+- `procedural_aggregate_worker_seconds`
 
 The finish helper derives these objective metrics from final JSON; do not record them again in a stage:
 
@@ -119,6 +145,7 @@ The finish helper derives these objective metrics from final JSON; do not record
 - `step_count_histogram`
 - `multi_action_step_warnings`
 - `possible_step_underspecification_warnings`
+- `hidden_subtest_warnings`
 - `possible_step_template_bias`
 - `test_cases_with_execution_enrichment`
 - `test_cases_with_multiple_source_roles`
@@ -147,7 +174,7 @@ The helper derives step distribution, selected-role contributions, multi-role pr
 
 Compound-claim and multi-action heuristics are advisory and never rewrite output. `possible_step_underspecification_warnings` is the explicit metric name for the existing `POSSIBLE_MULTI_ACTION_STEP` audit; it does not create a duplicate warning type. Record `varied_execution_paths_available=true` only when selected evidence actually contains paths of different supported complexity; a uniform distribution then adds `POSSIBLE_STEP_TEMPLATE_BIAS`. Evidence-map counters measure real cache events, not estimated savings.
 
-Scenario-independence metrics describe the candidate-first review; they are not scores or count targets. `scenario_merge_candidates` and `scenario_merges_applied` count only decisions with an objective internal reason such as `INSEPARABLE_SAME_EVENT`, `SHARED_PASS_FAIL_BOUNDARY`, or `TRUE_SEMANTIC_DUPLICATE`. `multi_cp_scenarios` is derived from final cases. A nonzero `possible_scenario_overcompression_warnings` adds the advisory `POSSIBLE_SCENARIO_OVERCOMPRESSION` warning and never rewrites output automatically.
+Scenario-independence metrics describe the candidate-first review; they are not scores or count targets. `scenario_merge_candidates` and `scenario_merges_applied` count only decisions with an objective internal reason such as `SHARED_EXECUTION_OBSERVATIONS`, `INSEPARABLE_SAME_EVENT`, `SHARED_PASS_FAIL_BOUNDARY`, or `TRUE_SEMANTIC_DUPLICATE`. `multi_cp_scenarios` is derived from final cases. A nonzero `possible_scenario_overcompression_warnings` adds the advisory `POSSIBLE_SCENARIO_OVERCOMPRESSION` warning and never rewrites output automatically.
 
 The finish gate rejects fewer candidates than testable Coverage Points and requires `scenario_candidates_before_merge - scenario_merges_applied = scenarios_after_merge`. Each applied merge counts one actual candidate reduction, so N-to-1 merges contribute N-1. This is structural accounting, not a target ratio.
 

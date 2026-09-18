@@ -4,9 +4,9 @@ Read this reference only after final Scenarios have produced immutable Test iden
 
 ## Frozen Boundary
 
-Freeze the TC ID, title, Scenario relation, requirement refs, Coverage Point refs, normative source refs, and normative oracle before synthesis. `scripts/procedural_execution.py` accepts that immutable identity plus one in-scope Evidence Pack. Its identity guard rejects changes to those relations or replacement of the final normative oracle.
+Freeze the TC ID, title, objective, material preconditions, test-data partition, assertions, execution boundary, Scenario relation, requirement refs, Coverage Point refs, normative source refs, and normative oracle before synthesis. `scripts/procedural_execution.py` accepts that immutable identity plus one in-scope Evidence Pack. Its identity guard rejects changes to those relations or replacement of the final normative oracle.
 
-If an action is actually an independent variant, return it to Scenario design. Do not split or merge tests after the freeze.
+If an action is actually an independent variant, report `INDEPENDENT_BRANCH_DETECTED` to the main authority. Do not split or merge frozen tests. One bounded feedback pass may append a new independently justified Scenario and TC without modifying the existing suite.
 
 ## Procedural Model
 

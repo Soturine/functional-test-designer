@@ -34,7 +34,7 @@ Finalize Questions only after searching all pertinent selected evidence. Ask onl
 
 Start from legitimate preconditions, follow the supported path to the trigger, and end at an observable result. A tester with basic product knowledge should not need to guess a path already documented in the selected evidence.
 
-Scenario identity and the normative oracle must already be frozen. Use the internal procedural synthesis contract in [procedural-execution.md](procedural-execution.md); execution enrichment may not alter Test Case count, Scenario relations, requirement refs, Coverage Point refs, or the normative oracle.
+Scenario identity and the normative oracle must already be frozen. Use the internal procedural synthesis contract in [procedural-execution.md](procedural-execution.md); execution enrichment may not alter an existing Test Case, its Scenario relations, requirement refs, Coverage Point refs, or normative oracle. A procedural worker can only report a late independent candidate. The main authority may append a separately justified Scenario and TC during one bounded additive pass; it never removes, merges, renumbers, or rewrites frozen cases.
 
 - Atomic TC does not mean single-step TC. Keep dependent navigation and actions in the same case.
 - A condition with independent setup, execution, evidence, oracle, or Pass/Fail remains a separate TC.
