@@ -13,6 +13,8 @@ sys.path.insert(0, str(ROOT / "scripts"))
 from parallel_evidence import (  # noqa: E402
     EvidenceRecord,
     SourceAssignment,
+    SourceInspectionPlan,
+    analyze_source_inspection_plan,
     analyze_selected_sources,
 )
 
@@ -110,6 +112,122 @@ class ParallelEvidenceTests(unittest.TestCase):
 
         self.assertEqual("requirements.md", by_role["FUNCTIONAL_AUTHORITY"][0].source)
         self.assertEqual("implementation.py", by_role["IMPLEMENTATION_EVIDENCE"][0].source)
+
+    def test_ordered_groups_wait_for_the_preceding_barrier(self) -> None:
+        timeline: dict[str, dict[str, float]] = {}
+        lock = threading.Lock()
+
+        def analyzer(assignment: SourceAssignment) -> list[EvidenceRecord]:
+            with lock:
+                timeline.setdefault(assignment.source, {})["start"] = time.perf_counter()
+            time.sleep(0.02)
+            with lock:
+                timeline[assignment.source]["end"] = time.perf_counter()
+            return [EvidenceRecord(
+                source=assignment.source,
+                source_role=assignment.source_role,
+                source_ref=assignment.source_ref,
+                source_excerpt_ref="selected excerpt",
+                observation_or_claim="Role-scoped evidence.",
+            )]
+
+        plan = SourceInspectionPlan(groups=tuple((item,) for item in self.assignments[:3]))
+        result = analyze_source_inspection_plan(
+            plan, {item.source for item in self.assignments[:3]}, analyzer, max_workers=3
+        )
+
+        self.assertGreaterEqual(
+            timeline["implementation.py"]["start"], timeline["requirements.md"]["end"]
+        )
+        self.assertGreaterEqual(
+            timeline["operator-guide.md"]["start"], timeline["implementation.py"]["end"]
+        )
+        self.assertEqual(3, result.metrics["source_analysis_groups"])
+        self.assertEqual(2, result.metrics["source_analysis_group_barriers"])
+        self.assertEqual(3, result.metrics["source_analysis_serialized_groups"])
+
+    def test_grouped_order_allows_overlap_only_inside_each_group(self) -> None:
+        timeline: dict[str, dict[str, float]] = {}
+        lock = threading.Lock()
+
+        def analyzer(assignment: SourceAssignment) -> list[EvidenceRecord]:
+            with lock:
+                timeline.setdefault(assignment.source, {})["start"] = time.perf_counter()
+            time.sleep(0.03)
+            with lock:
+                timeline[assignment.source]["end"] = time.perf_counter()
+            return [EvidenceRecord(
+                source=assignment.source,
+                source_role=assignment.source_role,
+                source_ref=assignment.source_ref,
+                source_excerpt_ref="selected excerpt",
+                observation_or_claim="Observed evidence.",
+            )]
+
+        plan = SourceInspectionPlan(groups=(
+            tuple(self.assignments[:2]),
+            (self.assignments[2],),
+            tuple(self.assignments[3:]),
+        ))
+        result = analyze_source_inspection_plan(
+            plan, {item.source for item in self.assignments}, analyzer, max_workers=5
+        )
+
+        self.assertLess(
+            timeline["implementation.py"]["start"], timeline["requirements.md"]["end"]
+        )
+        first_end = max(timeline[item.source]["end"] for item in self.assignments[:2])
+        self.assertGreaterEqual(timeline["operator-guide.md"]["start"], first_end)
+        self.assertGreaterEqual(
+            min(timeline[item.source]["start"] for item in self.assignments[3:]),
+            timeline["operator-guide.md"]["end"],
+        )
+        self.assertEqual(2, result.metrics["source_analysis_parallel_groups"])
+        self.assertGreater(
+            result.metrics["aggregate_worker_seconds"],
+            result.metrics["stage_wall_clock_seconds"] / 2,
+        )
+
+    def test_instruction_text_controls_scheduling_without_becoming_authority(self) -> None:
+        instruction = "analysis-order.txt"
+        plan = SourceInspectionPlan(
+            groups=((self.assignments[1],), (self.assignments[0],)),
+            instruction_sources=(instruction,),
+        )
+        result = analyze_source_inspection_plan(
+            plan,
+            {instruction, self.assignments[0].source, self.assignments[1].source},
+            lambda assignment: [EvidenceRecord(
+                source=assignment.source,
+                source_role=assignment.source_role,
+                source_ref=assignment.source_ref,
+                source_excerpt_ref="line 1",
+                observation_or_claim="Evidence retains its declared source role.",
+            )],
+        )
+
+        self.assertNotIn(instruction, result.source_owners)
+        self.assertEqual(
+            ["IMPLEMENTATION_EVIDENCE", "FUNCTIONAL_AUTHORITY"],
+            [record.source_role for record in result.records],
+        )
+
+    def test_inspection_plan_never_expands_selected_scope(self) -> None:
+        plan = SourceInspectionPlan(groups=((self.assignments[0],), (self.assignments[2],)))
+        with self.assertRaisesRegex(ValueError, "outside selected scope"):
+            analyze_source_inspection_plan(
+                plan, {self.assignments[0].source}, lambda _: []
+            )
+
+    def test_instruction_file_cannot_silently_enter_evidence_groups(self) -> None:
+        instruction = SourceAssignment(
+            "analysis-order.txt", "FUNCTIONAL_AUTHORITY", "whole file"
+        )
+        plan = SourceInspectionPlan(
+            groups=((instruction,),), instruction_sources=(instruction.source,)
+        )
+        with self.assertRaisesRegex(ValueError, "not evidence"):
+            analyze_source_inspection_plan(plan, {instruction.source}, lambda _: [])
 
 
 if __name__ == "__main__":
