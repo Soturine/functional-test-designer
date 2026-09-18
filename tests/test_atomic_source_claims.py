@@ -76,6 +76,9 @@ class AtomicSourceClaimTests(unittest.TestCase):
             {key: len(value) for key, value in claims_by_requirement.items()},
         )
         self.assertEqual(25, inventory["atomic_source_claims_identified"])
+        self.assertEqual(9, inventory["compound_claims_reviewed"])
+        self.assertEqual(8, inventory["compound_claims_split"])
+        self.assertEqual(1, inventory["compound_claims_kept_atomic"])
         self.assertEqual(24, len(chain["normative_clauses"]))
         self.assertEqual(24, len(chain["coverage_points"]))
         self.assertEqual(1, chain["metrics"]["atomic_claims_deduplicated"])

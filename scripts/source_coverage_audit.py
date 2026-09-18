@@ -69,6 +69,8 @@ def compound_signals(text: str) -> list[str]:
         signals.append("MULTIPLE_SEARCH_OR_FILTER_DIMENSIONS")
     if len(REPEATED_TIME_LIMIT.findall(text)) >= 2:
         signals.append("MULTIPLE_TIME_LIMITS")
+    if "/" in text and re.search(r"\b(?:pair|par)\b", text, re.IGNORECASE):
+        signals.append("COMPOSITE_VALUE_PAIR")
     if (
         len(verbs) == 1
         and COMPOUND_CONNECTOR.search(text)
