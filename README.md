@@ -123,7 +123,9 @@ Quando `Diagnostic: true` é usado, métricas separadas são escritas em `diagno
 
 Antes da finalização, uma auditoria source-first por RF/RN procura claims normativos omitidos independentemente do mapeamento clause→CP; uma única recuperação passa novamente pelo pipeline completo. A análise Cross-RF apenas sinaliza sobreposição e possíveis duplicatas para revisão, sem mesclar ou remover TCs automaticamente.
 
-Claims preservam efeitos e alternativas observáveis de forma atômica, inclusive regras RN/CU explicitamente aplicáveis e disponíveis no escopo. Steps seguem a complexidade natural do caminho documentado, enquanto o relatório offline permanece uma projeção determinística e leve do JSON validado.
+Claims preservam efeitos e alternativas observáveis de forma atômica, inclusive regras RN/CU explicitamente aplicáveis e disponíveis no escopo. Cada CP testável passa por um candidate independente e toda redução candidate→Scenario exige uma decisão explícita antes que a identidade do TC seja congelada. Depois desse freeze, Evidence Packs enriquecem somente preconditions, dados, caminho, Steps e observabilidade; o Expected final continua pertencendo à autoridade normativa.
+
+Steps seguem a complexidade natural do caminho documentado: navegação, busca, seleção, trigger e observação permanecem ações operacionais separadas quando a sequência suportada exige isso, enquanto um comportamento de uma única ação pode continuar com um Step. O relatório offline permanece uma projeção determinística e leve do JSON validado.
 
 Subtests encontrados em artefatos legados são normalizados: condições independentes viram TCs e ações sequenciais dependentes viram steps. O output final nunca contém `subtests`.
 
@@ -147,6 +149,12 @@ python scripts/render_report.py examples/expected-output
 python -m unittest discover -s tests -v
 ```
 
+O E2E sintético completo também pode ser executado em um artifact root temporário:
+
+```bash
+python scripts/run_synthetic_e2e.py <artifact-root>
+```
+
 ## Estrutura do repositório
 
 ```text
@@ -159,6 +167,8 @@ scripts/validate_output.py     Validação JSON e cross-file
 scripts/render_markdown.py     Markdown determinístico por TC
 scripts/render_report.py       Relatório HTML offline
 scripts/diagnostics.py         Diagnóstico opcional de execução
+scripts/scenario_independence.py  Candidate-first e freeze da identidade
+scripts/procedural_execution.py   Síntese procedural pós-freeze
 examples/                      Exemplo sintético multi-source
 tests/                         Testes de escopo, contrato e renderização
 ```

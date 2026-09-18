@@ -100,9 +100,13 @@ Use this order: atomic CPs -> independent candidates -> independence review -> c
 
 Scenario and TC count are emergent. Shared requirement, screen, setup, actor, Evidence Pack, navigation, title, source, or expected wording never justifies merging by itself. If two behaviors can fail independently, preserve independent reporting. Do not optimize for fewer or more Test Cases.
 
+For the real generation path, materialize the working CP profiles through `build_scenario_pipeline` in `scripts/scenario_independence.py`; do not author final Scenarios directly from grouped CPs. The gate requires at least one candidate per testable CP, records every candidate reduction as an explicit merge decision, audits every internal multi-CP Scenario, assigns final Scenario IDs, and returns immutable `TestIdentity` values. A run with fewer candidates than testable CPs or an unexplained candidate-to-Scenario reduction is invalid.
+
 ### 7. Enrich Evidence and Synthesize Execution Paths
 
 Read [references/evidence-enrichment.md](references/evidence-enrichment.md) when selected technical context, implementation evidence, or QA assets can contribute execution detail, data, observability, branches, or prior coverage. Build each selected-source entry and shared scenario-family Evidence Pack once, then reuse it during generation, enrichment, and audits. For every final scenario, consult this compact in-scope evidence map before materialization. Do not create a public cache or reopen every file per TC.
+
+Read [references/procedural-execution.md](references/procedural-execution.md) before materializing Steps. Scenario design returns immutable Test identities first. Then use `synthesize_test_case` in `scripts/procedural_execution.py` with the in-memory Evidence Pack. Procedural synthesis may add execution fields but must pass the identity guard and must retain the normative oracle as the final expected result.
 
 Keep the normative oracle anchored to functional authority while using genuinely contributing selected evidence for preconditions, concrete local test data, ordered actions, intermediate observations, opportunity analysis, Findings, and minimal Questions. Add those contributing sources to the TC's `source_refs`; never add decorative provenance.
 
@@ -110,7 +114,7 @@ Synthesize a reproducible path from legitimate preconditions through dependent a
 
 Use natural step granularity, never a fixed step template. Split a documented operational sequence when order, intermediate state, or separate failure points matter. Keep one coherent action together and never split cursor movement or keystrokes merely to increase the count.
 
-Evidence Enrichment normally changes execution fields and presentation, never valid normative normalization, clauses, CPs, scenario identity, TC independence, oracle, status, or disposition. Treat such a change as a regression unless it fixes a demonstrated pre-existing defect.
+Evidence Enrichment normally changes execution fields and presentation, never valid normative normalization, clauses, CPs, scenario identity, TC independence, normative oracle, or disposition. Status may reflect a newly exposed unsupported intermediate observation, but it must not change merely because enrichment rewrote test identity. Treat any identity change as a regression unless it fixes a demonstrated pre-existing defect upstream of the freeze.
 
 ### 8. Generate Independent Test Cases
 
