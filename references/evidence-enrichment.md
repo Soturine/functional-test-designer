@@ -47,6 +47,8 @@ Use natural step granularity. One step is valid when one coherent action reaches
 
 Build each selected source entry and scenario-family Evidence Pack once in the run-local evidence map. Reuse shared actor, setup, navigation, constraints, observability, and source refs across related TCs, then specialize only scenario-specific parts. Reopen a source only for truncation, unresolved ambiguity, or a verification detail not retained in the map. Batch design by RF/scenario family while validating every TC independently.
 
+Evidence reuse optimizes context retrieval, not Scenario or Test Case count. A shared requirement, family, actor, setup, navigation, source, or Evidence Pack never justifies merging independently reportable Pass/Fail boundaries.
+
 ## Test Data
 
 Use concrete synthetic values when selected constraints make them defensible: explicit boundaries, lengths, enums, states, and formats. Apply BVA/EP selectively and record a technique tag only when it materially shaped the case.

@@ -2,7 +2,7 @@
 
 Read this reference only when ranges, states, interacting conditions, or many combinations justify a formal technique. Techniques improve scenario selection; they do not create extra output structures, multiply Test Cases, or supply missing expected results.
 
-Test Design techniques are reasoning tools, not output multiplication tools. Analyze broadly, then eliminate redundant scenarios, keep coherent observations together, and preserve separate TCs only for behavior, risk, flow, evidence, or Pass/Fail results that are genuinely independent. Prefer a few strong TCs to many nearly identical ones.
+Test Design techniques are reasoning tools, not output multiplication tools. Analyze broadly, preserve independent Pass/Fail boundaries, create independently reviewable candidates, deduplicate only true duplicates, and merge only observations proven inseparable within one event. Scenario and TC count are emergent; never optimize for fewer or more cases.
 
 ## Selection Guide
 
@@ -37,7 +37,9 @@ Use pairwise to reduce a Cartesian product, not to combine independent results i
 
 ## Coverage and Deduplication
 
-Coverage Points retain every normative behavior even when several points map to one coherent TC. Deduplicate only when behavior, setup, essential action, expected result, oracle, and evidence are all equivalent. Do not merge different permissions, actors, inputs, transitions, bounds, failure modes, recovery paths, or oracles merely to minimize the case count. Deduplication removes duplicates; it does not compress independent Pass/Fail results.
+Start with at least one independently reviewable candidate for every atomic Coverage Point. Review independence before any merge. Deduplicate only when actor, setup, preconditions, state, trigger, behavior, input or partition, expected result, oracle, execution evidence, and reporting purpose are all equivalent. Several CPs may share a scenario only when they are inseparable observations of the same continuous event and have one Pass/Fail boundary. Shared requirement, screen, actor, setup, navigation, title, expected wording, source, or Evidence Pack never proves this by itself.
+
+Ask whether one behavior can fail while the other passes. If it can, preserve separate scenarios. Keep different permissions, inputs, partitions, transitions, boundaries, failure modes, recovery paths, compatibility objectives, and performance objectives independent. When uncertain, preserve independence until stronger evidence proves a coherent merge. Deduplication removes duplicates; it does not compress independent Pass/Fail results.
 
 ## Guardrails
 

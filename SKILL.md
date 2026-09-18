@@ -94,7 +94,11 @@ Use techniques to improve coverage and reduce redundant combinations. Pairwise s
 
 ### 6. Design and Deduplicate Scenarios Early
 
-Create atomic candidate scenarios from atomic Coverage Points, then remove only genuine semantic duplicates before materializing TCs. Two candidates are duplicates only when behavior, relevant setup, essential action, expected result, oracle, and required evidence are all the same. Keep them separate when any difference changes an independent Pass/Fail result, including actor, permission, input, boundary, state, transition, error, recovery, retry, finalization, reversal, or cancellation. Assign stable `SCN-001`, `SCN-002`, ... IDs only after deduplication. Do not optimize for a lower TC count.
+Create at least one independently reviewable candidate from every atomic Coverage Point before grouping. Ask whether one candidate can fail while another passes. If it can, preserve separate reporting. Review independence first, then remove only genuine semantic duplicates or merge observations proven inseparable within one continuous event and one Pass/Fail boundary. Two candidates are duplicates only when actor, setup, preconditions, state, trigger, behavior, input or partition, expected result, oracle, execution evidence, and reporting purpose are all equivalent. Keep differences in permission, input, boundary, state, transition, error, recovery, compatibility, or performance independent. Assign stable `SCN-001`, `SCN-002`, ... IDs only after this conservative review.
+
+Use this order: atomic CPs -> independent candidates -> independence review -> conservative merge/dedup -> final scenarios -> TCs. Record an internal objective reason for every merge; valid reasons include `INSEPARABLE_SAME_EVENT`, `SHARED_PASS_FAIL_BOUNDARY`, and `TRUE_SEMANTIC_DUPLICATE`. Never merge for `SAME_RF`, `SAME_SCREEN`, `SAME_ACTOR`, `SAME_SETUP`, `SAME_EVIDENCE_PACK`, `SAME_TITLE`, fewer tests, or performance optimization.
+
+Scenario and TC count are emergent. Shared requirement, screen, setup, actor, Evidence Pack, navigation, title, source, or expected wording never justifies merging by itself. If two behaviors can fail independently, preserve independent reporting. Do not optimize for fewer or more Test Cases.
 
 ### 7. Enrich Evidence and Synthesize Execution Paths
 
