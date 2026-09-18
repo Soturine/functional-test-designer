@@ -34,6 +34,24 @@ class ExecutionQualityTests(unittest.TestCase):
         self.assertEqual({"1": 1}, QUALITY.step_distribution(cases)["step_count_histogram"])
         self.assertEqual([], QUALITY.multi_action_step_warnings(cases))
 
+    def test_summary_step_warning_covers_navigation_input_trigger_and_verification(self) -> None:
+        cases = [{
+            "id": "TC-001",
+            "steps": [{
+                "step": 1,
+                "action": "Open the list, search for the record, provide the value, then confirm and verify the state.",
+            }],
+        }]
+
+        warnings = QUALITY.step_underspecification_warnings(cases)
+
+        self.assertEqual("POSSIBLE_STEP_UNDERSPECIFICATION", warnings[0]["code"])
+
+    def test_independent_variants_disguised_as_one_step_are_flagged(self) -> None:
+        cases = [{"id": "TC-001", "steps": [{"step": 1, "action": "Test valid and invalid values separately."}]}]
+
+        self.assertEqual(1, len(QUALITY.step_underspecification_warnings(cases)))
+
 
 if __name__ == "__main__":
     unittest.main()
