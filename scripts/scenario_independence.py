@@ -11,6 +11,7 @@ from typing import Any
 ALLOWED_MERGE_REASONS = {
     "INSEPARABLE_SAME_EVENT",
     "SHARED_PASS_FAIL_BOUNDARY",
+    "SHARED_EXECUTION_OBSERVATIONS",
     "TRUE_SEMANTIC_DUPLICATE",
 }
 FORBIDDEN_MERGE_REASONS = {
@@ -26,6 +27,35 @@ FORBIDDEN_MERGE_REASONS = {
 
 
 @dataclass(frozen=True)
+class AssertionObservation:
+    """One atomic oracle observed from a Scenario execution."""
+
+    coverage_point_ref: str
+    requirement_ref: str
+    oracle: str
+    observation_target: str = ""
+    evidence_source: tuple[tuple[str, str], ...] = ()
+    observation_phase: str = "after_trigger"
+
+
+@dataclass(frozen=True)
+class ExecutionSignature:
+    """Semantic execution boundary used only after every CP has a candidate."""
+
+    actor_permission: str
+    setup: str
+    starting_state: str
+    preconditions: tuple[str, ...]
+    input_partition: str
+    trigger: str
+    transaction_event: str
+    environment_platform: str
+    reset_required: bool
+    path_objective: str
+    execution_boundary: str
+
+
+@dataclass(frozen=True)
 class TestIdentity:
     """Immutable WHAT-to-test boundary passed to execution synthesis."""
 
@@ -37,6 +67,12 @@ class TestIdentity:
     coverage_point_refs: tuple[str, ...]
     normative_source_refs: tuple[tuple[str, str], ...]
     normative_oracle: str
+    objective: str = ""
+    material_preconditions: tuple[str, ...] = ()
+    test_data_partition: str = ""
+    assertions: tuple[AssertionObservation, ...] = ()
+    execution_signature: ExecutionSignature | None = None
+    execution_boundary: str = ""
 
 
 IDENTITY_FIELDS = (
@@ -72,6 +108,54 @@ SHARED_BOUNDARY_FIELDS = (
 )
 
 
+def _semantic_text(value: Any) -> str:
+    return " ".join(str(value or "").casefold().split())
+
+
+def _semantic_items(values: Any) -> tuple[str, ...]:
+    if not isinstance(values, list):
+        return ()
+    return tuple(sorted({_semantic_text(value) for value in values if _semantic_text(value)}))
+
+
+def execution_signature(candidate: dict[str, Any]) -> ExecutionSignature:
+    """Build a normalized execution boundary; missing evidence remains visibly empty."""
+    actor = candidate.get("actor") or candidate.get("permission")
+    transaction = candidate.get("transaction") or candidate.get("event")
+    environment = candidate.get("environment") or candidate.get("platform")
+    path_objective = candidate.get("execution_path_objective") or candidate.get("objective")
+    boundary = candidate.get("execution_boundary") or candidate.get("pass_fail_boundary")
+    return ExecutionSignature(
+        actor_permission=_semantic_text(actor),
+        setup=_semantic_text(candidate.get("setup")),
+        starting_state=_semantic_text(candidate.get("starting_state") or candidate.get("state")),
+        preconditions=_semantic_items(
+            candidate.get("material_preconditions", candidate.get("preconditions", []))
+        ),
+        input_partition=_semantic_text(candidate.get("input_partition")),
+        trigger=_semantic_text(candidate.get("trigger")),
+        transaction_event=_semantic_text(transaction),
+        environment_platform=_semantic_text(environment),
+        reset_required=bool(candidate.get("reset_required", False)),
+        path_objective=_semantic_text(path_objective),
+        execution_boundary=_semantic_text(boundary),
+    )
+
+
+def _assertion_for(
+    coverage_point: dict[str, Any], profile: dict[str, Any]
+) -> dict[str, Any]:
+    refs = deepcopy(coverage_point.get("source_refs", []))
+    return {
+        "coverage_point_ref": str(coverage_point["id"]),
+        "requirement_ref": str(coverage_point["requirement_ref"]),
+        "oracle": str(profile.get("assertion_oracle", profile.get("normative_oracle", ""))),
+        "observation_target": str(profile.get("observation_target", "")),
+        "evidence_source": refs,
+        "observation_phase": str(profile.get("observation_phase", "after_trigger")),
+    }
+
+
 def candidate_from_coverage_point(
     coverage_point: dict[str, Any],
     profile: dict[str, Any],
@@ -90,6 +174,8 @@ def candidate_from_coverage_point(
     candidate.setdefault("claim_refs", [])
     candidate.setdefault("clause_refs", deepcopy(coverage_point.get("clause_refs", [])))
     candidate.setdefault("can_fail_independently", True)
+    candidate.setdefault("assertions", [_assertion_for(coverage_point, profile)])
+    candidate["execution_signature"] = execution_signature(candidate)
     return candidate
 
 
@@ -104,6 +190,32 @@ def merge_reason(left: dict[str, Any], right: dict[str, Any]) -> str | None:
 
     left_reason = left.get("merge_reason")
     right_reason = right.get("merge_reason")
+    if left_reason == right_reason == "SHARED_EXECUTION_OBSERVATIONS":
+        family = left.get("execution_family")
+        if not family or family != right.get("execution_family"):
+            return None
+        if (
+            left.get("observation_from_same_execution") is not True
+            or right.get("observation_from_same_execution") is not True
+            or left.get("requires_independent_rerun", True)
+            or right.get("requires_independent_rerun", True)
+        ):
+            return None
+        left_signature = left.get("execution_signature") or execution_signature(left)
+        right_signature = right.get("execution_signature") or execution_signature(right)
+        required = (
+            left_signature.actor_permission,
+            left_signature.setup,
+            left_signature.starting_state,
+            left_signature.input_partition,
+            left_signature.trigger,
+            left_signature.path_objective,
+            left_signature.execution_boundary,
+        )
+        if not all(required) or left_signature != right_signature:
+            return None
+        return "SHARED_EXECUTION_OBSERVATIONS"
+
     if left_reason != right_reason or left_reason not in {
         "INSEPARABLE_SAME_EVENT",
         "SHARED_PASS_FAIL_BOUNDARY",
@@ -155,6 +267,7 @@ def merge_candidates(candidates: list[dict[str, Any]]) -> tuple[list[dict[str, A
                 "claim_refs",
                 "clause_refs",
                 "observations",
+                "assertions",
             ):
                 _extend_unique(scenario, candidate, field)
             break
@@ -209,6 +322,10 @@ def metrics(
         "semantic_duplicates_removed": sum(
             item["reason"] == "TRUE_SEMANTIC_DUPLICATE" for item in decisions
         ),
+        "scenario_cohesion_decisions": sum(
+            item["reason"] == "SHARED_EXECUTION_OBSERVATIONS" for item in decisions
+        ),
+        "traceable_assertions": sum(len(item.get("assertions", [])) for item in scenarios),
         "test_cases_generated": len(scenarios),
     }
 
@@ -263,6 +380,31 @@ def build_scenario_pipeline(
         oracle = scenario.get("normative_oracle")
         if not isinstance(oracle, str) or not oracle.strip():
             raise ValueError(f"{scenario_id} has no normative oracle")
+        raw_assertions = scenario.get("assertions", [])
+        assertion_cp_refs = {
+            str(item.get("coverage_point_ref")) for item in raw_assertions if isinstance(item, dict)
+        }
+        if assertion_cp_refs != set(scenario.get("coverage_point_refs", [])):
+            raise ValueError(f"{scenario_id} does not preserve one assertion per Coverage Point")
+        assertions = tuple(
+            AssertionObservation(
+                coverage_point_ref=str(item["coverage_point_ref"]),
+                requirement_ref=str(item["requirement_ref"]),
+                oracle=str(item["oracle"]),
+                observation_target=str(item.get("observation_target", "")),
+                evidence_source=tuple(
+                    (str(ref["source"]), str(ref["reference"]))
+                    for ref in item.get("evidence_source", [])
+                ),
+                observation_phase=str(item.get("observation_phase", "after_trigger")),
+            )
+            for item in raw_assertions
+        )
+        distinct_oracles = list(dict.fromkeys(item.oracle for item in assertions if item.oracle))
+        if len(distinct_oracles) > 1:
+            oracle = "\n".join(
+                f"{item.coverage_point_ref}: {item.oracle}" for item in assertions
+            )
         source_refs = tuple(
             (str(ref["source"]), str(ref["reference"]))
             for ref in scenario.get("normative_source_refs", [])
@@ -277,6 +419,20 @@ def build_scenario_pipeline(
                 coverage_point_refs=tuple(scenario.get("coverage_point_refs", [])),
                 normative_source_refs=source_refs,
                 normative_oracle=oracle,
+                objective=str(scenario.get("objective", scenario["title"])),
+                material_preconditions=tuple(
+                    str(value)
+                    for value in scenario.get(
+                        "material_preconditions", scenario.get("preconditions", [])
+                    )
+                ),
+                test_data_partition=str(scenario.get("input_partition", "")),
+                assertions=assertions,
+                execution_signature=scenario.get("execution_signature")
+                or execution_signature(scenario),
+                execution_boundary=str(
+                    scenario.get("execution_boundary", scenario.get("pass_fail_boundary", ""))
+                ),
             )
         )
 
