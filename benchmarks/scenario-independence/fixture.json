@@ -1,0 +1,157 @@
+{
+  "name": "Generic Reservation Service",
+  "fixtures": [
+    {
+      "id": "A",
+      "description": "Independent business, compatibility, and performance concerns",
+      "profiles": [
+        {"behavior": "Reject insufficient quantity", "nature": "functional", "input_partition": "insufficient", "reporting_purpose": "business-rule"},
+        {"behavior": "Support mobile terminal", "nature": "compatibility", "input_partition": "mobile", "reporting_purpose": "compatibility"},
+        {"behavior": "Respond within two seconds", "nature": "performance", "input_partition": "nominal-load", "reporting_purpose": "performance"}
+      ],
+      "expected_scenarios": 3,
+      "expected_test_cases": 3,
+      "expected_merges": 0
+    },
+    {
+      "id": "B",
+      "description": "Inseparable observations of the same confirmation event",
+      "defaults": {
+        "actor": "operator",
+        "setup": "pending reservation",
+        "preconditions": ["reservation is pending"],
+        "state": "PENDING",
+        "trigger": "confirm reservation",
+        "execution_evidence": "confirmation response",
+        "reporting_purpose": "confirmation transaction",
+        "pass_fail_boundary": "all confirmation effects commit atomically",
+        "continuous_execution": true,
+        "nature": "functional",
+        "input_partition": "valid confirmation",
+        "oracle": "confirmation transaction completes atomically",
+        "can_fail_independently": false,
+        "merge_key": "confirmation-transaction",
+        "merge_reason": "INSEPARABLE_SAME_EVENT"
+      },
+      "profiles": [
+        {"behavior": "State becomes CONFIRMED", "expected_result": "State is CONFIRMED"},
+        {"behavior": "Balance decreases", "expected_result": "Balance reflects the reservation"},
+        {"behavior": "Audit record is written", "expected_result": "One audit record exists"}
+      ],
+      "expected_scenarios": 1,
+      "expected_test_cases": 1,
+      "expected_merges": 2,
+      "expected_merge_reason": "INSEPARABLE_SAME_EVENT"
+    },
+    {
+      "id": "C",
+      "description": "Happy and negative transitions",
+      "profiles": [
+        {"behavior": "Accept valid transition", "nature": "happy", "input_partition": "valid transition"},
+        {"behavior": "Reject invalid transition", "nature": "negative", "input_partition": "invalid transition"}
+      ],
+      "expected_scenarios": 2,
+      "expected_test_cases": 2,
+      "expected_merges": 0
+    },
+    {
+      "id": "D",
+      "description": "Four independently reportable boundaries",
+      "profiles": [
+        {"behavior": "Accept lower bound", "nature": "boundary", "input_partition": "1"},
+        {"behavior": "Accept upper bound", "nature": "boundary", "input_partition": "10"},
+        {"behavior": "Reject below lower bound", "nature": "boundary", "input_partition": "0"},
+        {"behavior": "Reject above upper bound", "nature": "boundary", "input_partition": "11"}
+      ],
+      "expected_scenarios": 4,
+      "expected_test_cases": 4,
+      "expected_merges": 0
+    },
+    {
+      "id": "E",
+      "description": "Same setup with different failure behavior",
+      "defaults": {"actor": "user", "setup": "reservation form", "preconditions": ["form is open"]},
+      "profiles": [
+        {"behavior": "Deny missing permission", "nature": "permission", "input_partition": "unauthorized"},
+        {"behavior": "Reject invalid input", "nature": "negative", "input_partition": "invalid"},
+        {"behavior": "Report service timeout", "nature": "recovery", "input_partition": "timeout"}
+      ],
+      "expected_scenarios": 3,
+      "expected_test_cases": 3,
+      "expected_merges": 0
+    },
+    {
+      "id": "F",
+      "description": "Shared Evidence Pack with independent outcomes",
+      "defaults": {"actor": "operator", "setup": "reservation exists", "execution_evidence": "shared-pack-1"},
+      "profiles": [
+        {"behavior": "Approve reservation", "nature": "happy", "input_partition": "approvable"},
+        {"behavior": "Cancel reservation", "nature": "happy", "input_partition": "cancelable"}
+      ],
+      "expected_scenarios": 2,
+      "expected_test_cases": 2,
+      "expected_merges": 0,
+      "expected_evidence_packs": 1
+    },
+    {
+      "id": "G",
+      "description": "Legacy independent variants disguised as steps",
+      "profiles": [
+        {"behavior": "Accept valid value", "nature": "happy", "input_partition": "valid"},
+        {"behavior": "Reject invalid value", "nature": "negative", "input_partition": "invalid"}
+      ],
+      "legacy_steps_are_independent": true,
+      "expected_scenarios": 2,
+      "expected_test_cases": 2,
+      "expected_merges": 0
+    },
+    {
+      "id": "H",
+      "description": "Dependent actions remain one sequential scenario",
+      "profiles": [
+        {"behavior": "Submit a prepared draft", "nature": "state-transition", "input_partition": "valid draft"}
+      ],
+      "dependent_steps": ["open draft", "add item", "submit draft", "verify submitted status"],
+      "expected_scenarios": 1,
+      "expected_test_cases": 1,
+      "expected_merges": 0
+    },
+    {
+      "id": "I",
+      "description": "Same expected wording with independent negative partitions",
+      "profiles": [
+        {"behavior": "Reject inactive resource", "nature": "negative", "input_partition": "inactive", "expected_result": "Request is rejected"},
+        {"behavior": "Reject foreign resource", "nature": "negative", "input_partition": "foreign", "expected_result": "Request is rejected"},
+        {"behavior": "Reject occupied resource", "nature": "negative", "input_partition": "occupied", "expected_result": "Request is rejected"}
+      ],
+      "expected_scenarios": 3,
+      "expected_test_cases": 3,
+      "expected_merges": 0
+    },
+    {
+      "id": "J",
+      "description": "True semantic duplicate from two sources",
+      "defaults": {
+        "actor": "operator",
+        "setup": "draft exists",
+        "preconditions": ["draft is editable"],
+        "state": "DRAFT",
+        "trigger": "submit draft",
+        "behavior": "Submit draft",
+        "input_partition": "valid draft",
+        "oracle": "state becomes SUBMITTED",
+        "expected_result": "State is SUBMITTED",
+        "execution_evidence": "submit action",
+        "reporting_purpose": "submission"
+      },
+      "profiles": [
+        {"source_refs": [{"source": "requirements.md", "reference": "RSV-010"}]},
+        {"source_refs": [{"source": "approved-spec.md", "reference": "Submission"}]}
+      ],
+      "expected_scenarios": 1,
+      "expected_test_cases": 1,
+      "expected_merges": 1,
+      "expected_merge_reason": "TRUE_SEMANTIC_DUPLICATE"
+    }
+  ]
+}
