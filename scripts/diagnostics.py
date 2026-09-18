@@ -72,6 +72,12 @@ AGGREGATION_STRATEGIES = {
     "unmapped_normative_clauses": "last",
     "coverage_points": "last",
     "scenario_candidates": "last",
+    "scenario_candidates_before_merge": "last",
+    "scenario_merge_candidates": "last",
+    "scenario_merges_applied": "last",
+    "scenarios_after_merge": "last",
+    "multi_cp_scenarios": "last",
+    "possible_scenario_overcompression_warnings": "last",
     "scenarios_after_dedup": "last",
     "independent_scenarios_preserved": "last",
     "semantic_duplicates_removed": "last",
@@ -343,6 +349,7 @@ def output_totals(output_dir: Path | None) -> dict[str, Any]:
         "coverage_points": len(index.get("coverage_points", [])),
         "scenarios": len(index.get("scenarios", [])),
         "test_cases": len(cases),
+        "multi_cp_scenarios": sum(len(case.get("coverage_point_refs", [])) >= 2 for case in cases),
         "steps": sum(len(case.get("steps", [])) for case in cases),
         "ready": statuses["READY"],
         "needs_review": statuses["NEEDS_REVIEW"],
@@ -504,6 +511,17 @@ def finish_run(
                 "code": "POSSIBLE_MULTI_ACTION_STEP",
                 "message": "One or more steps may compress a documented operational sequence.",
                 "count": multi_action_count,
+            }
+        )
+    scenario_warning_count = document["totals"].get(
+        "possible_scenario_overcompression_warnings", 0
+    )
+    if scenario_warning_count:
+        document["warnings"].append(
+            {
+                "code": "POSSIBLE_SCENARIO_OVERCOMPRESSION",
+                "message": "One or more multi-CP scenarios require semantic independence review.",
+                "count": scenario_warning_count,
             }
         )
     document["scope_proof"] = {

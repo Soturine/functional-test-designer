@@ -137,6 +137,37 @@ class DiagnosticsTests(unittest.TestCase):
         self.assertEqual(3, document["totals"]["independent_scenarios_preserved"])
         self.assertEqual(1, document["totals"]["semantic_duplicates_removed"])
 
+    def test_scenario_independence_metrics_and_warning_are_preserved(self) -> None:
+        DIAGNOSTICS.start_run(self.metrics)
+        DIAGNOSTICS.begin_stage(self.metrics, "test_design_and_scenarios")
+        DIAGNOSTICS.end_stage(
+            self.metrics,
+            "test_design_and_scenarios",
+            ["Reviewed every Coverage Point before conservative merging."],
+            {
+                "coverage_points": 6,
+                "scenario_candidates_before_merge": 6,
+                "scenario_merge_candidates": 1,
+                "scenario_merges_applied": 1,
+                "scenarios_after_merge": 5,
+                "multi_cp_scenarios": 1,
+                "possible_scenario_overcompression_warnings": 1,
+            },
+        )
+        for name in DIAGNOSTICS.STAGE_NAMES:
+            if name != "test_design_and_scenarios":
+                DIAGNOSTICS.skip_stage(self.metrics, name, ["Not needed for independence metric test."])
+
+        document = DIAGNOSTICS.finish_run(self.metrics)
+
+        self.assertEqual(6, document["totals"]["scenario_candidates_before_merge"])
+        self.assertEqual(1, document["totals"]["scenario_merges_applied"])
+        self.assertEqual(5, document["totals"]["scenarios_after_merge"])
+        self.assertIn(
+            "POSSIBLE_SCENARIO_OVERCOMPRESSION",
+            {warning["code"] for warning in document["warnings"]},
+        )
+
     def test_finish_requires_every_stage_to_be_addressed(self) -> None:
         DIAGNOSTICS.start_run(self.metrics)
 
@@ -225,6 +256,7 @@ class DiagnosticsTests(unittest.TestCase):
         self.assertEqual(0, totals["automatic_removals"])
         self.assertEqual({"1": 9, "2": 1, "3": 1}, totals["step_count_histogram"])
         self.assertEqual(23, totals["atomic_source_claims_identified"])
+        self.assertEqual(9, totals["multi_cp_scenarios"])
 
     def test_detailed_evidence_single_step_distribution_adds_non_blocking_warning(self) -> None:
         index = DIAGNOSTICS.read_document(self.output / "test-cases.json")

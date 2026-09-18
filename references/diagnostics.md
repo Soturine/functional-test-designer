@@ -65,6 +65,12 @@ Record these when naturally observable:
 - `unmapped_normative_clauses`
 - `coverage_points`
 - `scenario_candidates`
+- `scenario_candidates_before_merge`
+- `scenario_merge_candidates`
+- `scenario_merges_applied`
+- `scenarios_after_merge`
+- `multi_cp_scenarios`
+- `possible_scenario_overcompression_warnings`
 - `scenarios_after_dedup`
 - `independent_scenarios_preserved`
 - `semantic_duplicates_removed`
@@ -133,6 +139,8 @@ Aggregation is explicit per metric: event counters such as reads and real valida
 The helper derives step distribution, selected-role contributions, multi-role provenance, execution enrichment, concrete-data signals, abstract-action signals, and execution-path Questions from final JSON. Role contribution counts only TCs that actually cite a source with that role. When the evidence map objectively contains detailed execution paths, record `detailed_execution_evidence_available=true`; if at least 80% of a suite with five or more cases still has one step, the helper adds the non-blocking `POSSIBLE_EXECUTION_UNDER_SPECIFICATION` warning. This is not a quality score and does not force extra steps.
 
 Compound-claim and multi-action heuristics are advisory and never rewrite output. Record `varied_execution_paths_available=true` only when selected evidence actually contains paths of different supported complexity; a uniform distribution then adds `POSSIBLE_STEP_TEMPLATE_BIAS`. Evidence-map counters measure real cache events, not estimated savings.
+
+Scenario-independence metrics describe the candidate-first review; they are not scores or count targets. `scenario_merge_candidates` and `scenario_merges_applied` count only decisions with an objective internal reason such as `INSEPARABLE_SAME_EVENT`, `SHARED_PASS_FAIL_BOUNDARY`, or `TRUE_SEMANTIC_DUPLICATE`. `multi_cp_scenarios` is derived from final cases. A nonzero `possible_scenario_overcompression_warnings` adds the advisory `POSSIBLE_SCENARIO_OVERCOMPRESSION` warning and never rewrites output automatically.
 
 ## Finish
 
