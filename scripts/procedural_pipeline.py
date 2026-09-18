@@ -65,10 +65,11 @@ def operator_actions_from_evidence(records: list[EvidenceRecord]) -> list[dict[s
     actions = []
     for index, label in enumerate(path):
         verb = "Open" if index == 0 else "Select"
+        next_label = path[index + 1] if index + 1 < len(path) else label
         actions.append(
             {
                 "action": f"{verb} {label}.",
-                "expected_result": f"{label} is displayed.",
+                "expected_result": f"The documented path makes {next_label} available.",
                 "evidence_source": source_ref,
                 **({"depends_on_previous_step": True} if index else {}),
             }
