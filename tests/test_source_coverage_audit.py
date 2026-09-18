@@ -57,6 +57,28 @@ class SourceCoverageAuditTests(unittest.TestCase):
         self.assertEqual(0, verified["source_coverage_gaps"])
         self.assertEqual(2, len(clauses))
 
+    def test_requirement_summary_uses_independent_inventory_when_available(self) -> None:
+        inventory = {
+            "claims": [
+                {"id": "CLAIM-001", "requirement_ref": "REQ-001"},
+                {"id": "CLAIM-002", "requirement_ref": "REQ-001"},
+            ]
+        }
+        index = {
+            "requirements": [{"id": "REQ-001"}],
+            "normative_clauses": [
+                {"id": "CLAUSE-001", "requirement_ref": "REQ-001", "destination_type": "COVERAGE_POINT"}
+            ],
+            "coverage_points": [], "scenarios": [], "test_cases": [], "findings": [],
+        }
+
+        summary = AUDIT.per_requirement_summary(
+            index, source_inventory=inventory, claim_destinations={"CLAIM-001": "CLAUSE-001"}
+        )["REQ-001"]
+
+        self.assertEqual(2, summary["source_claims_identified"])
+        self.assertEqual(1, summary["source_claims_represented"])
+
 
 if __name__ == "__main__":
     unittest.main()

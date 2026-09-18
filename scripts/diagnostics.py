@@ -98,9 +98,14 @@ AGGREGATION_STRATEGIES = {
     "source_claims_represented": "last",
     "source_coverage_gaps": "last",
     "recovered_source_gaps": "last",
+    "source_items": "last",
     "atomic_source_claims_identified": "last",
+    "atomic_claims_deduplicated": "last",
     "compound_source_items_split": "last",
     "possible_compound_claim_warnings": "last",
+    "compound_claims_reviewed": "last",
+    "compound_claims_split": "last",
+    "compound_claims_kept_atomic": "last",
     "referenced_normative_rules": "last",
     "referenced_rules_resolved_in_scope": "last",
     "referenced_rules_unresolved": "last",
@@ -462,6 +467,23 @@ def finish_run(
             raise ValueError(
                 "candidate-to-scenario reduction is inconsistent with scenario_merges_applied"
             )
+    reviewed = document["totals"].get("compound_claims_reviewed")
+    split = document["totals"].get("compound_claims_split")
+    kept = document["totals"].get("compound_claims_kept_atomic")
+    if all(isinstance(value, int) for value in (reviewed, split, kept)) and reviewed != split + kept:
+        raise ValueError(
+            "compound claim review count differs from SPLIT plus KEEP_ATOMIC decisions"
+        )
+    identified = document["totals"].get("source_claims_identified")
+    represented = document["totals"].get("source_claims_represented")
+    gaps = document["totals"].get("source_coverage_gaps")
+    if (
+        all(isinstance(value, int) for value in (identified, represented, gaps))
+        and identified != represented + gaps
+    ):
+        raise ValueError(
+            "source claim lineage differs from represented claims plus coverage gaps"
+        )
     measured = [
         item
         for item in document["stages"]

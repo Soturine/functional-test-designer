@@ -210,6 +210,26 @@ class DiagnosticsTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "lower than testable_coverage_points"):
             DIAGNOSTICS.finish_run(self.metrics)
 
+    def test_inconsistent_compound_review_metrics_are_rejected(self) -> None:
+        DIAGNOSTICS.start_run(self.metrics)
+        DIAGNOSTICS.begin_stage(self.metrics, "evidence_normalization")
+        DIAGNOSTICS.end_stage(
+            self.metrics,
+            "evidence_normalization",
+            ["Recorded an inconsistent synthetic atomicity review."],
+            {
+                "compound_claims_reviewed": 3,
+                "compound_claims_split": 1,
+                "compound_claims_kept_atomic": 1,
+            },
+        )
+        for name in DIAGNOSTICS.STAGE_NAMES:
+            if name != "evidence_normalization":
+                DIAGNOSTICS.skip_stage(self.metrics, name, ["Not needed for consistency test."])
+
+        with self.assertRaisesRegex(ValueError, "SPLIT plus KEEP_ATOMIC"):
+            DIAGNOSTICS.finish_run(self.metrics)
+
     def test_finish_requires_every_stage_to_be_addressed(self) -> None:
         DIAGNOSTICS.start_run(self.metrics)
 
