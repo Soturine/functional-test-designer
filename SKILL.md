@@ -60,12 +60,15 @@ Resolve the user's selected roots and inventory paths/metadata before opening co
 
 Extract atomic normative clauses before summarizing them into logical Requirements, starting from atomic normative source claims. A bullet or sentence may contain one or many claims. Split `and` outcomes, `or` alternatives, and enumerated effects when one could be wrong while another remains correct; do not split inseparable representations mechanically. Preserve every claim and clause source ref even when several belong to one `REQ-XXX`.
 
+Materialize each normative passage as a Source Item and run `review_source_items` from `scripts/source_coverage_audit.py` before creating Clauses. Record `SPLIT`, or `KEEP_ATOMIC` with one of the narrow semantic reasons `INSEPARABLE_VALUE`, `INSEPARABLE_RELATION`, or `SINGLE_OBSERVABLE_OUTCOME`. Heuristics only identify suspicious compounds; they never choose the decomposition. A suspicious item or residual claim cannot proceed without an explicit valid decision. Then use `materialize_atomic_coverage` and `audit_atomic_chain` to enforce Source Item -> Claim -> Clause -> CP lineage. Do not compress Source Claims, Clauses, or Coverage Points to control Scenario or Test Case count, and do not predict a downstream merge while extracting source truth.
+
 - Assign stable `REQ-001`, `REQ-002`, ... IDs in source order.
 - Preserve original identifiers and locations in `source_refs`.
 - Separate normative authority from implementation and test evidence.
 - Split independent verbs, outcomes joined by `and`, alternatives joined by `or`, filter dimensions, permissions, timing limits, boundaries, states, transitions, search, detail, and export behavior. `alerts and records` is two clauses; `finalize, reverse, or cancel releases the link` is three clauses.
 - Equivalent translations become one clause with all source refs; a real difference becomes a finding.
 - Mark unsupported or contradictory behavior `NEEDS_CLARIFICATION`; do not strengthen a source.
+- Deduplicate semantically equivalent claims only with an explicit equivalence key and retain every contributing source reference.
 
 ### 3. Extract and Audit Coverage Points
 

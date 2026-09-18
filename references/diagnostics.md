@@ -91,9 +91,14 @@ Record these when naturally observable:
 - `source_claims_represented`
 - `source_coverage_gaps`
 - `recovered_source_gaps`
+- `source_items`
 - `atomic_source_claims_identified`
+- `atomic_claims_deduplicated`
 - `compound_source_items_split`
 - `possible_compound_claim_warnings`
+- `compound_claims_reviewed`
+- `compound_claims_split`
+- `compound_claims_kept_atomic`
 - `referenced_normative_rules`
 - `referenced_rules_resolved_in_scope`
 - `referenced_rules_unresolved`
