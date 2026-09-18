@@ -129,8 +129,28 @@ AGGREGATION_STRATEGIES = {
     "source_analysis_barrier_wait_seconds": "last",
     "stage_wall_clock_seconds": "sum",
     "aggregate_worker_seconds": "sum",
+    "source_analysis_groups": "last",
+    "source_analysis_group_barriers": "last",
+    "source_analysis_order_constraints": "last",
+    "source_analysis_parallel_groups": "last",
+    "source_analysis_serialized_groups": "last",
     "varied_execution_paths_available": "last",
     "possible_step_underspecification_warnings": "last",
+    "hidden_subtest_warnings": "last",
+    "procedural_tasks_enqueued": "last",
+    "procedural_tasks_completed": "last",
+    "procedural_max_concurrency": "last",
+    "procedure_ready": "last",
+    "procedure_gaps": "last",
+    "procedural_ambiguities": "last",
+    "procedural_divergences": "last",
+    "independent_branches_detected": "last",
+    "unsupported_steps": "last",
+    "new_tc_candidates": "last",
+    "new_tcs_appended": "last",
+    "pending_additive_follow_up": "last",
+    "procedural_wall_clock_seconds": "last",
+    "procedural_aggregate_worker_seconds": "last",
 }
 
 ABSTRACT_ACTION_PATTERNS = (
@@ -562,6 +582,15 @@ def finish_run(
                 "code": "POSSIBLE_MULTI_ACTION_STEP",
                 "message": "One or more steps may compress a documented operational sequence.",
                 "count": multi_action_count,
+            }
+        )
+    hidden_subtest_count = document["totals"].get("hidden_subtest_warnings", 0)
+    if hidden_subtest_count:
+        document["warnings"].append(
+            {
+                "code": "HIDDEN_SUBTEST",
+                "message": "One or more procedural actions compress independently rerunnable variants.",
+                "count": hidden_subtest_count,
             }
         )
     scenario_warning_count = document["totals"].get(

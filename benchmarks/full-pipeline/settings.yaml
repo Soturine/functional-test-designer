@@ -1,0 +1,4 @@
+reservation:
+  confirmation_quantity:
+    minimum: 1
+    maximum: 10

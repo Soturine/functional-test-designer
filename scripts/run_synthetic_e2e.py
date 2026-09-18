@@ -5,12 +5,22 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 from pathlib import Path
 from typing import Any, Callable
 
 import diagnostics
 from evidence_map import EvidenceMap
-from procedural_execution import compose_path, synthesize_test_case
+from parallel_evidence import (
+    EvidenceRecord,
+    SourceAssignment,
+    analyze_selected_sources,
+)
+from procedural_pipeline import (
+    automation_execution_audit,
+    reconcile_additive_feedback,
+    run_procedural_tasks,
+)
 from resolve_artifacts import resolve_artifact_paths
 from render_markdown import render_markdown
 from render_report import render_report
@@ -46,69 +56,93 @@ def timed(
     return result
 
 
-def execution_packs(evidence_map: EvidenceMap) -> dict[str, dict[str, Any]]:
+def analyze_fixture_source(
+    assignment: SourceAssignment, evidence_map: EvidenceMap
+) -> list[EvidenceRecord]:
+    """Extract compact records from the selected generic fixture source once."""
+    text = evidence_map.source(
+        assignment.source,
+        lambda: (ROOT / assignment.source).read_text(encoding="utf-8"),
+    )
+    records = []
+    procedures = re.findall(r"^Procedure ([^:]+):\s*(.+)$", text, re.MULTILINE)
+    if procedures:
+        for name, path_text in procedures:
+            path = tuple(part.strip() for part in path_text.split(">") if part.strip())
+            records.append(EvidenceRecord(
+                source=assignment.source,
+                source_role=assignment.source_role,
+                source_ref=name.strip(),
+                source_excerpt_ref=f"Procedure {name.strip()}",
+                observation_or_claim="A selected operator procedure provides an ordered path.",
+                navigation=path,
+                visible_labels=path,
+            ))
+        return records
+    first_content = next(
+        (line.strip(" #-\t") for line in text.splitlines() if line.strip(" #-\t")),
+        assignment.source_ref,
+    )
+    return [EvidenceRecord(
+        source=assignment.source,
+        source_role=assignment.source_role,
+        source_ref=assignment.source_ref,
+        source_excerpt_ref="selected file",
+        observation_or_claim=first_content,
+    )]
+
+
+def execution_packs(
+    evidence_map: EvidenceMap, records: tuple[EvidenceRecord, ...]
+) -> dict[str, dict[str, Any]]:
     manual_ref = {
         "source": "benchmarks/full-pipeline/manual.md",
         "reference": "Generic Reservation Procedure",
     }
-    shared = evidence_map.pack(
-        "reservation-detail-navigation",
-        lambda: [
-            {"action": "Open the reservation list.", "expected_result": "The reservation list is presented.", "evidence_source": manual_ref},
-            {"action": "Search using the reservation identifier from the test data.", "expected_result": "The matching reservation is displayed.", "evidence_source": manual_ref, "depends_on_previous_step": True},
-            {"action": "Open the matching reservation detail.", "expected_result": "The reservation detail is presented.", "evidence_source": manual_ref, "depends_on_previous_step": True}
-        ],
+    manual_records = evidence_map.pack(
+        "manual-procedures",
+        lambda: [record for record in records if record.source_role == "TECHNICAL_CONTEXT"],
     )
-    confirm = compose_path(
-        shared,
-        [
-            {"action": "Choose Confirm.", "expected_result": "The documented confirmation action is available.", "evidence_source": manual_ref, "depends_on_previous_step": True},
-            {"action": "Provide the required confirmation input from the test data.", "expected_result": "The supplied confirmation input remains available for submission.", "evidence_source": manual_ref, "depends_on_previous_step": True},
-            {"action": "Confirm the action.", "expected_result": "The documented confirmation action is submitted.", "evidence_source": manual_ref, "depends_on_previous_step": True},
-            {"action": "Review the resulting state, balance, and audit evidence.", "depends_on_previous_step": True}
-        ],
-    )
-    cancel = compose_path(
-        evidence_map.pack("reservation-detail-navigation", lambda: []),
-        [
-            {"action": "Choose Cancel.", "expected_result": "The documented cancellation action is available.", "evidence_source": manual_ref, "depends_on_previous_step": True},
-            {"action": "Confirm the cancellation.", "expected_result": "The documented cancellation action is submitted.", "evidence_source": manual_ref, "depends_on_previous_step": True},
-            {"action": "Review the resulting reservation state.", "depends_on_previous_step": True}
-        ],
-    )
+    confirm = [record for record in manual_records if record.source_ref == "Confirm reservation"]
+    cancel = [record for record in manual_records if record.source_ref == "Cancel reservation"]
     return {
         "Confirm an eligible reservation": {
-            "objective": "Confirm all normative effects of one atomic confirmation.",
             "priority": "HIGH",
             "preconditions": ["An authenticated operator and an eligible pending reservation exist."],
+            "test_data_partition": "eligible reservation",
             "test_data": [
                 {"name": "reservation identifier", "description": "<existing eligible test reservation>"},
                 {"name": "confirmation quantity", "description": "2 units from an available balance of 10 units"}
             ],
-            "actions": confirm,
-            "source_refs": [manual_ref, {"source": "benchmarks/full-pipeline/service.py", "reference": "confirm"}],
+            "manual_evidence_records": confirm,
+            "source_refs": [
+                manual_ref,
+                {"source": "benchmarks/full-pipeline/service.py", "reference": "confirm"},
+                {"source": "benchmarks/full-pipeline/settings.yaml", "reference": "confirmation_quantity"},
+                {"source": "benchmarks/full-pipeline/existing-tests.md", "reference": "quantity 2"}
+            ],
+            "divergence": {"statement": "The functional authority requires CONFIRMED, while implementation evidence assigns REVIEWED."},
             "postconditions": ["The synthetic reservation has the normative confirmation effects."],
             "cleanup": ["Use an isolated test environment or an approved cleanup procedure."],
             "tags": ["state-transition", "atomic-event"],
             "notes": ["Implementation evidence assigns REVIEWED; the normative oracle remains CONFIRMED."]
         },
         "Cancel an eligible reservation": {
-            "objective": "Confirm cancellation reaches the required state.",
             "priority": "MEDIUM",
             "preconditions": ["An authenticated operator and an eligible reservation exist."],
+            "test_data_partition": "eligible reservation",
             "test_data": [{"name": "reservation identifier", "description": "<existing cancellable test reservation>"}],
-            "actions": cancel,
-            "source_refs": [manual_ref],
+            "manual_evidence_records": cancel,
+            "source_refs": [manual_ref, {"source": "benchmarks/full-pipeline/existing-tests.md", "reference": "cancellation transaction"}],
             "postconditions": ["The synthetic reservation is CANCELLED."],
             "cleanup": ["Use an isolated test environment or an approved cleanup procedure."],
             "tags": ["state-transition", "cancellation"]
         },
         "Reject a malformed reservation request": {
-            "objective": "Confirm malformed input is rejected.",
             "priority": "HIGH",
             "preconditions": ["The reservation API is available in the test environment."],
+            "test_data_partition": "malformed payload",
             "test_data": [{"name": "request body", "description": "{\"quantity\": \"not-a-number\"}"}],
-            "actions": [{"action": "Send the malformed reservation request."}],
             "source_refs": [],
             "postconditions": [],
             "cleanup": [],
@@ -148,15 +182,25 @@ def run(artifact_root: Path) -> dict[str, Any]:
             **artifact_paths,
         },
     )
-    timed(
+    assignments = [
+        SourceAssignment(item["path"], item["role"], "selected file")
+        for item in fixture["sources"]
+    ]
+    evidence_analysis = timed(
         metrics_path,
         "source_read",
-        lambda: [
-            evidence_map.source(path, lambda selected=path: (ROOT / selected).read_text(encoding="utf-8"))
-            for path in source_paths
-        ],
-        "Read each selected synthetic source once.",
-        lambda values: {"source_reads": len(values), "source_rereads": 0},
+        lambda: analyze_selected_sources(
+            assignments,
+            set(source_paths),
+            lambda assignment: analyze_fixture_source(assignment, evidence_map),
+            max_workers=5,
+        ),
+        "Analyzed each selected source once and joined at the evidence barrier.",
+        lambda result: {
+            "source_reads": len(assignments),
+            "source_rereads": 0,
+            **result.metrics,
+        },
     )
     inventory = timed(
         metrics_path,
@@ -203,18 +247,36 @@ def run(artifact_root: Path) -> dict[str, Any]:
     packs = timed(
         metrics_path,
         "evidence_enrichment",
-        lambda: execution_packs(evidence_map),
+        lambda: execution_packs(evidence_map, evidence_analysis.records),
         "Built and reused selected-source Evidence Packs.",
         lambda _: evidence_map.metrics(),
     )
-    cases = timed(
+    procedural = timed(
         metrics_path,
         "execution_path_synthesis",
-        lambda: [synthesize_test_case(identity, packs[identity.title]) for identity in design["test_identities"]],
-        "Synthesized procedural steps after identity freeze.",
-        lambda values: {"steps_generated": sum(len(case["steps"]) for case in values)},
+        lambda: run_procedural_tasks(
+            [(identity, packs[identity.title]) for identity in design["test_identities"]],
+            max_workers=3,
+        ),
+        "Synthesized procedural steps in parallel after identity freeze.",
+        lambda value: {
+            **value.metrics,
+            "steps_generated": sum(len(result.case["steps"]) for result in value.results),
+        },
     )
-    timed(metrics_path, "test_case_generation", lambda: cases, "Materialized frozen identities as schema-1.2 Test Cases.", lambda values: {"test_cases_generated": len(values)})
+    initial_cases = [result.case for result in procedural.results]
+    reconciliation = reconcile_additive_feedback(initial_cases, procedural.results)
+    cases = reconciliation["test_cases"]
+    timed(
+        metrics_path,
+        "test_case_generation",
+        lambda: cases,
+        "Materialized frozen identities and completed one bounded additive pass.",
+        lambda values: {
+            "test_cases_generated": len(values),
+            **reconciliation["metrics"],
+        },
+    )
     timed(
         metrics_path,
         "source_coverage_audit",
@@ -271,7 +333,7 @@ def run(artifact_root: Path) -> dict[str, Any]:
         "sources": fixture["sources"],
         "requirements": fixture["requirements"],
         "normative_clauses": chain["normative_clauses"],
-        "findings": fixture["findings"],
+        "findings": [*fixture["findings"], *reconciliation["findings"]],
         "coverage_points": coverage_points,
         "scenarios": scenarios,
         "test_cases": entries,
@@ -279,7 +341,10 @@ def run(artifact_root: Path) -> dict[str, Any]:
 
     def materialize() -> int:
         write_json(output / "test-cases.json", index)
-        write_json(output / "questions.json", {"schema_version": "1.2", "questions": []})
+        write_json(
+            output / "questions.json",
+            {"schema_version": "1.2", "questions": reconciliation["questions"]},
+        )
         for case in cases:
             write_json(output / "test-cases" / f"{case['id']}.json", case)
         return sum(path.stat().st_size for path in output.rglob("*.json"))
@@ -309,6 +374,13 @@ def run(artifact_root: Path) -> dict[str, Any]:
         "report": str(report),
         "json_bytes": json_bytes,
         "evidence_map": evidence_map.metrics(),
+        "source_analysis": evidence_analysis.metrics,
+        "procedural": procedural.metrics,
+        "additive_feedback": reconciliation["metrics"],
+        "automation_audits": [
+            automation_execution_audit(case, identity)
+            for case, identity in zip(cases, design["test_identities"])
+        ],
     }
 
 

@@ -21,9 +21,44 @@ SEQUENCE_MARKER = re.compile(
     re.IGNORECASE,
 )
 INDEPENDENT_VARIANTS = re.compile(
-    r"\b(?:separately|valid and invalid|each variant|cada variante|válido e inválido|separadamente)\b",
+    r"\b(?:separately|execute separately|valid and invalid|valid, invalid|invalid and unknown|"
+    r"each variant|desktop,? tablet|tablet and handheld|completion,? reversal|reversal and cancellation|"
+    r"cada variante|válido e inválido|separadamente|conclusão,? reversão|reversão e cancelamento)\b",
     re.IGNORECASE,
 )
+
+
+def hidden_subtest_signals(action: str) -> list[str]:
+    """Detect independent executions compressed into one procedural action."""
+    signals = []
+    if INDEPENDENT_VARIANTS.search(action):
+        signals.append("INDEPENDENT_VARIANTS_IN_ONE_ACTION")
+    independent_verbs = re.findall(
+        r"\b(?:complete|reverse|cancel|finalize|approve|reject|"
+        r"concluir|reverter|cancelar|finalizar|aprovar|rejeitar)\w*\b",
+        action,
+        re.IGNORECASE,
+    )
+    if len({verb.casefold() for verb in independent_verbs}) >= 2:
+        signals.append("MULTIPLE_INDEPENDENT_TRIGGERS")
+    return signals
+
+
+def hidden_subtest_warnings(cases: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    warnings = []
+    for case in cases:
+        for step in case.get("steps", []):
+            signals = hidden_subtest_signals(str(step.get("action", "")))
+            if signals:
+                warnings.append(
+                    {
+                        "code": "HIDDEN_SUBTEST",
+                        "test_case_id": case.get("id"),
+                        "step": step.get("step"),
+                        "signals": signals,
+                    }
+                )
+    return warnings
 
 
 def multi_action_step_warnings(cases: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -37,7 +72,7 @@ def multi_action_step_warnings(cases: list[dict[str, Any]]) -> list[dict[str, An
                 (len(verbs) >= 4 and len(markers) >= 1)
                 or (len(verbs) >= 3 and len(markers) >= 2)
             )
-            if compressed_sequence or INDEPENDENT_VARIANTS.search(action):
+            if compressed_sequence or hidden_subtest_signals(action):
                 warnings.append(
                     {
                         "code": "POSSIBLE_MULTI_ACTION_STEP",
@@ -64,4 +99,5 @@ def step_distribution(cases: list[dict[str, Any]]) -> dict[str, Any]:
         "possible_step_underspecification_warnings": len(
             step_underspecification_warnings(cases)
         ),
+        "hidden_subtest_warnings": len(hidden_subtest_warnings(cases)),
     }

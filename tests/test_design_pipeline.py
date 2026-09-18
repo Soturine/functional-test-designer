@@ -204,12 +204,28 @@ class FullPipelineE2ETests(unittest.TestCase):
             self.assertEqual(3, result["metrics"]["test_cases_generated"])
             self.assertEqual(1, result["metrics"]["multi_cp_scenarios"])
             self.assertEqual(0, result["metrics"]["possible_scenario_overcompression_warnings"])
-            self.assertEqual(7, len(result["cases"][0]["steps"]))
+            self.assertEqual(4, len(result["cases"][0]["steps"]))
+            self.assertEqual(4, len(result["cases"][1]["steps"]))
             self.assertEqual(1, len(result["cases"][2]["steps"]))
             self.assertIn("CONFIRMED", result["cases"][0]["steps"][-1]["expected_result"])
             self.assertNotIn("REVIEWED", result["cases"][0]["steps"][-1]["expected_result"])
             self.assertEqual(3, result["markdown_files"])
             self.assertTrue((output / "report.html").is_file())
+            self.assertEqual("NEEDS_REVIEW", result["cases"][2]["status"])
+            self.assertEqual(1, diagnostic["totals"]["questions"])
+            self.assertEqual(1, diagnostic["totals"]["procedure_gaps"])
+            self.assertEqual(1, diagnostic["totals"]["procedural_divergences"])
+            self.assertEqual(5, diagnostic["totals"]["source_analysis_workers_completed"])
+            self.assertEqual(0, diagnostic["totals"]["duplicate_source_reads"])
+            self.assertEqual(5, diagnostic["totals"]["traceable_assertions"])
+            self.assertEqual(0, diagnostic["totals"]["hidden_subtest_warnings"])
+            self.assertEqual(0, diagnostic["totals"]["new_tcs_appended"])
+            self.assertEqual(0, result["additive_feedback"]["pending_additive_follow_up"])
+            self.assertEqual(
+                "AUTOMATION_EXECUTION_NOT_READY",
+                result["automation_audits"][2]["classification"],
+            )
+            self.assertNotIn("subtests", json.dumps(result["cases"]))
             self.assertEqual(5, diagnostic["totals"]["scenario_candidates_before_merge"])
             self.assertEqual(2, diagnostic["totals"]["scenario_merges_applied"])
             self.assertEqual(3, diagnostic["totals"]["scenarios_after_merge"])
@@ -226,6 +242,16 @@ class FullPipelineE2ETests(unittest.TestCase):
             self.assertEqual(
                 ["CP-001", "CP-002", "CP-003"],
                 result["cases"][0]["coverage_point_refs"],
+            )
+            self.assertEqual(
+                {
+                    "FUNCTIONAL_AUTHORITY",
+                    "TECHNICAL_CONTEXT",
+                    "IMPLEMENTATION_EVIDENCE",
+                    "OTHER_SELECTED",
+                    "TEST_ASSET",
+                },
+                set(result["source_analysis"]["evidence_records_by_role"]),
             )
 
 
