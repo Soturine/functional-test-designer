@@ -10,6 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from generation_orchestrator import GenerationContractError  # noqa: E402
+from risk_coverage import RiskCoverageError  # noqa: E402
 from source_accounting import SourceAccountingError  # noqa: E402
 from workflow_entrypoints import INTENTS, dispatch, dispatch_request, normalize_intent  # noqa: E402
 
@@ -62,8 +63,15 @@ def generation_request(root: Path, artifact: Path) -> dict:
         "opportunities": [{
             "id": "OPP-001", "source_role": "FUNCTIONAL_AUTHORITY", "source_ref": source_ref,
             "authority_status": "NORMATIVE", "disposition": "NEW_NORMATIVE_SCENARIO",
-            "target_refs": ["SCN-001"],
+            "target_refs": ["SCN-001"], "risk_condition_ref": "RISK-001",
+            "normative_support_refs": [source_ref],
         }],
+        "risk_conditions": [{
+            "id": "RISK-001", "risk_class": "OPERATOR_ERROR", "dimension": "duplicate_replay",
+            "condition_support_refs": [source_ref], "oracle_support": "NORMATIVE",
+        }],
+        "use_case_flows": [],
+        "test_asset_inventory": {"discovered": [], "classifications": []},
         "scenario_profiles": {"CP-001": {
             "title": "Refresh the dashboard counter", "behavior": "Refresh counter",
             "scenario_type": "HAPPY_PATH", "normative_oracle": "The counter is updated.",
@@ -245,6 +253,60 @@ class WorkflowEntrypointTests(unittest.TestCase):
             ]
             self.assertIn("SOURCE_ACCOUNTING_COMPLETE", created)
             self.assertIn("SOURCE_REVIEW_COMPLETE", created)
+
+    def test_an_evidence_supported_risk_cannot_be_omitted_from_the_run(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            request = generation_request(root, root / "artifacts")
+            request["risk_conditions"].append({
+                "id": "RISK-002", "risk_class": "RESILIENCE", "dimension": "integration",
+                "condition_support_refs": [{"source": "requirements.md", "reference": "RF-001"}],
+                "oracle_support": "NORMATIVE",
+            })
+            with self.assertRaisesRegex(RiskCoverageError, "no opportunity disposition"):
+                dispatch("ftd-gen", **request)
+
+    def test_an_invented_recovery_oracle_is_refused_without_authority(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            request = generation_request(root, root / "artifacts")
+            request["risk_conditions"][0]["oracle_support"] = "UNDEFINED"
+            with self.assertRaisesRegex(RiskCoverageError, "cannot .*normative scenario"):
+                dispatch("ftd-gen", **request)
+
+    def test_selected_test_assets_require_a_real_inventory(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "legacy_test_flow.py").write_text(
+                "def test_rejects_duplicate():\n    assert True\n", encoding="utf-8"
+            )
+            request = generation_request(root, root / "artifacts")
+            request["selectors"] = ["requirements.md", "legacy_test_flow.py"]
+            request["evidence_manifest"] = ["legacy_test_flow.py", "requirements.md"]
+            request["source_ledger"].append({
+                "source": "legacy_test_flow.py", "source_role": "TEST_ASSET",
+                "content_type": "text/x-python", "disposition": "INSPECTED_CONTENT",
+                "inspection_method": "STATIC_AST_DISCOVERY", "evidence_records": 0,
+                "source_behaviors": 0, "test_asset_behaviors": 1,
+            })
+            with self.assertRaisesRegex(GenerationContractError, "require a real inventory"):
+                dispatch("ftd-gen", **request)
+
+    def test_risk_and_flow_review_metrics_reach_diagnostics(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            result = dispatch("ftd-gen", **generation_request(root, root / "artifacts"))
+            diagnostic = json.loads(Path(result["diagnostics"]).read_text(encoding="utf-8"))
+            self.assertEqual(1, diagnostic["risk_conditions_reviewed"])
+            self.assertEqual(1, diagnostic["operator_error_opportunities"])
+            self.assertEqual(0, diagnostic["unaccounted_risk_conditions"])
+            self.assertEqual(0, diagnostic["unaccounted_use_case_flows"])
+            self.assertEqual(0, diagnostic["test_asset_missing_dispositions"])
+            created = [
+                item["checkpoint"] for item in diagnostic["checkpoint_events"]
+                if item["event"] == "created"
+            ]
+            self.assertIn("OPPORTUNITY_AUDIT_COMPLETE", created)
 
     def test_natural_language_is_primary_for_every_capability(self) -> None:
         examples = {

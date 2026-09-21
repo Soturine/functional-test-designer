@@ -17,10 +17,12 @@ from resolve_artifacts import resolve_artifact_paths
 from resolve_scope import resolve_selected_scope
 from run_state import RunStateStore, source_manifest
 from scenario_independence import build_scenario_pipeline
+from risk_coverage import audit_flow_coverage, audit_risk_matrix
 from scenario_opportunities import audit_scenario_opportunities
 from source_accounting import (
     audit_source_review_independence, build_source_ledger, read_telemetry,
 )
+from test_asset_inventory import audit_test_asset_inventory
 from source_coverage_audit import (
     audit_atomic_chain, audit_materialized_atomicity, audit_source_claims,
     materialize_atomic_coverage, review_source_items,
@@ -30,7 +32,8 @@ from source_coverage_audit import (
 REQUIRED_INPUTS = {
     "workspace", "selectors", "artifact_root", "run_id", "sources", "requirements",
     "source_items", "source_ledger", "source_review", "evidence_manifest", "selected_evidence",
-    "opportunities", "scenario_profiles", "evidence_packs",
+    "opportunities", "risk_conditions", "use_case_flows", "test_asset_inventory",
+    "scenario_profiles", "evidence_packs",
 }
 PHASES = (
     "scope_resolution", "source_inventory", "source_collection", "evidence_reconciliation",
@@ -182,9 +185,37 @@ def run_generation(request: dict[str, Any]) -> dict[str, Any]:
     }, hashes)
     metrics["checkpoint_events"].append({"checkpoint": "SOURCE_ATOMICITY_COMPLETE", "event": "created"})
 
-    opportunity_precheck = phase(
-        "scenario_reasoning",
-        lambda: audit_scenario_opportunities(request["selected_evidence"], request["opportunities"]),
+    question_ids = {str(item["id"]) for item in request.get("questions", [])}
+
+    def review_opportunities() -> dict[str, Any]:
+        precheck = audit_scenario_opportunities(
+            request["selected_evidence"], request["opportunities"]
+        )
+        assets = request["test_asset_inventory"]
+        declared_test_assets = any(
+            entry["source_role"] == "TEST_ASSET" for entry in collection["ledger"]["entries"]
+        )
+        discovered = list(assets.get("discovered", []))
+        if declared_test_assets and not discovered:
+            raise GenerationContractError(
+                "Selected Test Assets require a real inventory before disposition"
+            )
+        return {
+            **precheck,
+            **audit_test_asset_inventory(discovered, list(assets.get("classifications", []))),
+            **audit_risk_matrix(
+                request["risk_conditions"], request["opportunities"], question_ids=question_ids
+            ),
+            **audit_flow_coverage(request["use_case_flows"], request["opportunities"]),
+        }
+
+    opportunity_precheck = phase("scenario_reasoning", review_opportunities)
+    store.save("OPPORTUNITY_AUDIT_COMPLETE", {
+        "risk_conditions_reviewed": opportunity_precheck["risk_conditions_reviewed"],
+        "use_case_flows_reviewed": opportunity_precheck["use_case_flows_reviewed"],
+    }, hashes)
+    metrics["checkpoint_events"].append(
+        {"checkpoint": "OPPORTUNITY_AUDIT_COMPLETE", "event": "created"}
     )
     design = phase(
         "scenario_engine",
@@ -192,7 +223,6 @@ def run_generation(request: dict[str, Any]) -> dict[str, Any]:
     )
     scenario_ids = {item["id"] for item in design["scenarios"]}
     finding_ids = {str(item["id"]) for item in request.get("findings", [])}
-    question_ids = {str(item["id"]) for item in request.get("questions", [])}
     opportunity_audit = audit_scenario_opportunities(
         request["selected_evidence"], request["opportunities"], scenario_ids=scenario_ids,
         finding_ids=finding_ids, question_ids=question_ids,
