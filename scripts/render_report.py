@@ -259,6 +259,7 @@ def render_case(
     related_groups: list[str] | None = None,
     technical_context: dict[str, Any] | str = "",
     feature_flags: set[str] | None = None,
+    artifact_formats: set[str] | None = None,
 ) -> str:
     status = case["status"]
     priority = case["priority"]
@@ -289,10 +290,14 @@ def render_case(
         if related_groups
         else ""
     )
-    artifacts = (
-        f'<a href="{esc(entry["file"])}">JSON</a>'
-        f'<a href="{esc(entry["markdown_file"])}">Markdown</a>'
-    )
+    if artifact_formats is None:
+        artifact_formats = {"JSON", "MARKDOWN"}
+    artifact_links = []
+    if "JSON" in artifact_formats:
+        artifact_links.append(f'<a href="{esc(entry["file"])}">JSON</a>')
+    if "MARKDOWN" in artifact_formats:
+        artifact_links.append(f'<a href="{esc(entry["markdown_file"])}">Markdown</a>')
+    artifacts = "".join(artifact_links) or '<span class="empty">No additional public projection requested.</span>'
     flow_id = f"flow-{case['id']}"
     flow, expandable = render_flow(mermaid, flow_id)
     expand_button = (
@@ -392,7 +397,11 @@ def render_coverage(
     return "".join(blocks)
 
 
-def render_report(output_dir: Path, destination: Path | None = None) -> Path:
+def render_report(
+    output_dir: Path,
+    destination: Path | None = None,
+    artifact_formats: set[str] | None = None,
+) -> Path:
     output_dir = output_dir.resolve()
     errors = validate(output_dir)
     if errors:
@@ -501,7 +510,10 @@ def render_report(output_dir: Path, destination: Path | None = None) -> Path:
                 "related_groups": related,
                 "finding_ids": finding_ids,
             }
-            cards_parts.append(render_case(case, entry, mermaid_by_id[case["id"]], group, related, technical, flags))
+            cards_parts.append(render_case(
+                case, entry, mermaid_by_id[case["id"]], group, related, technical, flags,
+                artifact_formats,
+            ))
         cards = "".join(cards_parts)
         member_req_ids = {ref for _, _, case, _ in members for ref in case.get("requirement_refs", [])}
         group_claims = sum(summaries[ref]["source_claims_identified"] for ref in member_req_ids)

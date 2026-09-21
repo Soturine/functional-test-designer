@@ -171,6 +171,10 @@ AGGREGATION_STRATEGIES = {
     "abstract_observation_warnings": "last",
     "placeholder_test_data_warnings": "last",
     "assertion_discrimination_warnings": "last",
+    "requested_public_formats": "last",
+    "rendered_public_formats": "last",
+    "canonical_state_written": "last",
+    "source_reads_during_render": "sum",
 }
 
 ABSTRACT_ACTION_PATTERNS = (

@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 import diagnostics
+from canonical_state import persist_canonical_suite
 from evidence_map import EvidenceMap
 from parallel_evidence import (
     EvidenceRecord,
@@ -385,22 +386,41 @@ def run(artifact_root: Path) -> dict[str, Any]:
         findings=index["findings"],
     )
 
-    def materialize() -> int:
-        write_json(output / "test-cases.json", index)
-        write_json(
-            output / "questions.json",
-            {"schema_version": "1.2", "questions": reconciliation["questions"]},
+    questions_document = {
+        "schema_version": "1.2",
+        "questions": reconciliation["questions"],
+    }
+
+    def materialize() -> dict[str, Any]:
+        canonical_path = persist_canonical_suite(
+            artifact_root,
+            "synthetic-e2e",
+            index=index,
+            questions=questions_document,
+            cases=cases,
         )
+        write_json(output / "test-cases.json", index)
+        write_json(output / "questions.json", questions_document)
         for case in cases:
             write_json(output / "test-cases" / f"{case['id']}.json", case)
-        return sum(path.stat().st_size for path in output.rglob("*.json"))
+        return {
+            "bytes": sum(path.stat().st_size for path in output.rglob("*.json")),
+            "canonical_path": str(canonical_path),
+        }
 
-    json_bytes = timed(
+    materialized = timed(
         metrics_path,
         "json_write",
         materialize,
         "Serialized already prepared JSON structures.",
-        lambda size: {"individual_json_files_written": len(cases), "json_bytes_written": size},
+        lambda value: {
+            "individual_json_files_written": len(cases),
+            "json_bytes_written": value["bytes"],
+            "requested_public_formats": ["HTML", "JSON", "MARKDOWN"],
+            "rendered_public_formats": ["HTML", "JSON", "MARKDOWN"],
+            "canonical_state_written": True,
+            "source_reads_during_render": 0,
+        },
     )
     errors = timed(metrics_path, "validation", lambda: validate(output), "Ran the schema and cross-file validator.", lambda _: {"validator_runs": 1})
     if errors:
@@ -418,7 +438,8 @@ def run(artifact_root: Path) -> dict[str, Any]:
         "cases": cases,
         "markdown_files": len(markdown),
         "report": str(report),
-        "json_bytes": json_bytes,
+        "json_bytes": materialized["bytes"],
+        "canonical_state": materialized["canonical_path"],
         "evidence_map": evidence_map.metrics(),
         "source_analysis": evidence_analysis.metrics,
         "procedural": procedural.metrics,
