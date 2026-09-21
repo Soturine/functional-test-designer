@@ -149,6 +149,20 @@ def render_case(
         f"## JSON Artifact\n`{json_path}`",
         "## Fluxo do Teste\n```mermaid\n" + mermaid_source(case) + "\n```",
     ]
+    if case.get("schema_version") == "2.2":
+        design_lines = [
+            f"**Test basis:** {case['test_basis']}  ",
+            f"**Primary type:** {case['primary_type']}  ",
+            f"**Execution status:** {case['execution_status']}  ",
+            f"**Automation candidate:** {'yes' if case['automation_candidate'] else 'no'}",
+        ]
+        if case.get("composes"):
+            design_lines.append("  \n**Composes:** " + ", ".join(case["composes"]))
+        if case.get("finding_refs"):
+            design_lines.append("  \n**Findings:** " + ", ".join(case["finding_refs"]))
+        if case.get("question_refs"):
+            design_lines.append("  \n**Questions:** " + ", ".join(case["question_refs"]))
+        sections.insert(2, "## Test Design Classification\n" + "".join(design_lines))
     if requirement_group:
         group_lines = f"**Requirement group:** {requirement_group}"
         if related_groups:

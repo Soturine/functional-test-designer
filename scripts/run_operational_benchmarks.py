@@ -25,6 +25,8 @@ def load_pack(path: Path) -> dict[str, Any]:
     for field in ("id", "title", "files", "request", "expected_invariants"):
         if field not in pack:
             raise ValueError(f"Benchmark pack {path.name} is missing {field}")
+    # Packs created before the v2.2 schema remain explicit compatibility fixtures.
+    pack["request"].setdefault("schema_version", "1.2")
     return pack
 
 

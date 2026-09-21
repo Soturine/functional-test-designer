@@ -66,13 +66,24 @@ class TestIdentity:
     requirement_refs: tuple[str, ...]
     coverage_point_refs: tuple[str, ...]
     normative_source_refs: tuple[tuple[str, str], ...]
-    normative_oracle: str
+    normative_oracle: str | None
     objective: str = ""
     material_preconditions: tuple[str, ...] = ()
     test_data_partition: str = ""
     assertions: tuple[AssertionObservation, ...] = ()
     execution_signature: ExecutionSignature | None = None
     execution_boundary: str = ""
+    test_basis: str = "ACCEPTANCE"
+    primary_type: str = "FUNCTIONAL"
+    secondary_tags: tuple[str, ...] = ()
+    question_refs: tuple[str, ...] = ()
+    finding_refs: tuple[str, ...] = ()
+    composes: tuple[str, ...] = ()
+    automation_candidate: bool = False
+    automation_layer: str = "NONE"
+    automation_tool_hint: str = "NONE"
+    deterministic: bool = True
+    execution_status: str = "READY"
 
 
 IDENTITY_FIELDS = (
@@ -470,4 +481,211 @@ def build_scenario_pipeline(
         "warnings": warnings,
         "metrics": observed,
         "cohesion_audit_trail": cohesion_audit_trail,
+    }
+
+
+V22_TEST_BASES = {
+    "ACCEPTANCE", "CHARACTERIZATION", "DERIVED", "EXPLORATORY", "REGRESSION", "E2E",
+}
+V22_PRIMARY_TYPES = {
+    "FUNCTIONAL", "NEGATIVE", "BOUNDARY", "SECURITY", "AUTHORIZATION", "PERFORMANCE",
+    "RESILIENCE", "RECOVERY", "CONCURRENCY", "RACE_CONDITION", "IDEMPOTENCY",
+    "INTEGRATION", "CONTRACT", "DATA_INTEGRITY", "AUDIT", "STATE_TRANSITION", "E2E",
+    "FIELD", "HARDWARE_INTEGRATION", "CHAOS", "EXPLORATORY",
+}
+V22_EXECUTION_STATUSES = {
+    "READY", "NEEDS_REVIEW", "BLOCKED_REQUIREMENT", "BLOCKED_IMPLEMENTATION_GAP",
+    "BLOCKED_ENVIRONMENT", "BLOCKED_TEST_DATA", "BLOCKED_EXTERNAL_DEPENDENCY", "EXPLORATORY",
+}
+
+
+def _v22_family_key(candidate: dict[str, Any]) -> str:
+    explicit = candidate.get("scenario_family") or candidate.get("scenario_family_key")
+    if explicit:
+        return _semantic_text(explicit)
+    requirements = candidate.get("requirement_refs", [])
+    return _semantic_text(requirements[0] if requirements else candidate.get("behavior"))
+
+
+def _v22_merge_suggestions(
+    candidates: list[dict[str, Any]], candidate_to_tc: dict[str, str]
+) -> list[dict[str, Any]]:
+    """Describe possible manual compaction without deleting canonical atomic cases."""
+    suggestions: list[dict[str, Any]] = []
+    for index, left in enumerate(candidates):
+        for right in candidates[index + 1:]:
+            same_event = bool(left.get("event")) and left.get("event") == right.get("event")
+            same_setup = (
+                left.get("actor") == right.get("actor")
+                and left.get("setup") == right.get("setup")
+                and left.get("state") == right.get("state")
+            )
+            explicit = (
+                left.get("merge_candidate_group")
+                and left.get("merge_candidate_group") == right.get("merge_candidate_group")
+            )
+            if not explicit and not (same_event and same_setup):
+                continue
+            suggestions.append({
+                "test_case_ids": [candidate_to_tc[left["id"]], candidate_to_tc[right["id"]]],
+                "reason": "same business event" if same_event else "shared execution setup",
+                "shared_setup": same_setup,
+                "shared_business_event": same_event,
+                "manual_execution_benefit": "HIGH" if same_setup else "MEDIUM",
+                "automation_tradeoff": "LOSES_INDEPENDENT_FAILURE_DIAGNOSIS",
+                "confidence": "HIGH" if explicit or (same_event and same_setup) else "MEDIUM",
+            })
+    return suggestions
+
+
+def build_scenario_family_pipeline(
+    coverage_points: list[dict[str, Any]],
+    profiles_by_coverage_point: dict[str, dict[str, Any] | list[dict[str, Any]]],
+) -> dict[str, Any]:
+    """Build the v2.2 atomic view: Scenario families organize TCs and never compress them."""
+    testable = [item for item in coverage_points if item.get("disposition") == "TEST_CASE"]
+    candidates: list[dict[str, Any]] = []
+    for coverage_point in testable:
+        cp_id = str(coverage_point["id"])
+        raw_profiles = profiles_by_coverage_point.get(cp_id)
+        if raw_profiles is None:
+            raise ValueError(f"Testable Coverage Point {cp_id} has no scenario candidate profile")
+        profiles = raw_profiles if isinstance(raw_profiles, list) else [raw_profiles]
+        if not profiles:
+            raise ValueError(f"Testable Coverage Point {cp_id} has no scenario candidate profile")
+        for number, profile in enumerate(profiles, 1):
+            candidate = candidate_from_coverage_point(coverage_point, profile)
+            candidate["id"] = f"CAND-{cp_id}-{number:02d}" if len(profiles) > 1 else f"CAND-{cp_id}"
+            basis = str(candidate.get("test_basis", "ACCEPTANCE"))
+            primary_type = str(candidate.get("primary_type", "FUNCTIONAL"))
+            execution_status = str(candidate.get("execution_status", "READY"))
+            if basis not in V22_TEST_BASES:
+                raise ValueError(f"{candidate['id']} has unsupported test_basis {basis}")
+            if primary_type not in V22_PRIMARY_TYPES:
+                raise ValueError(f"{candidate['id']} has unsupported primary_type {primary_type}")
+            if execution_status not in V22_EXECUTION_STATUSES:
+                raise ValueError(f"{candidate['id']} has unsupported execution_status {execution_status}")
+            oracle = candidate.get("normative_oracle")
+            if basis == "ACCEPTANCE" and (not isinstance(oracle, str) or not oracle.strip()):
+                raise ValueError(f"{candidate['id']} acceptance test has no normative oracle")
+            if basis == "CHARACTERIZATION" and not candidate.get("implementation_oracle"):
+                raise ValueError(f"{candidate['id']} characterization test has no implementation oracle")
+            if basis == "EXPLORATORY" and oracle:
+                raise ValueError(f"{candidate['id']} exploratory test cannot claim a normative oracle")
+            candidate["test_basis"] = basis
+            candidate["primary_type"] = primary_type
+            candidate["execution_status"] = execution_status
+            candidate["scenario_family_key"] = _v22_family_key(candidate)
+            candidates.append(candidate)
+
+    represented = {cp for item in candidates for cp in item.get("coverage_point_refs", [])}
+    missing = {str(item["id"]) for item in testable} - represented
+    if missing:
+        raise ValueError(
+            "Testable Coverage Points disappeared before atomic Test Case design: "
+            + ", ".join(sorted(missing))
+        )
+
+    family_keys: list[str] = []
+    for candidate in candidates:
+        if candidate["scenario_family_key"] not in family_keys:
+            family_keys.append(candidate["scenario_family_key"])
+    family_ids = {key: f"SCN-{number:03d}" for number, key in enumerate(family_keys, 1)}
+    candidate_to_tc = {candidate["id"]: f"TC-{number:03d}" for number, candidate in enumerate(candidates, 1)}
+    identities: list[TestIdentity] = []
+    for candidate in candidates:
+        scenario_id = family_ids[candidate["scenario_family_key"]]
+        tc_id = candidate_to_tc[candidate["id"]]
+        source_refs = tuple(
+            (str(ref["source"]), str(ref["reference"]))
+            for ref in candidate.get("normative_source_refs", [])
+        )
+        raw_assertions = candidate.get("assertions", [])
+        assertions = tuple(
+            AssertionObservation(
+                coverage_point_ref=str(item["coverage_point_ref"]),
+                requirement_ref=str(item["requirement_ref"]),
+                oracle=str(item.get("oracle", "")),
+                observation_target=str(item.get("observation_target", "")),
+                evidence_source=tuple(
+                    (str(ref["source"]), str(ref["reference"]))
+                    for ref in item.get("evidence_source", [])
+                ),
+                observation_phase=str(item.get("observation_phase", "after_trigger")),
+            )
+            for item in raw_assertions
+        )
+        final_oracle = candidate.get("normative_oracle")
+        if candidate["test_basis"] == "CHARACTERIZATION":
+            final_oracle = str(candidate["implementation_oracle"])
+        identities.append(TestIdentity(
+            id=tc_id,
+            title=str(candidate.get("title") or candidate.get("behavior") or tc_id),
+            scenario_ref=scenario_id,
+            scenario_type="SCENARIO_FAMILY",
+            requirement_refs=tuple(candidate.get("requirement_refs", [])),
+            coverage_point_refs=tuple(candidate.get("coverage_point_refs", [])),
+            normative_source_refs=source_refs,
+            normative_oracle=final_oracle if isinstance(final_oracle, str) and final_oracle else None,
+            objective=str(candidate.get("objective") or candidate.get("behavior") or candidate.get("title")),
+            material_preconditions=tuple(map(str, candidate.get("material_preconditions", []))),
+            test_data_partition=str(candidate.get("input_partition", "")),
+            assertions=assertions,
+            execution_signature=candidate.get("execution_signature") or execution_signature(candidate),
+            execution_boundary=str(candidate.get("execution_boundary", "")),
+            test_basis=candidate["test_basis"],
+            primary_type=candidate["primary_type"],
+            secondary_tags=tuple(map(str, candidate.get("secondary_tags", []))),
+            question_refs=tuple(map(str, candidate.get("question_refs", []))),
+            finding_refs=tuple(map(str, candidate.get("finding_refs", []))),
+            composes=tuple(map(str, candidate.get("composes", []))),
+            automation_candidate=bool(candidate.get("automation_candidate", False)),
+            automation_layer=str(candidate.get("automation_layer", "NONE")),
+            automation_tool_hint=str(candidate.get("automation_tool_hint", "NONE")),
+            deterministic=bool(candidate.get("deterministic", True)),
+            execution_status=candidate["execution_status"],
+        ))
+
+    families: list[dict[str, Any]] = []
+    for key in family_keys:
+        members = [item for item in candidates if item["scenario_family_key"] == key]
+        families.append({
+            "id": family_ids[key],
+            "title": str(members[0].get("scenario_family_title") or members[0].get("scenario_family") or members[0].get("title") or key),
+            "type": "SCENARIO_FAMILY",
+            "requirement_refs": list(dict.fromkeys(
+                ref for item in members for ref in item.get("requirement_refs", [])
+            )),
+            "coverage_point_refs": list(dict.fromkeys(
+                ref for item in members for ref in item.get("coverage_point_refs", [])
+            )),
+            "test_case_refs": [candidate_to_tc[item["id"]] for item in members],
+        })
+    suggestions = _v22_merge_suggestions(candidates, candidate_to_tc)
+    basis_counts = {basis: sum(item.test_basis == basis for item in identities) for basis in V22_TEST_BASES}
+    return {
+        "candidates": candidates,
+        "merge_decisions": [],
+        "merge_candidates": suggestions,
+        "scenarios": families,
+        "test_identities": identities,
+        "warnings": [],
+        "cohesion_audit_trail": [],
+        "metrics": {
+            "coverage_points": len(coverage_points),
+            "testable_coverage_points": len(testable),
+            "scenario_candidates_before_merge": len(candidates),
+            "scenario_merge_candidates": len(suggestions),
+            "scenario_merges_applied": 0,
+            "scenarios_after_merge": len(families),
+            "test_cases_generated": len(identities),
+            "atomic_tests": sum(item.test_basis != "E2E" for item in identities),
+            "flow_tests": basis_counts["E2E"],
+            "e2e_tests": basis_counts["E2E"],
+            "derived_tests": basis_counts["DERIVED"],
+            "characterization_tests": basis_counts["CHARACTERIZATION"],
+            "exploratory_tests": basis_counts["EXPLORATORY"],
+            "merge_candidates": len(suggestions),
+            "actual_merges": 0,
+        },
     }

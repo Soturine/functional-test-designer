@@ -6,7 +6,7 @@
   "additionalProperties": false,
   "required": ["schema_version", "questions"],
   "properties": {
-    "schema_version": {"const": "1.2"},
+    "schema_version": {"enum": ["1.2", "2.2"]},
     "questions": {"type": "array", "items": {"$ref": "#/$defs/question"}}
   },
   "$defs": {
@@ -53,6 +53,7 @@
         "question": {"type": "string", "minLength": 1},
         "reason": {"type": "string", "minLength": 1},
         "blocking": {"type": "boolean"}
+        ,"impact": {"enum": ["EXECUTION_DETAIL", "TEST_DATA", "ACTOR_PERMISSION", "EXPECTED_RESULT", "ENVIRONMENT", "SCOPE", "IMPLEMENTATION_LOCATION", "REQUIREMENT_AMBIGUITY"]}
       }
     }
   }

@@ -81,15 +81,21 @@ def synthesize_test_case(
     supplied_partition = str(evidence_pack.get("test_data_partition", ""))
     if identity.test_data_partition and supplied_partition and supplied_partition != identity.test_data_partition:
         raise ValueError(f"Procedural synthesis changed frozen test-data partition for {identity.id}")
-    status = "NEEDS_REVIEW" if any(item["needs_clarification"] for item in steps) else "READY"
+    schema_version = str(evidence_pack.get("schema_version", "1.2"))
+    if schema_version == "2.2":
+        status = identity.execution_status
+        if any(item["needs_clarification"] for item in steps) and status == "READY":
+            status = "NEEDS_REVIEW"
+    else:
+        status = "NEEDS_REVIEW" if any(item["needs_clarification"] for item in steps) else "READY"
     objective = identity.objective or evidence_pack.get("objective", identity.title)
     case = {
-        "schema_version": "1.2",
+        "schema_version": schema_version,
         "id": identity.id,
         "title": identity.title,
         "status": status,
         "priority": evidence_pack.get("priority", "MEDIUM"),
-        "type": "FUNCTIONAL",
+        "type": identity.primary_type if schema_version == "2.2" else "FUNCTIONAL",
         "objective": objective,
         "requirement_refs": list(identity.requirement_refs),
         "scenario_refs": [identity.scenario_ref],
@@ -103,6 +109,20 @@ def synthesize_test_case(
         "tags": deepcopy(evidence_pack.get("tags", [])),
         "notes": deepcopy(evidence_pack.get("notes", [])),
     }
+    if schema_version == "2.2":
+        case.update({
+            "test_basis": identity.test_basis,
+            "primary_type": identity.primary_type,
+            "secondary_tags": list(identity.secondary_tags),
+            "execution_status": status,
+            "question_refs": list(identity.question_refs),
+            "finding_refs": list(identity.finding_refs),
+            "composes": list(identity.composes),
+            "automation_candidate": identity.automation_candidate,
+            "automation_layer": identity.automation_layer,
+            "automation_tool_hint": identity.automation_tool_hint,
+            "deterministic": identity.deterministic,
+        })
     assert_identity_preserved(identity, case)
     return case
 

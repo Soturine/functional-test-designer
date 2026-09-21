@@ -57,7 +57,7 @@ def persist_canonical_suite(
     catalog = operational_catalog or {"families": [], "family_count": 0}
     document = {
         "internal_schema_version": "1",
-        "public_schema_version": "1.2",
+        "public_schema_version": str(index.get("schema_version", "1.2")),
         "semantic_fingerprint": fingerprint({"index": index, "questions": questions, "cases": cases}),
         "index": index,
         "questions": questions,
@@ -71,7 +71,7 @@ def persist_canonical_suite(
 
 def read_canonical_suite(path: Path) -> dict[str, Any]:
     document = json.loads(path.read_text(encoding="utf-8"))
-    if document.get("internal_schema_version") != "1" or document.get("public_schema_version") != "1.2":
+    if document.get("internal_schema_version") != "1" or document.get("public_schema_version") not in {"1.2", "2.2"}:
         raise ValueError("Unsupported canonical suite version")
     expected = fingerprint({
         "index": document["index"],

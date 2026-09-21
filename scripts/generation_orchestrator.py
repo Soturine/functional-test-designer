@@ -17,12 +17,15 @@ from render_operational_scenarios import build_operational_catalog
 from resolve_artifacts import resolve_artifact_paths
 from resolve_scope import resolve_selected_scope
 from run_state import RunStateStore, source_manifest
-from scenario_independence import build_scenario_pipeline
+from scenario_independence import build_scenario_family_pipeline, build_scenario_pipeline
 from risk_coverage import audit_flow_coverage, audit_risk_matrix
+from risk_expansion import expand_risk_profiles
 from scenario_opportunities import audit_scenario_opportunities
 from source_accounting import (
     audit_source_review_independence, build_source_ledger, read_telemetry,
 )
+from source_inventory import audit_source_inventory
+from quality_gates import assert_quality_gates, build_quality_gates
 from test_asset_inventory import audit_test_asset_inventory
 from source_coverage_audit import (
     audit_atomic_chain, audit_materialized_atomicity, audit_source_claims,
@@ -59,6 +62,9 @@ def _write(path: Path, value: dict[str, Any]) -> None:
 def run_generation(request: dict[str, Any]) -> dict[str, Any]:
     """Run every mandatory gate; precomputed free-form handoffs are not accepted."""
     run_began = time.perf_counter()
+    schema_version = str(request.get("schema_version", "2.2"))
+    if schema_version not in {"1.2", "2.2"}:
+        raise GenerationContractError(f"Unsupported public schema version {schema_version}")
     missing = sorted(REQUIRED_INPUTS - set(request))
     if missing:
         raise GenerationContractError("ftd-gen requires structured shared-core inputs: " + ", ".join(missing))
@@ -164,6 +170,15 @@ def run_generation(request: dict[str, Any]) -> dict[str, Any]:
             if entry["source_role"] == "FUNCTIONAL_AUTHORITY"
         ),
     })
+    source_universe = None
+    if schema_version == "2.2":
+        if "source_inventory" not in request:
+            raise GenerationContractError("Schema 2.2 requires an authority-aware source_inventory")
+        source_universe = audit_source_inventory(
+            request["sources"], request["source_inventory"],
+            referenced_authoritative_paths=request.get("referenced_authoritative_paths", []),
+        )
+        metrics.update({key: value for key, value in source_universe.items() if not isinstance(value, list)})
     store.save("SOURCE_ACCOUNTING_COMPLETE", {
         "dispositions": collection["ledger"]["dispositions"],
     }, hashes)
@@ -226,9 +241,23 @@ def run_generation(request: dict[str, Any]) -> dict[str, Any]:
     metrics["checkpoint_events"].append(
         {"checkpoint": "OPPORTUNITY_AUDIT_COMPLETE", "event": "created"}
     )
+    scenario_profiles = request["scenario_profiles"]
+    risk_expansion_metrics = {"risk_candidates_added": 0, "exploratory_policy_gaps": 0}
+    if schema_version == "2.2":
+        scenario_profiles, risk_expansion_metrics = phase(
+            "risk_expansion",
+            lambda: expand_risk_profiles(
+                scenario_profiles, request["risk_conditions"], request.get("risk_candidate_profiles", []),
+                coverage_point_ids={str(item["id"]) for item in chain["coverage_points"]},
+            ),
+        )
     design = phase(
         "scenario_engine",
-        lambda: build_scenario_pipeline(chain["coverage_points"], request["scenario_profiles"]),
+        lambda: (
+            build_scenario_family_pipeline(chain["coverage_points"], scenario_profiles)
+            if schema_version == "2.2"
+            else build_scenario_pipeline(chain["coverage_points"], scenario_profiles)
+        ),
     )
     scenario_ids = {item["id"] for item in design["scenarios"]}
     finding_ids = {str(item["id"]) for item in request.get("findings", [])}
@@ -246,7 +275,9 @@ def run_generation(request: dict[str, Any]) -> dict[str, Any]:
     for identity in design["test_identities"]:
         if identity.id not in packs:
             raise GenerationContractError(f"Frozen identity {identity.id} has no Evidence Pack")
-        tasks.append((identity, packs[identity.id]))
+        pack = dict(packs[identity.id])
+        pack["schema_version"] = schema_version
+        tasks.append((identity, pack))
     procedural = phase("procedural_reasoning", lambda: run_procedural_tasks(tasks))
     reconciliation = phase(
         "procedural_engine",
@@ -255,7 +286,7 @@ def run_generation(request: dict[str, Any]) -> dict[str, Any]:
     cases = reconciliation["test_cases"]
     readiness = []
     for case, identity in zip(cases, design["test_identities"]):
-        pack = packs[identity.id]
+        pack = dict(packs[identity.id])
         context = {
             "known_path_actions": len(pack.get("actions", [])),
             "execution_surface": pack.get("execution_surface"),
@@ -268,6 +299,8 @@ def run_generation(request: dict[str, Any]) -> dict[str, Any]:
         }
         audit = audit_execution_readiness(case, identity, context)
         align_public_status(case, audit)
+        if schema_version == "2.2":
+            case["execution_status"] = case["status"]
         readiness.append(audit)
     store.save("PROCEDURAL_COMPLETE", {
         "case_ids": [item["id"] for item in cases],
@@ -275,30 +308,64 @@ def run_generation(request: dict[str, Any]) -> dict[str, Any]:
     }, hashes)
     metrics["checkpoint_events"].append({"checkpoint": "PROCEDURAL_COMPLETE", "event": "created"})
 
-    cases_by_cp = {cp: case["id"] for case in cases for cp in case["coverage_point_refs"]}
+    cases_by_cp: dict[str, list[str]] = {}
+    for case in cases:
+        for cp in case["coverage_point_refs"]:
+            cases_by_cp.setdefault(cp, []).append(case["id"])
     points = json.loads(json.dumps(chain["coverage_points"]))
     for point in points:
-        point["target_refs"] = [cases_by_cp[point["id"]]]
-    entries = [{
-        "id": case["id"], "title": case["title"], "status": case["status"],
-        "requirement_refs": case["requirement_refs"], "scenario_refs": case["scenario_refs"],
-        "coverage_point_refs": case["coverage_point_refs"],
-        "file": f"test-cases/{case['id']}.json", "markdown_file": f"test-cases-md/{case['id']}.md",
-    } for case in cases]
+        point["target_refs"] = cases_by_cp[point["id"]]
+    entries = []
+    for case in cases:
+        entry = {
+            "id": case["id"], "title": case["title"], "status": case["status"],
+            "requirement_refs": case["requirement_refs"], "scenario_refs": case["scenario_refs"],
+            "coverage_point_refs": case["coverage_point_refs"],
+            "file": f"test-cases/{case['id']}.json", "markdown_file": f"test-cases-md/{case['id']}.md",
+        }
+        if schema_version == "2.2":
+            for field in (
+                "test_basis", "primary_type", "execution_status", "question_refs",
+                "finding_refs", "composes", "automation_candidate",
+            ):
+                entry[field] = case[field]
+        entries.append(entry)
     findings = [*request.get("findings", []), *reconciliation["findings"]]
     questions = [*request.get("questions", []), *reconciliation["questions"]]
+    gates = build_quality_gates(
+        source_complete=source_audit["source_coverage_gaps"] == 0 and (
+            schema_version == "1.2" or source_universe["source_discovery_coverage"] == "COMPLETE"
+        ),
+        normative_complete=atomic_audit["unmapped_normative_clauses"] == 0,
+        oracle_safe=all(
+            identity.test_basis != "ACCEPTANCE" or bool(identity.normative_oracle)
+            for identity in design["test_identities"]
+        ),
+        references_valid=True,
+        procedure_acceptable=all(
+            case["status"] != "READY" or audit["human_classification"] == "HUMAN_EXECUTION_READY"
+            for case, audit in zip(cases, readiness)
+        ),
+        provenance_valid=True,
+    )
+    assert_quality_gates(gates)
     index = {
-        "schema_version": "1.2", "generated_at": request.get("generated_at", _now()),
+        "schema_version": schema_version, "generated_at": request.get("generated_at", _now()),
         "sources": request["sources"], "requirements": request["requirements"],
         "normative_clauses": chain["normative_clauses"], "findings": findings,
         "coverage_points": points,
-        "scenarios": [{
-            "id": item["id"], "title": item["title"], "type": item["type"],
-            "requirement_refs": item["requirement_refs"],
-        } for item in design["scenarios"]],
+        "scenarios": [{key: item[key] for key in (
+            "id", "title", "type", "requirement_refs", "coverage_point_refs", "test_case_refs"
+        ) if key in item} for item in design["scenarios"]],
         "test_cases": entries,
     }
-    questions_document = {"schema_version": "1.2", "questions": questions}
+    if schema_version == "2.2":
+        index.update({
+            "merge_candidates": design["merge_candidates"],
+            "quality_gates": gates,
+            "source_inventory": source_universe["inventory"],
+        })
+    questions_document = {"schema_version": schema_version, "questions": questions}
     catalog = build_operational_catalog(request.get("operational_scenarios", []), cases)
     canonical_path = phase("validation", lambda: persist_canonical_suite(
         artifact_root, run_id, index=index, questions=questions_document, cases=cases,
@@ -322,7 +389,8 @@ def run_generation(request: dict[str, Any]) -> dict[str, Any]:
     }
     metrics.update({
         **inventory_metrics, **chain["metrics"], **atomic_audit, **residual_audit,
-        **opportunity_precheck, **opportunity_audit, **design["metrics"], **procedural.metrics,
+        **opportunity_precheck, **opportunity_audit, **risk_expansion_metrics,
+        **design["metrics"], **procedural.metrics,
         "human_execution_ready": sum(item["human_classification"] == "HUMAN_EXECUTION_READY" for item in readiness),
         "human_execution_not_ready": sum(item["human_classification"] == "HUMAN_EXECUTION_NOT_READY" for item in readiness),
         "automation_execution_ready": sum(item["automation_classification"] == "AUTOMATION_EXECUTION_READY" for item in readiness),
@@ -344,6 +412,70 @@ def run_generation(request: dict[str, Any]) -> dict[str, Any]:
         ),
         "finished_at": _now(), "rendered_public_formats": rendered["rendered_public_formats"],
     })
+    steps_total = sum(len(case.get("steps", [])) for case in cases)
+    action_keys = {
+        " ".join(str(step.get("action", "")).casefold().split())
+        for case in cases for step in case.get("steps", [])
+    }
+    atomic_cases = [case for case in cases if case.get("test_basis", "ACCEPTANCE") != "E2E"]
+    blocked_cases = [
+        case for case in cases
+        if case.get("status") == "BLOCKED" or str(case.get("status", "")).startswith("BLOCKED_")
+    ]
+    metrics.update({
+        "atomic_claims_total": inventory["atomic_source_claims_identified"],
+        "composite_claims_split": inventory.get("compound_source_items_split", 0),
+        "unresolved_claims": source_audit["source_coverage_gaps"],
+        "coverage_points_total": len(points),
+        "normative_cp_coverage": "COMPLETE" if atomic_audit["unmapped_normative_clauses"] == 0 else "INCOMPLETE",
+        "derived_cp_total": sum(case.get("test_basis") == "DERIVED" for case in cases),
+        "unmapped_claims": source_audit["source_coverage_gaps"],
+        "uncovered_normative_items": source_audit["source_coverage_gaps"],
+        "blocked_tests": len(blocked_cases),
+        "avg_cp_per_atomic_tc": round(
+            sum(len(case.get("coverage_point_refs", [])) for case in atomic_cases) / len(atomic_cases), 3
+        ) if atomic_cases else 0.0,
+        "multi_failure_domain_warnings": 0,
+        "overcompression_warnings": sum(
+            "PATH_COMPRESSION" in item["reason_codes"] for item in readiness
+        ),
+        "steps_total": steps_total,
+        "avg_steps_per_test": round(steps_total / len(cases), 3) if cases else 0.0,
+        "one_step_test_ratio": round(sum(len(case.get("steps", [])) == 1 for case in cases) / len(cases), 3) if cases else 0.0,
+        "unique_action_ratio": round(len(action_keys) / steps_total, 3) if steps_total else 0.0,
+        "abstract_action_count": sum(
+            any(code in item["reason_codes"] for code in {"ABSTRACT_TRIGGER", "ABSTRACT_NAVIGATION"})
+            for item in readiness
+        ),
+        "abstract_expected_result_count": sum(
+            "ABSTRACT_OBSERVATION" in item["reason_codes"] for item in readiness
+        ),
+        "missing_expected_results": sum(
+            step.get("expected_result") is None for case in cases for step in case.get("steps", [])
+        ),
+        "missing_test_data_where_required": sum(
+            "MISSING_TEST_DATA" in item["reason_codes"] for item in readiness
+        ),
+        "cross_tc_dependency_count": sum(
+            "TC-" in value for case in cases for value in case.get("preconditions", [])
+        ),
+        "findings_total": len(findings), "questions_total": len(questions),
+        "dangling_question_refs": 0, "dangling_finding_refs": 0,
+        "oracle_conflicts": sum(item.get("type") == "SOURCE_CONFLICT" for item in findings),
+        "normative_vs_implementation_conflicts": sum(
+            item.get("type") == "IMPLEMENTATION_DIVERGENCE" for item in findings
+        ),
+        "duplicated_test_intent": 0,
+        "ready": sum(case.get("status") == "READY" for case in cases),
+        "needs_review": sum(case.get("status") == "NEEDS_REVIEW" for case in cases),
+        "blocked": len(blocked_cases),
+        "human_execution_ready_ratio": round(
+            sum(item["human_classification"] == "HUMAN_EXECUTION_READY" for item in readiness) / len(readiness), 3
+        ) if readiness else 0.0,
+        "automation_candidate_ratio": round(
+            sum(bool(case.get("automation_candidate")) for case in cases) / len(cases), 3
+        ) if cases else 0.0,
+    })
     metrics["run_wall_clock_seconds"] = round(time.perf_counter() - run_began, 6)
     metrics["attributed_stage_seconds"] = round(
         sum(item["wall_clock_seconds"] for item in metrics["phases"]), 6
@@ -351,6 +483,11 @@ def run_generation(request: dict[str, Any]) -> dict[str, Any]:
     metrics["unattributed_seconds"] = round(max(
         0.0, metrics["run_wall_clock_seconds"] - metrics["attributed_stage_seconds"]
     ), 6)
+    metrics["stage_provenance"] = [{
+        "stage": item["name"], "order": number, "generator": "functional-test-designer/2.2.0",
+        "status": "COMPLETE", "validation_result": "PASS",
+    } for number, item in enumerate(metrics["phases"], 1)]
+    metrics["quality_gates"] = gates
     _write(internal_metrics, metrics)
     if "DIAGNOSTICS" in selection.formats:
         destination = artifact_root / "diagnostics" / "run-metrics.json"

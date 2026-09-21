@@ -31,6 +31,12 @@ STATUS_LABELS = {
     "READY": "READY",
     "NEEDS_REVIEW": "NEEDS REVIEW",
     "BLOCKED": "BLOCKED",
+    "BLOCKED_REQUIREMENT": "BLOCKED REQUIREMENT",
+    "BLOCKED_IMPLEMENTATION_GAP": "BLOCKED IMPLEMENTATION",
+    "BLOCKED_ENVIRONMENT": "BLOCKED ENVIRONMENT",
+    "BLOCKED_TEST_DATA": "BLOCKED TEST DATA",
+    "BLOCKED_EXTERNAL_DEPENDENCY": "BLOCKED DEPENDENCY",
+    "EXPLORATORY": "EXPLORATORY",
 }
 PRIORITY_LABELS = {
     "CRITICAL": "CRITICAL",
@@ -282,8 +288,15 @@ def render_case(
     )
     feature_badges = "".join(
         f'<span class="badge feature-{esc(flag)}">{esc(flag.replace("-", " ").title())}</span>'
-        for flag in ("cross-rf", "multi-source", "findings", "duplicate-candidate")
+        for flag in (
+            "cross-rf", "multi-source", "findings", "questions", "merge-candidate",
+            "e2e-composition", "automation-candidate", "derived-risk",
+        )
         if flag in feature_flags
+    )
+    basis_badge = (
+        f'<span class="badge test-basis">{esc(case.get("test_basis", ""))}</span>'
+        if case.get("test_basis") else ""
     )
     related_html = (
         f'    <p class="related-requirements"><strong>Related requirements:</strong> {esc(", ".join(related_groups))}</p>\n'
@@ -310,7 +323,7 @@ def render_case(
 <details class="tc-card" data-status="{esc(status)}" data-priority="{esc(priority)}" data-rf="{esc(group_identifier(requirement_group or 'Unmapped'))}" data-features="{esc(' '.join(sorted(feature_flags)))}" data-search="{esc(search_text)}">
   <summary>
     <span class="tc-heading"><span class="tc-id">{esc(case['id'])}</span>{esc(case['title'])}</span>
-    <span class="badges">{group_badge}{feature_badges}<span class="badge status-{esc(status.lower())}">{STATUS_LABELS[status]}</span><span class="badge priority">{PRIORITY_LABELS[priority]}</span></span>
+    <span class="badges">{group_badge}{basis_badge}{feature_badges}<span class="badge status-{esc(status.lower())}">{STATUS_LABELS.get(status, esc(status))}</span><span class="badge priority">{PRIORITY_LABELS[priority]}</span></span>
   </summary>
   <div class="tc-content">
     <section><h3>Objetivo</h3><p>{esc(case['objective'])}</p></section>
@@ -446,6 +459,10 @@ def render_report(
     duplicate_ids = {
         case["id"] for case in cases if "duplicate-candidate" in case.get("tags", [])
     }
+    merge_candidate_ids = {
+        tc_id for candidate in index.get("merge_candidates", [])
+        for tc_id in candidate.get("test_case_ids", [])
+    }
     clauses_by_cp: dict[str, list[str]] = {}
     for clause in index.get("normative_clauses", []):
         if clause.get("destination_type") == "COVERAGE_POINT":
@@ -483,18 +500,30 @@ def render_report(
                 flags.add("multi-source")
             if case["id"] in duplicate_ids:
                 flags.add("duplicate-candidate")
+            if case["id"] in merge_candidate_ids:
+                flags.add("merge-candidate")
+            if case.get("test_basis") == "E2E":
+                flags.add("e2e-composition")
+            if case.get("test_basis") == "DERIVED":
+                flags.add("derived-risk")
+            if case.get("automation_candidate"):
+                flags.add("automation-candidate")
             if case["id"] in question_case_ids:
                 flags.add("questions")
-            finding_ids = list(
+            finding_ids = list(dict.fromkeys([
+                *case.get("finding_refs", []),
+                *(
                 dict.fromkeys(
                     finding_id
                     for requirement_ref in case.get("requirement_refs", [])
                     for finding_id in finding_ids_by_requirement.get(requirement_ref, [])
                 )
-            )
+                ),
+            ]))
             if finding_ids:
                 flags.add("findings")
             traceability = list(dict.fromkeys([
+                *(ref.get("source", "") for ref in case.get("source_refs", [])),
                 group_identifier(group),
                 *case.get("requirement_refs", []),
                 *clause_ids,
@@ -509,6 +538,10 @@ def render_report(
                 "primary_group": group,
                 "related_groups": related,
                 "finding_ids": finding_ids,
+                "question_ids": list(case.get("question_refs", [])),
+                "composes": list(case.get("composes", [])),
+                "test_basis": case.get("test_basis"),
+                "automation_candidate": case.get("automation_candidate"),
             }
             cards_parts.append(render_case(
                 case, entry, mermaid_by_id[case["id"]], group, related, technical, flags,
@@ -544,6 +577,11 @@ def render_report(
     source_claim_count = sum(item["source_claims_identified"] for item in summaries.values())
     source_gap_count = sum(item["source_coverage_gaps"] for item in summaries.values())
     cross_rf_count = sum(len(case.get("requirement_refs", [])) > 1 for case in cases)
+    basis_counts = Counter(case.get("test_basis", "ACCEPTANCE") for case in cases)
+    blocked_count = sum(
+        status == "BLOCKED" or str(status).startswith("BLOCKED_")
+        for status in (case.get("status") for case in cases)
+    )
 
     report = f"""<!doctype html>
 <html lang="pt-BR">
@@ -602,6 +640,7 @@ input,select {{ width:100%; min-height:40px; border:1px solid #aeb7bc; border-ra
 .feature-cross-rf {{ color:#3949ab; border-color:#c5cae9; background:#f0f1ff; }}
 .feature-multi-source {{ color:#075e47; border-color:#9fd8c6; background:var(--accent-soft); }}
 .feature-findings,.feature-duplicate-candidate {{ color:#765500; border-color:#ead28e; background:#fff6dd; }}
+.test-basis,.feature-merge-candidate,.feature-e2e-composition,.feature-automation-candidate,.feature-derived-risk {{ color:#3949ab; border-color:#c5cae9; background:#f0f1ff; }}
 .tc-content {{ border-top:1px solid var(--line); padding:16px; }}
 .two-column {{ display:grid; grid-template-columns:1fr 1fr; gap:24px; }}
 ul {{ margin:6px 0 14px; padding-left:20px; }}
@@ -663,7 +702,12 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,su
 <div class="metric"><strong>{len(cases)}</strong><span>Total de TCs</span></div>
 <div class="metric"><strong>{status_counts['READY']}</strong><span>READY</span></div>
 <div class="metric"><strong>{status_counts['NEEDS_REVIEW']}</strong><span>NEEDS REVIEW</span></div>
-<div class="metric"><strong>{status_counts['BLOCKED']}</strong><span>BLOCKED</span></div>
+<div class="metric"><strong>{blocked_count}</strong><span>BLOCKED</span></div>
+<div class="metric"><strong>{basis_counts['ACCEPTANCE'] + basis_counts['REGRESSION']}</strong><span>Normative TCs</span></div>
+<div class="metric"><strong>{basis_counts['DERIVED']}</strong><span>Derived TCs</span></div>
+<div class="metric"><strong>{basis_counts['CHARACTERIZATION']}</strong><span>Characterization TCs</span></div>
+<div class="metric"><strong>{basis_counts['E2E']}</strong><span>E2E TCs</span></div>
+<div class="metric"><strong>{basis_counts['EXPLORATORY']}</strong><span>Exploratory TCs</span></div>
 <div class="metric"><strong>{len(set(groups.values()))}</strong><span>RFs/RNs</span></div>
 <div class="metric"><strong>{source_claim_count}</strong><span>Claims</span></div>
 <div class="metric"><strong>{len(coverage_points)}</strong><span>Coverage Points</span></div>
@@ -671,7 +715,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,su
 <div class="metric"><strong>{len(index.get('findings', []))}</strong><span>Findings</span></div>
 <div class="metric"><strong>{cross_rf_count}</strong><span>Cross-RF</span></div>
 </div>{warning}</section>
-<section id="test-cases"><h2>Test Cases</h2><nav class="rf-navigation" aria-label="Navega&ccedil;&atilde;o por requisito">{rf_navigation}</nav><div class="filter-panel"><div class="bulk-controls"><button type="button" id="expand-all">Expandir todos</button><button type="button" id="collapse-all">Recolher todos</button></div><div class="filters"><label>Buscar<input id="search" type="search" placeholder="T&iacute;tulo, objetivo ou tag"></label><label>Status<select id="status-filter"><option value="">Todos</option><option>READY</option><option>NEEDS_REVIEW</option><option>BLOCKED</option></select></label><label>Prioridade<select id="priority-filter"><option value="">Todas</option><option>CRITICAL</option><option>HIGH</option><option>MEDIUM</option><option>LOW</option></select></label><label>Requisito<select id="rf-filter"><option value="">Todos</option>{rf_options}</select></label><label>Caracter&iacute;stica<select id="feature-filter"><option value="">Todas</option><option value="cross-rf">Cross-RF</option><option value="findings">Com findings</option><option value="questions">Com questions</option><option value="single-step">1 step</option><option value="multi-step">M&uacute;ltiplos steps</option><option value="multi-source">Multi-source</option><option value="duplicate-candidate">Duplicate candidate</option></select></label></div></div><div id="case-list">{case_html}</div><p id="no-results" hidden>Nenhum Test Case corresponde aos filtros.</p></section>
+<section id="test-cases"><h2>Test Cases</h2><nav class="rf-navigation" aria-label="Navega&ccedil;&atilde;o por requisito">{rf_navigation}</nav><div class="filter-panel"><div class="bulk-controls"><button type="button" id="expand-all">Expandir todos</button><button type="button" id="collapse-all">Recolher todos</button></div><div class="filters"><label>Buscar<input id="search" type="search" placeholder="T&iacute;tulo, objetivo ou tag"></label><label>Status<select id="status-filter"><option value="">Todos</option><option>READY</option><option>NEEDS_REVIEW</option><option>BLOCKED</option><option>BLOCKED_REQUIREMENT</option><option>BLOCKED_IMPLEMENTATION_GAP</option><option>BLOCKED_ENVIRONMENT</option><option>BLOCKED_TEST_DATA</option><option>BLOCKED_EXTERNAL_DEPENDENCY</option><option>EXPLORATORY</option></select></label><label>Prioridade<select id="priority-filter"><option value="">Todas</option><option>CRITICAL</option><option>HIGH</option><option>MEDIUM</option><option>LOW</option></select></label><label>Requisito<select id="rf-filter"><option value="">Todos</option>{rf_options}</select></label><label>Caracter&iacute;stica<select id="feature-filter"><option value="">Todas</option><option value="cross-rf">Cross-RF</option><option value="findings">Com findings</option><option value="questions">Com questions</option><option value="single-step">1 step</option><option value="multi-step">M&uacute;ltiplos steps</option><option value="multi-source">Multi-source</option><option value="merge-candidate">Merge candidate</option><option value="e2e-composition">E2E composition</option><option value="automation-candidate">Automation candidate</option><option value="derived-risk">Derived risk</option></select></label></div></div><div id="case-list">{case_html}</div><p id="no-results" hidden>Nenhum Test Case corresponde aos filtros.</p></section>
 <section id="findings"><h2>Findings</h2>{finding_html or '<p class="empty">Nenhum finding.</p>'}</section>
 <section id="perguntas"><h2>Perguntas</h2>{question_html or '<p class="empty">Nenhuma pergunta pendente.</p>'}</section>
 <section id="cobertura"><h2>Cobertura</h2>{coverage_html}</section>

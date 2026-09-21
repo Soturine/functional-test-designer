@@ -25,12 +25,23 @@
     "notes"
   ],
   "properties": {
-    "schema_version": {"const": "1.2"},
+    "schema_version": {"enum": ["1.2", "2.2"]},
     "id": {"type": "string", "pattern": "^TC-[0-9]{3,}$"},
     "title": {"type": "string", "minLength": 1},
-    "status": {"enum": ["READY", "NEEDS_REVIEW", "BLOCKED"]},
+    "status": {"enum": ["READY", "NEEDS_REVIEW", "BLOCKED", "BLOCKED_REQUIREMENT", "BLOCKED_IMPLEMENTATION_GAP", "BLOCKED_ENVIRONMENT", "BLOCKED_TEST_DATA", "BLOCKED_EXTERNAL_DEPENDENCY", "EXPLORATORY"]},
     "priority": {"enum": ["CRITICAL", "HIGH", "MEDIUM", "LOW"]},
-    "type": {"const": "FUNCTIONAL"},
+    "type": {"enum": ["FUNCTIONAL", "NEGATIVE", "BOUNDARY", "SECURITY", "AUTHORIZATION", "PERFORMANCE", "RESILIENCE", "RECOVERY", "CONCURRENCY", "RACE_CONDITION", "IDEMPOTENCY", "INTEGRATION", "CONTRACT", "DATA_INTEGRITY", "AUDIT", "STATE_TRANSITION", "E2E", "FIELD", "HARDWARE_INTEGRATION", "CHAOS", "EXPLORATORY"]},
+    "test_basis": {"enum": ["ACCEPTANCE", "CHARACTERIZATION", "DERIVED", "EXPLORATORY", "REGRESSION", "E2E"]},
+    "primary_type": {"enum": ["FUNCTIONAL", "NEGATIVE", "BOUNDARY", "SECURITY", "AUTHORIZATION", "PERFORMANCE", "RESILIENCE", "RECOVERY", "CONCURRENCY", "RACE_CONDITION", "IDEMPOTENCY", "INTEGRATION", "CONTRACT", "DATA_INTEGRITY", "AUDIT", "STATE_TRANSITION", "E2E", "FIELD", "HARDWARE_INTEGRATION", "CHAOS", "EXPLORATORY"]},
+    "secondary_tags": {"$ref": "#/$defs/uniqueStringList"},
+    "execution_status": {"enum": ["READY", "NEEDS_REVIEW", "BLOCKED_REQUIREMENT", "BLOCKED_IMPLEMENTATION_GAP", "BLOCKED_ENVIRONMENT", "BLOCKED_TEST_DATA", "BLOCKED_EXTERNAL_DEPENDENCY", "EXPLORATORY"]},
+    "question_refs": {"type": "array", "uniqueItems": true, "items": {"type": "string", "pattern": "^Q-[0-9]{3,}$"}},
+    "finding_refs": {"type": "array", "uniqueItems": true, "items": {"type": "string", "pattern": "^FND-[0-9]{3,}$"}},
+    "composes": {"type": "array", "uniqueItems": true, "items": {"type": "string", "pattern": "^TC-[0-9]{3,}$"}},
+    "automation_candidate": {"type": "boolean"},
+    "automation_layer": {"enum": ["UI", "API", "SERVICE", "INTEGRATION", "HARDWARE", "MIXED", "NONE"]},
+    "automation_tool_hint": {"enum": ["PLAYWRIGHT", "API_TEST", "TESTSPRITE", "PYTEST", "OTHER", "NONE"]},
+    "deterministic": {"type": "boolean"},
     "objective": {"type": "string", "minLength": 1},
     "requirement_refs": {
       "type": "array",
@@ -65,6 +76,10 @@
     "notes": {"$ref": "#/$defs/stringList"}
   },
   "allOf": [
+    {
+      "if": {"properties": {"schema_version": {"const": "2.2"}}, "required": ["schema_version"]},
+      "then": {"required": ["test_basis", "primary_type", "secondary_tags", "execution_status", "question_refs", "finding_refs", "composes", "automation_candidate", "automation_layer", "automation_tool_hint", "deterministic"]}
+    },
     {
       "if": {"properties": {"status": {"const": "READY"}}, "required": ["status"]},
       "then": {

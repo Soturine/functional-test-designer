@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate functional-test-designer V1.2 JSON output and cross-file invariants."""
+"""Validate functional-test-designer JSON output and cross-file invariants."""
 
 from __future__ import annotations
 
@@ -74,7 +74,10 @@ def check_duplicates(items: list[dict[str, Any]], field: str, label: str, errors
 
 
 def string_set(values: Any) -> set[str]:
-    return {value for value in values if isinstance(value, str)} if isinstance(values, list) else set()
+    return (
+        {value for value in values if isinstance(value, str)}
+        if isinstance(values, (list, tuple, set, frozenset)) else set()
+    )
 
 
 def source_paths(values: Any) -> set[str]:
@@ -232,6 +235,9 @@ def validate(output_dir: Path) -> list[str]:
     validate_schema(questions_doc, "questions.schema.json", str(questions_path), errors)
     if not isinstance(index, dict) or not isinstance(questions_doc, dict):
         return errors
+    schema_version = str(index.get("schema_version", ""))
+    if questions_doc.get("schema_version") != schema_version:
+        errors.append("questions schema_version differs from test-cases index")
 
     requirements = index.get("requirements", [])
     findings = index.get("findings", [])
@@ -296,6 +302,11 @@ def validate(output_dir: Path) -> list[str]:
         for item in questions
         if isinstance(item, dict) and isinstance(item.get("id"), str)
     }
+    findings_by_id = {
+        item["id"]: item
+        for item in findings
+        if isinstance(item, dict) and isinstance(item.get("id"), str)
+    }
     declared_sources = index.get("sources", [])
     sources = source_paths(declared_sources)
     if isinstance(declared_sources, list):
@@ -313,6 +324,12 @@ def validate(output_dir: Path) -> list[str]:
         finding_id = finding.get("id", "finding")
         check_refs(finding.get("requirement_refs", []), requirement_ids, "requirement", finding_id, errors)
         check_source_refs(finding.get("source_refs", []), sources, finding_id, errors)
+        if schema_version == "2.2":
+            check_refs(
+                finding.get("related_test_cases", []), set(entries_by_id), "test case", finding_id, errors
+            )
+            if not finding.get("coverage_disposition"):
+                errors.append(f"{finding_id} has no coverage disposition")
 
     scenario_requirements: dict[str, set[str]] = {}
     for scenario in scenarios:
@@ -329,16 +346,37 @@ def validate(output_dir: Path) -> list[str]:
         if not isinstance(entry, dict):
             continue
         tc_id = entry.get("id", "test case")
+        if schema_version == "2.2":
+            required_entry_fields = {
+                "test_basis", "primary_type", "execution_status", "question_refs",
+                "finding_refs", "composes", "automation_candidate",
+            }
+            missing_entry_fields = sorted(required_entry_fields - set(entry))
+            if missing_entry_fields:
+                errors.append(f"{tc_id} lacks v2.2 index fields: {', '.join(missing_entry_fields)}")
         refs = string_set(entry.get("scenario_refs", []))
         if len(refs) != 1:
-            errors.append(f"{tc_id} must reference exactly one independent scenario")
+            label = "scenario family" if schema_version == "2.2" else "independent scenario"
+            errors.append(f"{tc_id} must reference exactly one {label}")
         scenario_targets.update(refs)
     for scenario_id in sorted(scenario_ids):
         target_count = scenario_targets[scenario_id]
         if target_count == 0:
             errors.append(f"{scenario_id} is not materialized as a test case")
-        elif target_count > 1:
+        elif schema_version == "1.2" and target_count > 1:
             errors.append(f"{scenario_id} is reused by {target_count} test cases; create independent scenarios")
+    if schema_version == "2.2":
+        for scenario in scenarios:
+            if not isinstance(scenario, dict):
+                continue
+            scenario_id = str(scenario.get("id", "scenario"))
+            declared = string_set(scenario.get("test_case_refs", []))
+            actual = {
+                str(entry.get("id")) for entry in entries
+                if scenario_id in string_set(entry.get("scenario_refs", []))
+            }
+            if declared != actual:
+                errors.append(f"{scenario_id} test_case_refs do not match its Scenario Family members")
 
     questioned_case_ids: set[str] = set()
     blocking_case_ids: set[str] = set()
@@ -352,11 +390,35 @@ def validate(output_dir: Path) -> list[str]:
         check_refs(tc_refs, set(entries_by_id), "test case", question_id, errors)
         check_source_refs(question.get("source_refs", []), sources, question_id, errors)
         questioned_case_ids.update(string_set(tc_refs))
+        if schema_version == "2.2" and not question.get("impact"):
+            errors.append(f"{question_id} has no question impact classification")
         if question.get("blocking"):
             blocking_case_ids.update(string_set(tc_refs))
             for tc_id in string_set(tc_refs) & set(entries_by_id):
-                if entries_by_id[tc_id].get("status") != "BLOCKED":
+                status = entries_by_id[tc_id].get("status")
+                if schema_version == "1.2" and status != "BLOCKED":
                     errors.append(f"{question_id} is blocking but {tc_id} status is not BLOCKED")
+                if schema_version == "2.2" and status not in {
+                    "NEEDS_REVIEW", "BLOCKED_REQUIREMENT", "BLOCKED_IMPLEMENTATION_GAP",
+                    "BLOCKED_ENVIRONMENT", "BLOCKED_TEST_DATA", "BLOCKED_EXTERNAL_DEPENDENCY",
+                    "EXPLORATORY",
+                }:
+                    errors.append(f"{question_id} is blocking but {tc_id} remains READY")
+
+    if schema_version == "2.2":
+        for candidate in index.get("merge_candidates", []):
+            check_refs(candidate.get("test_case_ids", []), set(entries_by_id), "test case", "merge candidate", errors)
+        gates = index.get("quality_gates", [])
+        required_gates = {
+            "SCHEMA_VALID", "CROSS_FILE_VALID", "SOURCE_INVENTORY_COMPLETE",
+            "NORMATIVE_COVERAGE_COMPLETE", "ORACLE_SAFETY_VALID", "REFERENCE_INTEGRITY_VALID",
+            "PROCEDURE_QUALITY_ACCEPTABLE", "PIPELINE_PROVENANCE_VALID",
+        }
+        observed_gates = {item.get("gate") for item in gates if isinstance(item, dict)}
+        if observed_gates != required_gates:
+            errors.append("quality gates are incomplete")
+        if any(item.get("status") != "PASS" for item in gates if isinstance(item, dict)):
+            errors.append("completed output contains a failed or pending quality gate")
 
     coverage_by_id = validate_coverage_points(
         coverage_points,
@@ -410,9 +472,16 @@ def validate(output_dir: Path) -> list[str]:
         validate_schema(case, "test-case.schema.json", str(case_path), errors)
         if not isinstance(case, dict):
             continue
+        if case.get("schema_version") != schema_version:
+            errors.append(f"{tc_id} schema_version differs from test-cases index")
         if case.get("id") != tc_id:
             errors.append(f"{tc_id} index ID does not match file ID {case.get('id')!r}")
-        compared_fields = ("title", "status", "requirement_refs", "scenario_refs", "coverage_point_refs")
+        compared_fields = ["title", "status", "requirement_refs", "scenario_refs", "coverage_point_refs"]
+        if schema_version == "2.2":
+            compared_fields.extend([
+                "test_basis", "primary_type", "execution_status", "question_refs",
+                "finding_refs", "composes", "automation_candidate",
+            ])
         for field in compared_fields:
             if case.get(field) != entry.get(field):
                 errors.append(f"{tc_id} field {field!r} differs between index and case file")
@@ -424,6 +493,25 @@ def validate(output_dir: Path) -> list[str]:
         check_refs(case_scenario_refs, scenario_ids, "scenario", tc_id, errors)
         check_refs(case_coverage_refs, coverage_ids, "coverage point", tc_id, errors)
         check_source_refs(case.get("source_refs", []), sources, tc_id, errors)
+        if schema_version == "2.2":
+            question_refs = string_set(case.get("question_refs", []))
+            finding_refs = string_set(case.get("finding_refs", []))
+            composed_refs = string_set(case.get("composes", []))
+            check_refs(question_refs, set(questions_by_id), "question", tc_id, errors)
+            check_refs(finding_refs, set(findings_by_id), "finding", tc_id, errors)
+            check_refs(composed_refs, set(entries_by_id), "composed test case", tc_id, errors)
+            if tc_id in composed_refs:
+                errors.append(f"{tc_id} cannot compose itself")
+            if case.get("test_basis") == "E2E" and not composed_refs:
+                errors.append(f"{tc_id} E2E test does not compose atomic Test Cases")
+            if case.get("test_basis") != "E2E" and composed_refs:
+                errors.append(f"{tc_id} atomic test cannot hide an E2E composition")
+            for question_id in question_refs & set(questions_by_id):
+                if tc_id not in string_set(questions_by_id[question_id].get("related_test_cases", [])):
+                    errors.append(f"{tc_id} links {question_id}, but the Question does not link back")
+            for finding_id in finding_refs & set(findings_by_id):
+                if tc_id not in string_set(findings_by_id[finding_id].get("related_test_cases", [])):
+                    errors.append(f"{tc_id} links {finding_id}, but the Finding does not link back")
 
         scenario_requirement_refs: set[str] = set()
         for scenario_id in case_scenario_refs:

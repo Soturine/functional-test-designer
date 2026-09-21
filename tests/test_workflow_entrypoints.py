@@ -20,6 +20,7 @@ def generation_request(root: Path, artifact: Path) -> dict:
     source.write_text("Refreshing the dashboard updates the counter.", encoding="utf-8")
     source_ref = {"source": "requirements.md", "reference": "RF-001"}
     return {
+        "schema_version": "1.2",
         "workspace": root, "selectors": ["requirements.md"], "artifact_root": artifact,
         "run_id": "run-001", "formats": ["HTML", "DIAGNOSTICS"], "diagnostic": True,
         "sources": [{"path": "requirements.md", "role": "FUNCTIONAL_AUTHORITY"}],

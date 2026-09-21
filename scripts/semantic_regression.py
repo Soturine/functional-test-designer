@@ -58,6 +58,19 @@ def build_snapshots(
     findings: list[dict[str, Any]],
 ) -> dict[str, Any]:
     """Separate frozen semantic identity from intentionally improvable procedure."""
+    legacy_identity_fields = {
+        "id", "title", "scenario_ref", "scenario_type", "requirement_refs",
+        "coverage_point_refs", "normative_source_refs", "normative_oracle", "objective",
+        "material_preconditions", "test_data_partition", "assertions", "execution_signature",
+        "execution_boundary",
+    }
+    identities = []
+    for identity in design["test_identities"]:
+        if dataclasses.is_dataclass(identity):
+            raw = dataclasses.asdict(identity)
+            identities.append({key: raw[key] for key in raw if key in legacy_identity_fields})
+        else:
+            identities.append(identity)
     core = {
         "sources": sources,
         "source_items": source_items,
@@ -68,7 +81,7 @@ def build_snapshots(
         "candidates": design["candidates"],
         "merge_decisions": design["merge_decisions"],
         "scenarios": design["scenarios"],
-        "test_identities": design["test_identities"],
+        "test_identities": identities,
     }
     procedure = {
         "cases": cases,
