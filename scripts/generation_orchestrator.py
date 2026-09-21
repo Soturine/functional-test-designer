@@ -253,6 +253,9 @@ def run_generation(request: dict[str, Any]) -> dict[str, Any]:
             "execution_surface_required": pack.get("execution_surface_required", False),
             "record_required": pack.get("record_required", False),
             "intermediate_observation_required": pack.get("intermediate_observation_required", False),
+            "setup_required": pack.get("setup_required", False),
+            "setup": pack.get("setup"),
+            "procedural_actions": pack.get("actions", []),
         }
         audit = audit_execution_readiness(case, identity, context)
         align_public_status(case, audit)
@@ -313,6 +316,12 @@ def run_generation(request: dict[str, Any]) -> dict[str, Any]:
         "human_execution_not_ready": sum(item["human_classification"] == "HUMAN_EXECUTION_NOT_READY" for item in readiness),
         "automation_execution_ready": sum(item["automation_classification"] == "AUTOMATION_EXECUTION_READY" for item in readiness),
         "automation_execution_not_ready": sum(item["automation_classification"] == "AUTOMATION_EXECUTION_NOT_READY" for item in readiness),
+        "cases_missing_setup_acquisition": sum(
+            "MISSING_SETUP_ACQUISITION" in item["reason_codes"] for item in readiness
+        ),
+        "cases_missing_procedural_provenance": sum(
+            "MISSING_PROCEDURAL_PROVENANCE" in item["reason_codes"] for item in readiness
+        ),
         "finished_at": _now(), "rendered_public_formats": rendered["rendered_public_formats"],
     })
     metrics["run_wall_clock_seconds"] = round(time.perf_counter() - run_began, 6)

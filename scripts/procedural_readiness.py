@@ -34,6 +34,13 @@ PLACEHOLDER_DATA_PATTERNS = (
     r"^<.+>$",
     r"\b(?:valid[_ -]?item|existing (?:record|object)|appropriate record|partition[-_ ]?\d+|data defined for the case|availability_balance)\b",
 )
+SETUP_STRATEGIES = {
+    "SETUP_BY_FIXTURE",
+    "SETUP_BY_API",
+    "SETUP_BY_UI",
+    "REUSE_EXISTING_WITH_QUERY_RULE",
+    "PRESEEDED_ENVIRONMENT",
+}
 DETERMINISTIC_ACQUISITION = re.compile(
     r"\b(?:select|use|choose|locate)\b.+\b(?:with|where|having)\b.+\b(?:record|note|capture)\b.+\bid\b",
     re.IGNORECASE,
@@ -73,6 +80,50 @@ def classify_test_data(items: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def classify_setup_acquisition(context: dict[str, Any]) -> dict[str, Any]:
+    """Decide whether the test record or starting state can actually be obtained.
+
+    "Record X exists in state Y" is a precondition, not an acquisition. Without a
+    strategy and a concrete rule, a tester cannot start and an adapter cannot seed.
+    """
+    setup = context.get("setup")
+    if not isinstance(setup, dict):
+        return {"classification": "MISSING", "reasons": ["MISSING_SETUP_ACQUISITION"], "strategy": None}
+    strategy = str(setup.get("strategy", ""))
+    reasons: list[str] = []
+    if strategy not in SETUP_STRATEGIES:
+        reasons.append("MISSING_SETUP_ACQUISITION")
+    elif strategy != "PRESEEDED_ENVIRONMENT" and not str(setup.get("acquisition_rule", "")).strip():
+        reasons.append("MISSING_SETUP_ACQUISITION")
+    if strategy == "PRESEEDED_ENVIRONMENT" and not setup.get("source_refs"):
+        reasons.append("MISSING_SETUP_PROVENANCE")
+    return {
+        "classification": "READY" if not reasons else "NOT_READY",
+        "reasons": reasons,
+        "strategy": strategy or None,
+    }
+
+
+def classify_procedural_provenance(context: dict[str, Any]) -> dict[str, Any]:
+    """Keep navigation, labels, endpoints and device detail traceable to a selected source.
+
+    Normative refs carry the oracle; procedural refs carry the how. A published
+    procedure may not contain technical knowledge that came from neither.
+    """
+    actions = context.get("procedural_actions")
+    if actions is None:
+        return {"classification": "UNKNOWN", "reasons": [], "untraced_actions": 0}
+    untraced = [
+        index for index, action in enumerate(actions, 1)
+        if not (action.get("evidence_source") or action.get("source_refs"))
+    ]
+    return {
+        "classification": "READY" if not untraced else "NOT_READY",
+        "reasons": ["MISSING_PROCEDURAL_PROVENANCE"] if untraced else [],
+        "untraced_actions": len(untraced),
+    }
+
+
 def procedural_reason_codes(
     case: dict[str, Any], identity: TestIdentity | None = None,
     execution_context: dict[str, Any] | None = None,
@@ -107,6 +158,9 @@ def procedural_reason_codes(
         reasons.append("MISSING_EXECUTION_SURFACE")
     if context.get("record_required") and classify_test_data(case.get("test_data", []))["classification"] != "READY":
         reasons.append("MISSING_RECORD_ACQUISITION_RULE")
+    if context.get("setup_required"):
+        reasons.extend(classify_setup_acquisition(context)["reasons"])
+    reasons.extend(classify_procedural_provenance(context)["reasons"])
     if context.get("intermediate_observation_required") and len(actions) > 1:
         if any(value is None for value in expected[:-1]):
             reasons.append("MISSING_INTERMEDIATE_OBSERVATION")
@@ -139,9 +193,12 @@ def audit_execution_readiness(
     execution_context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     reasons = procedural_reason_codes(case, identity, execution_context)
+    context = execution_context or {}
     human_blockers = set(reasons) - {"MISSING_EXECUTION_BOUNDARY", "MISSING_DATA_PARTITION"}
     return {
         "test_case_id": case.get("id"),
+        "setup": classify_setup_acquisition(context),
+        "procedural_provenance": classify_procedural_provenance(context),
         "human_classification": "HUMAN_EXECUTION_READY" if not human_blockers else "HUMAN_EXECUTION_NOT_READY",
         "automation_classification": "AUTOMATION_EXECUTION_READY" if not reasons else "AUTOMATION_EXECUTION_NOT_READY",
         "reason_codes": reasons,
@@ -158,6 +215,8 @@ def align_public_status(case: dict[str, Any], audit: dict[str, Any]) -> dict[str
         "MISSING_EXECUTION_SURFACE", "MISSING_RECORD_ACQUISITION_RULE",
         "MISSING_INTERMEDIATE_OBSERVATION", "PLACEHOLDER_TEST_DATA",
         "NONDETERMINISTIC_TEST_DATA", "MISSING_TEST_DATA",
+        "MISSING_SETUP_ACQUISITION", "MISSING_SETUP_PROVENANCE",
+        "MISSING_PROCEDURAL_PROVENANCE",
     }
     if case.get("status") == "READY" and material.intersection(audit.get("reason_codes", [])):
         case["status"] = "NEEDS_REVIEW"
