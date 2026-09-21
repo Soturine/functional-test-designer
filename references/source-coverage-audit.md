@@ -14,7 +14,7 @@ KEEP_ATOMIC -> exactly one claim + INSEPARABLE_VALUE |
                INSEPARABLE_RELATION | SINGLE_OBSERVABLE_OUTCOME
 ```
 
-`SAME_SENTENCE`, `SAME_BULLET`, `SAME_REQUIREMENT`, `SAME_SCREEN`, `SAME_EVENT`, fewer tests, and simpler output are not valid reasons to keep source truth compressed. `SAME_EVENT` may justify a later Scenario merge, never a source-claim merge. Compound detection is a review signal, not a language parser or an automatic splitter. A suspicious source item or residual materialized claim must be split or explicitly kept for a valid semantic reason before Scenario Design.
+`SAME_SENTENCE`, `SAME_BULLET`, `SAME_REQUIREMENT`, `SAME_SCREEN`, `SAME_EVENT`, fewer tests, and simpler output are not valid reasons to keep source truth compressed. `SAME_EVENT` may justify a later non-destructive merge candidate, never a source-claim merge. Compound detection is a review signal, not a language parser or an automatic splitter. A suspicious source item or residual materialized claim must be split or explicitly kept for a valid semantic reason before Scenario Design.
 
 A claim is not a Test Case count: several claims may share one independently reportable TC when their separate Clause and Coverage Point traceability remains intact. Review materialized clauses/CPs that still appear compound, but treat `POSSIBLE_COMPOUND_NORMATIVE_CLAIM` as a detection signal rather than an automatic rewrite. The executable review decision is the gate; the diagnostic warning alone is not proof of review.
 

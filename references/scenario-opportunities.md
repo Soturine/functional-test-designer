@@ -23,4 +23,4 @@ Consider bounded cross-requirement and E2E opportunities only when selected evid
 
 Read [adversarial-coverage.md](adversarial-coverage.md) for the Test Asset inventory, the risk review matrix, and the main/alternative/exception flow review that feed these dispositions.
 
-Use `audit_scenario_opportunities` from `scripts/scenario_opportunities.py` before and after Scenario Cohesion. The first pass validates roles and dispositions; the second validates concrete Scenario, Finding, and Question links.
+Use `audit_scenario_opportunities` from `scripts/scenario_opportunities.py` before and after Scenario Family construction. The first pass validates roles and dispositions; the second validates concrete Scenario Family, Finding, and Question links.

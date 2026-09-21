@@ -1,4 +1,6 @@
-# Output Contract 1.2
+# Output Contract 1.2 (legacy compatibility)
+
+New generation uses [Output Contract 2.2](output-contract-v2.2.md). This document remains authoritative only for reading, validating, and rendering existing schema 1.2 artifacts.
 
 Write UTF-8 JSON with two-space indentation. Paths are relative to the output directory and use `/` separators. Use the exact `schema_version` value `1.2`.
 

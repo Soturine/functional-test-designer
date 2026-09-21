@@ -15,9 +15,9 @@ Design evidence-grounded functional tests from only the sources explicitly selec
 - Keep `skill_root`, `source_root`, `workspace_root`, and exact `artifact_root` distinct. Never use the skill or source root as an implicit destination.
 - Functional authority defines what should happen. Technical context explains how to reach it; implementation evidence shows what exists; QA assets reveal prior coverage. Inspection order never changes authority.
 - Never invent an oracle, UI/API path, field, message, credential, identifier format, state, or side effect.
-- JSON schema `1.2` remains the public truth; other formats are projections.
+- JSON schema `2.2` is the current public truth; schema `1.2` remains a compatibility input/output contract. Other formats are projections.
 
-Read [output-contract.md](references/output-contract.md) and [performance-orchestration.md](references/performance-orchestration.md) when resolving scope, destination, run state, checkpoints, or diagnostics.
+Read [output-contract-v2.2.md](references/output-contract-v2.2.md) for current generation, [output-contract.md](references/output-contract.md) for legacy 1.2 compatibility, and [performance-orchestration.md](references/performance-orchestration.md) when resolving scope, destination, run state, checkpoints, or diagnostics.
 
 ## Pipeline
 
@@ -25,7 +25,7 @@ Read [output-contract.md](references/output-contract.md) and [performance-orches
 Selected sources -> Scope lock -> Source accounting ledger -> Evidence collection/barrier
 -> Independent source-first review -> Atomic source claims -> Clauses -> Coverage Points
 -> Selected-evidence opportunity audit (Test Assets, risk matrix, use-case flows)
--> Independent candidates -> Scenario cohesion -> Frozen Test identities
+-> Independent candidates -> Scenario families -> Atomic frozen Test identities
 -> Procedural enrichment -> Readiness -> Validation
 -> Canonical run state -> Selected public projections
 ```
@@ -40,6 +40,7 @@ Read these detailed contracts only when their stage is relevant:
 - [test-design.md](references/test-design.md): contextual BVA, EP, state, decision-table, pairwise, and risk techniques.
 - [evidence-enrichment.md](references/evidence-enrichment.md): selected-source Evidence Packs and provenance.
 - [scenario-opportunities.md](references/scenario-opportunities.md): dispositions for normative, divergence, implementation, QA-asset, and bounded E2E opportunities.
+- [high-recall-design.md](references/high-recall-design.md): v2.2 Scenario Families, test bases, non-destructive merge candidates, risk expansion, and quality gates.
 - [procedural-execution.md](references/procedural-execution.md) and [procedural-readiness.md](references/procedural-readiness.md): post-freeze steps and human/automation readiness.
 - [cross-rf-audit.md](references/cross-rf-audit.md): advisory overlap analysis without automatic deletion or merge.
 
@@ -52,8 +53,8 @@ Read these detailed contracts only when their stage is relevant:
 - Extract atomic source claims before Requirement normalization. Every claim must reach exactly one explicit destination.
 - Review suspicious compound Claims and Clauses again after materialization; an upstream summary cannot bypass atomicity merely by arriving pre-compressed.
 - Create one independently reviewable candidate per testable CP before grouping.
-- Merge only proven same-execution observations or true semantic duplicates. Shared RF, actor, screen, setup, Evidence Pack, title, or a desire for fewer tests is never enough.
-- A TC represents an independently repeatable execution, not one assertion. Several discriminable observations from the same trigger/transaction may share it.
+- Preserve every independently diagnosable candidate as an atomic canonical TC. Shared RF, actor, screen, setup, Evidence Pack, title, event, or navigation may create a merge suggestion but never destroys the atomic view.
+- Scenario Families organize related atomic, negative, boundary, derived, characterization, and E2E cases. E2E cases explicitly compose atomic TCs.
 - Different triggers, actors, permissions, inputs, partitions, states, branches, platforms, or rerunnable Pass/Fail boundaries remain separate.
 - Independent legacy subtests become TCs; sequential dependent subtests become steps. Never emit `subtests`.
 - Freeze Test identity before procedural enrichment. Enrichment may change preconditions, test data, steps, provenance, observability, and presentation, but not silently redefine valid normative coverage, scenario identity, oracle, status, or disposition.
@@ -92,5 +93,5 @@ Before completion:
 - confirm human/automation readiness classifications and reason codes;
 - validate canonical state and selected projections;
 - confirm render did not reread project sources;
-- preserve schema `1.2`, exact artifact destination, offline HTML, Mermaid parity, and zero `subtests`;
+- preserve schema `2.2` plus `1.2` compatibility, exact artifact destination, offline HTML, Mermaid parity, and zero `subtests`;
 - report real diagnostics only, without source content, answers, credentials, or secrets, marking unobservable read, concurrency, and reasoning telemetry as unavailable instead of zero.

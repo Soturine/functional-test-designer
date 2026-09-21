@@ -1,4 +1,4 @@
-# Functional Test Designer
+# Functional Test Designer v2.2.0
 
 Agent Skill para projetar Test Cases funcionais manuais, rastreáveis e executáveis a partir somente das fontes explicitamente selecionadas pelo usuário.
 
@@ -43,7 +43,7 @@ Coleta/análise de evidência
             ↓
  Oportunidades em evidências selecionadas
             ↓
-      Scenario Cohesion
+      Scenario Families
             ↓
      Test Cases → Freeze
             ↓
@@ -227,7 +227,9 @@ O inventário source-first é uma segunda leitura genuína: declara seu método,
 
 Depois da cobertura normativa, as demais evidências selecionadas passam por uma auditoria de oportunidades. Branches observáveis, divergências, ativos de QA e fluxos contínuos Cross-RF/E2E recebem um destino explícito sem transformar código ou testes legados em autoridade. Uma divergência fica ligada à cobertura normativa, caracterização, Question, Finding ou justificativa não executável — nunca apenas como prosa desconectada.
 
-Claims preservam efeitos e alternativas observáveis de forma atômica, inclusive regras RN/CU explicitamente aplicáveis e disponíveis no escopo. Cada CP testável passa por um candidate independente e toda redução candidate→Scenario exige uma decisão explícita antes que a identidade do TC seja congelada. Depois desse freeze, Evidence Packs enriquecem somente preconditions, dados, caminho, Steps, provenance e observabilidade; o Expected final continua pertencendo à autoridade normativa. O Test Design define o que testar e congela a identidade do TC antes que evidência técnica ou de interface detalhe como uma pessoa executa o caso. Uma lacuna de procedimento permanece visível como Question/`NEEDS_REVIEW`, sem menus, botões ou endpoints inventados.
+Claims preservam efeitos e alternativas observáveis de forma atômica, inclusive regras RN/CU explicitamente aplicáveis e disponíveis no escopo. Cada CP testável passa por candidates independentes. Na versão 2.2, Scenario é uma família/contexto: organiza vários TCs sem comprimi-los. Setup, navegação ou evento compartilhado podem aparecer como sugestão de merge, mas a visão canônica continua atômica. Depois do freeze, Evidence Packs enriquecem somente preconditions, dados, caminho, Steps, provenance e observabilidade; o oracle de Acceptance continua pertencendo à autoridade normativa. Uma lacuna de procedimento permanece visível como Question/`NEEDS_REVIEW`, sem menus, botões ou endpoints inventados.
+
+Cada TC 2.2 declara sua base (`ACCEPTANCE`, `CHARACTERIZATION`, `DERIVED`, `EXPLORATORY`, `REGRESSION` ou `E2E`), tipo primário, readiness e metadados de automação. Missing implementation, Finding ou Question não apagam um design testável: alteram a classificação/status e mantêm as referências recíprocas. Casos E2E compõem TCs atômicos explicitamente, em vez de esconder a cobertura somente nos steps.
 
 Steps seguem a complexidade natural do caminho documentado: navegação, busca, seleção, trigger e observação permanecem ações operacionais separadas quando a sequência suportada exige isso, enquanto um comportamento de uma única ação pode continuar com um Step. O relatório offline permanece uma projeção determinística e leve do JSON validado.
 
@@ -282,6 +284,10 @@ scripts/render_markdown.py     Markdown determinístico por TC
 scripts/render_report.py       Relatório HTML offline
 scripts/diagnostics.py         Diagnóstico opcional de execução
 scripts/generation_orchestrator.py  Pipeline compartilhado e gates reais de geração
+scripts/source_inventory.py       Universo de fontes e autoridade v2.2
+scripts/quality_gates.py          Gates independentes de qualidade
+scripts/benchmark_reconciliation.py  Reconciliação explicável sem meta de contagem
+scripts/risk_expansion.py         Expansão de risco sustentada por evidência
 scripts/source_accounting.py        Ledger das fontes selecionadas e revisão independente
 scripts/test_asset_inventory.py     Inventário estático de ativos de teste selecionados
 scripts/risk_coverage.py            Matriz de risco e revisão de fluxos para E2E

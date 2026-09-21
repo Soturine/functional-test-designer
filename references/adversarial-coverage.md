@@ -77,4 +77,4 @@ Use `audit_risk_matrix` and `audit_flow_coverage` from `scripts/risk_coverage.py
 
 ## Organizational views without duplication
 
-One canonical Test Case can appear in a requirement-backed suite and in a risk-oriented static suite. `build_suite_mapping` in `scripts/azure_devops_adapter.py` maps memberships from existing tags without cloning the semantic Test Case and without changing schema `1.2`.
+One canonical Test Case can appear in a requirement-backed suite and in a risk-oriented static suite. `build_suite_mapping` in `scripts/azure_devops_adapter.py` maps memberships from existing tags without cloning the semantic Test Case or changing its schema version.
