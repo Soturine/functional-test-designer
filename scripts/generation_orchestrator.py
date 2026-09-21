@@ -18,6 +18,9 @@ from resolve_scope import resolve_selected_scope
 from run_state import RunStateStore, source_manifest
 from scenario_independence import build_scenario_pipeline
 from scenario_opportunities import audit_scenario_opportunities
+from source_accounting import (
+    audit_source_review_independence, build_source_ledger, read_telemetry,
+)
 from source_coverage_audit import (
     audit_atomic_chain, audit_materialized_atomicity, audit_source_claims,
     materialize_atomic_coverage, review_source_items,
@@ -26,7 +29,7 @@ from source_coverage_audit import (
 
 REQUIRED_INPUTS = {
     "workspace", "selectors", "artifact_root", "run_id", "sources", "requirements",
-    "source_items", "source_first_claims", "evidence_manifest", "selected_evidence",
+    "source_items", "source_ledger", "source_review", "evidence_manifest", "selected_evidence",
     "opportunities", "scenario_profiles", "evidence_packs",
 }
 PHASES = (
@@ -67,7 +70,7 @@ def run_generation(request: dict[str, Any]) -> dict[str, Any]:
     metrics: dict[str, Any] = {
         "schema_version": "1", "diagnostic": bool(request.get("diagnostic", False)),
         "started_at": _now(), "timing_available": True, "phases": [],
-        "checkpoint_events": [], "source_reads": 0, "source_rereads": 0,
+        "checkpoint_events": [], **read_telemetry(request),
     }
     _write(internal_metrics, metrics)  # initialized before scope/source work
 
@@ -138,14 +141,23 @@ def run_generation(request: dict[str, Any]) -> dict[str, Any]:
         expected = set(scope["resolved_scope_paths"])
         if manifest != expected:
             raise GenerationContractError("Evidence manifest must account for every resolved selected source")
-        return {"files": len(manifest), "records": len(request["selected_evidence"])}
+        ledger = build_source_ledger(scope["resolved_scope_paths"], request["source_ledger"])
+        return {
+            "files": len(manifest), "records": len(request["selected_evidence"]), "ledger": ledger,
+        }
 
     collection = phase("source_collection", collect)
     metrics.update({
         "source_files_assigned": collection["files"],
         "source_records_received": collection["records"],
-        "source_max_concurrency": int(request.get("source_max_concurrency", 1)),
+        **collection["ledger"]["metrics"],
     })
+    store.save("SOURCE_ACCOUNTING_COMPLETE", {
+        "dispositions": collection["ledger"]["dispositions"],
+    }, hashes)
+    metrics["checkpoint_events"].append(
+        {"checkpoint": "SOURCE_ACCOUNTING_COMPLETE", "event": "created"}
+    )
     phase("evidence_reconciliation", lambda: list(request["selected_evidence"]))
     store.save("EVIDENCE_BARRIER_COMPLETE", {"evidence_records": collection["records"]}, hashes)
     metrics["checkpoint_events"].append({"checkpoint": "EVIDENCE_BARRIER_COMPLETE", "event": "created"})
@@ -154,7 +166,14 @@ def run_generation(request: dict[str, Any]) -> dict[str, Any]:
     chain = phase("coverage_design", lambda: materialize_atomic_coverage(inventory))
     atomic_audit = audit_atomic_chain(inventory, chain)
     residual_audit = audit_materialized_atomicity(inventory, chain)
-    source_audit = audit_source_claims(request["source_first_claims"], chain["normative_clauses"])
+    review = audit_source_review_independence(
+        request["source_review"], primary_claim_count=inventory["atomic_source_claims_identified"],
+    )
+    source_audit = audit_source_claims(review["source_first_claims"], chain["normative_clauses"])
+    store.save("SOURCE_REVIEW_COMPLETE", {
+        "independent_review_source_behaviors": review["independent_review_source_behaviors"],
+    }, hashes)
+    metrics["checkpoint_events"].append({"checkpoint": "SOURCE_REVIEW_COMPLETE", "event": "created"})
     if source_audit["source_coverage_gaps"]:
         raise GenerationContractError("Source-first coverage gaps must be resolved before Scenario Design")
     store.save("SOURCE_ATOMICITY_COMPLETE", {
@@ -249,6 +268,10 @@ def run_generation(request: dict[str, Any]) -> dict[str, Any]:
     unexpected = sorted(str(path) for path in after_python - before_python)
     if unexpected:
         raise GenerationContractError("Generation created ad-hoc executable source: " + ", ".join(unexpected))
+    metrics["source_behavior_gaps"] = source_audit["source_coverage_gaps"]
+    metrics.update({
+        key: value for key, value in review.items() if not isinstance(value, list)
+    })
     inventory_metrics = {
         key: value for key, value in inventory.items()
         if key != "claims" and isinstance(value, (int, float, bool))
@@ -276,7 +299,8 @@ def run_generation(request: dict[str, Any]) -> dict[str, Any]:
         shutil.copy2(internal_metrics, destination)
     return {
         "intent": "ftd-gen", "scope": scope, "inventory": inventory, "chain": chain,
-        "source_audit": source_audit, "opportunity_audit": opportunity_audit,
+        "source_audit": source_audit, "source_ledger": collection["ledger"],
+        "source_review": review, "opportunity_audit": opportunity_audit,
         "design": design, "cases": cases, "readiness": readiness,
         "canonical_path": str(canonical_path), "render": rendered,
         "diagnostics": str(internal_metrics),

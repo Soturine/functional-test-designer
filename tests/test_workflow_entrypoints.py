@@ -10,6 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from generation_orchestrator import GenerationContractError  # noqa: E402
+from source_accounting import SourceAccountingError  # noqa: E402
 from workflow_entrypoints import INTENTS, dispatch, dispatch_request, normalize_intent  # noqa: E402
 
 
@@ -34,9 +35,25 @@ def generation_request(root: Path, artifact: Path) -> dict:
                 "coverage_statement": "The counter is updated.",
             }]},
         }],
-        "source_first_claims": [{
-            "requirement_ref": "REQ-001", "normalized_claim": "Refresh updates the counter."
+        "source_ledger": [{
+            "source": "requirements.md", "source_role": "FUNCTIONAL_AUTHORITY",
+            "content_type": "text/markdown", "disposition": "INSPECTED_CONTENT",
+            "inspection_method": "FULL_TEXT_READ", "evidence_records": 1, "source_behaviors": 1,
         }],
+        "source_review": {
+            "method": "SUBAGENT_INDEPENDENT",
+            "anchoring_inputs_withheld": [
+                "final_scenario_count", "final_test_case_count", "desired_suite_size",
+            ],
+            "structural_units": [{
+                "id": "UNIT-001", "kind": "ACCEPTANCE_CRITERION",
+                "source": "requirements.md", "reference": "RF-001",
+            }],
+            "behaviors": [{
+                "requirement_ref": "REQ-001", "normalized_claim": "Refresh updates the counter.",
+                "structural_unit_ref": "UNIT-001",
+            }],
+        },
         "evidence_manifest": ["requirements.md"],
         "selected_evidence": [{
             "source_role": "FUNCTIONAL_AUTHORITY", "source_ref": source_ref,
@@ -153,11 +170,81 @@ class WorkflowEntrypointTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             request = generation_request(root, root / "artifacts")
-            request["source_first_claims"].append({
-                "requirement_ref": "REQ-001", "normalized_claim": "Refresh records an audit entry."
+            request["source_review"]["structural_units"].append({
+                "id": "UNIT-002", "kind": "ACCEPTANCE_CRITERION",
+                "source": "requirements.md", "reference": "RF-001",
+            })
+            request["source_review"]["behaviors"].append({
+                "requirement_ref": "REQ-001", "normalized_claim": "Refresh records an audit entry.",
+                "structural_unit_ref": "UNIT-002",
             })
             with self.assertRaisesRegex(GenerationContractError, "Source-first coverage gaps"):
                 dispatch("ftd-gen", **request)
+
+    def test_generation_fails_closed_without_selected_source_accounting(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            request = generation_request(root, root / "artifacts")
+            request.pop("source_ledger")
+            with self.assertRaisesRegex(GenerationContractError, "source_ledger"):
+                dispatch("ftd-gen", **request)
+
+    def test_an_unaccounted_selected_source_blocks_the_run(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "legacy-notes.md").write_text("Legacy operator notes.", encoding="utf-8")
+            request = generation_request(root, root / "artifacts")
+            request["selectors"] = ["requirements.md", "legacy-notes.md"]
+            request["evidence_manifest"] = ["legacy-notes.md", "requirements.md"]
+            with self.assertRaisesRegex(SourceAccountingError, "no inspection disposition"):
+                dispatch("ftd-gen", **request)
+
+    def test_a_source_review_copied_from_primary_claims_blocks_the_run(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            request = generation_request(root, root / "artifacts")
+            request["source_review"]["behaviors"][0]["derived_from_claim_id"] = "CLAIM-001"
+            with self.assertRaisesRegex(SourceAccountingError, "derived from the primary"):
+                dispatch("ftd-gen", **request)
+
+    def test_diagnostics_never_fabricate_a_zero_source_read_count(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            result = dispatch("ftd-gen", **generation_request(root, root / "artifacts"))
+            diagnostic = json.loads(Path(result["diagnostics"]).read_text(encoding="utf-8"))
+            self.assertFalse(diagnostic["source_read_telemetry_available"])
+            self.assertIsNone(diagnostic["source_reads"])
+            self.assertIsNone(diagnostic["source_rereads"])
+            self.assertEqual(1, diagnostic["resolved_selected_sources"])
+            self.assertEqual(1, diagnostic["sources_inspected_content"])
+            self.assertEqual(0, diagnostic["sources_unaccounted"])
+            self.assertEqual(1, diagnostic["independent_review_source_behaviors"])
+            self.assertEqual(0, diagnostic["source_behavior_gaps"])
+
+    def test_observed_read_telemetry_is_reported_when_the_host_supplies_it(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            request = generation_request(root, root / "artifacts")
+            request["source_read_telemetry"] = {
+                "source_reads": 9, "source_rereads": 2, "max_concurrency": 3,
+            }
+            result = dispatch("ftd-gen", **request)
+            diagnostic = json.loads(Path(result["diagnostics"]).read_text(encoding="utf-8"))
+            self.assertTrue(diagnostic["source_read_telemetry_available"])
+            self.assertEqual(9, diagnostic["source_reads"])
+            self.assertEqual(3, diagnostic["source_max_concurrency"])
+
+    def test_source_accounting_and_review_are_resumable_checkpoints(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            result = dispatch("ftd-gen", **generation_request(root, root / "artifacts"))
+            diagnostic = json.loads(Path(result["diagnostics"]).read_text(encoding="utf-8"))
+            created = [
+                item["checkpoint"] for item in diagnostic["checkpoint_events"]
+                if item["event"] == "created"
+            ]
+            self.assertIn("SOURCE_ACCOUNTING_COMPLETE", created)
+            self.assertIn("SOURCE_REVIEW_COMPLETE", created)
 
     def test_natural_language_is_primary_for_every_capability(self) -> None:
         examples = {
