@@ -175,6 +175,14 @@ AGGREGATION_STRATEGIES = {
     "rendered_public_formats": "last",
     "canonical_state_written": "last",
     "source_reads_during_render": "sum",
+    "clarifications_applied": "last",
+    "clarification_conflicts": "last",
+    "mcp_preview_creates": "last",
+    "mcp_preview_updates": "last",
+    "mcp_preview_unchanged": "last",
+    "mcp_preview_skipped": "last",
+    "mcp_preview_conflicts": "last",
+    "external_writes": "sum",
 }
 
 ABSTRACT_ACTION_PATTERNS = (
