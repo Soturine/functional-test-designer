@@ -21,4 +21,6 @@ Every divergence links to normative coverage, a characterization candidate, a fo
 
 Consider bounded cross-requirement and E2E opportunities only when selected evidence supports one continuous independently rerunnable execution. Trace its checkpoints to atomic CPs and never use E2E coverage to erase atomic cases or create combinatorial suites.
 
+Read [adversarial-coverage.md](adversarial-coverage.md) for the Test Asset inventory, the risk review matrix, and the main/alternative/exception flow review that feed these dispositions.
+
 Use `audit_scenario_opportunities` from `scripts/scenario_opportunities.py` before and after Scenario Cohesion. The first pass validates roles and dispositions; the second validates concrete Scenario, Finding, and Question links.

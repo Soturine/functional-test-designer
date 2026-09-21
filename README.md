@@ -221,6 +221,10 @@ Quando `Diagnostic: true` é usado, métricas separadas são escritas em `diagno
 
 Antes da finalização, uma auditoria source-first por RF/RN procura claims normativos omitidos independentemente do mapeamento clause→CP; uma única recuperação passa novamente pelo pipeline completo. A análise Cross-RF apenas sinaliza sobreposição e possíveis duplicatas para revisão, sem mesclar ou remover TCs automaticamente.
 
+Antes de raciocinar sobre conteúdo, cada fonte selecionada resolvida recebe exatamente uma disposição de inspeção explícita. Contabilizar uma fonte não é o mesmo que abri-la: um binário, um arquivo gerado ou uma repetição equivalente pode permanecer sem leitura, mas com motivo registrado. Uma fonte sem disposição interrompe a execução. Métricas de leitura, concorrência e tempo de raciocínio relatam o que foi realmente observado ou ficam explicitamente indisponíveis, nunca zero fabricado.
+
+O inventário source-first é uma segunda leitura genuína: declara seu método, oculta as contagens finais de Scenario, TC e tamanho de suíte, e não pode ser derivado da lista primária de claims. Ele inventaria unidades estruturais antes de resumir, de modo que um título de requisito com N critérios de aceite não vira um único Claim por padrão; uma unidade sem comportamento registra o motivo.
+
 Depois da cobertura normativa, as demais evidências selecionadas passam por uma auditoria de oportunidades. Branches observáveis, divergências, ativos de QA e fluxos contínuos Cross-RF/E2E recebem um destino explícito sem transformar código ou testes legados em autoridade. Uma divergência fica ligada à cobertura normativa, caracterização, Question, Finding ou justificativa não executável — nunca apenas como prosa desconectada.
 
 Claims preservam efeitos e alternativas observáveis de forma atômica, inclusive regras RN/CU explicitamente aplicáveis e disponíveis no escopo. Cada CP testável passa por um candidate independente e toda redução candidate→Scenario exige uma decisão explícita antes que a identidade do TC seja congelada. Depois desse freeze, Evidence Packs enriquecem somente preconditions, dados, caminho, Steps, provenance e observabilidade; o Expected final continua pertencendo à autoridade normativa. O Test Design define o que testar e congela a identidade do TC antes que evidência técnica ou de interface detalhe como uma pessoa executa o caso. Uma lacuna de procedimento permanece visível como Question/`NEEDS_REVIEW`, sem menus, botões ou endpoints inventados.
@@ -228,6 +232,14 @@ Claims preservam efeitos e alternativas observáveis de forma atômica, inclusiv
 Steps seguem a complexidade natural do caminho documentado: navegação, busca, seleção, trigger e observação permanecem ações operacionais separadas quando a sequência suportada exige isso, enquanto um comportamento de uma única ação pode continuar com um Step. O relatório offline permanece uma projeção determinística e leve do JSON validado.
 
 Uma ação vaga não pode comprimir um caminho detalhado disponível nas fontes. Casos com lacuna material de superfície, aquisição de dados, trigger ou observação ficam `NEEDS_REVIEW`; `READY` indica que uma pessoa nova no produto consegue executar o procedimento no nível sustentado pelas evidências. Readiness de automação é mais estrita e não autoriza inventar seletores ou código de runner.
+
+Ativos de teste selecionados são inventariados mecanicamente por análise estática, sem importar nem executar o código inspecionado, e cada comportamento descoberto recebe uma classificação explícita. Um teste técnico não vira Test Case funcional, e nenhum ativo de teste vira autoridade normativa sozinho.
+
+Uma matriz de risco revisa como um operador, um dispositivo, uma integração, um processo concorrente ou o ambiente podem quebrar o fluxo documentado, mantendo apenas o que as evidências selecionadas sustentam. É uma revisão, não um TC por dimensão. Quando a evidência não define o comportamento esperado, o resultado é um candidato de caracterização com uma Question focada — nunca um oracle inventado. Fluxos principais, alternativos e de exceção são revisados separadamente para E2E; um TC E2E é uma execução contínua e independentemente repetível cujos checkpoints rastreiam pelo menos dois CPs atômicos. Cenários adversariais, de resiliência e E2E aceitos continuam sendo Test Cases normais, sem modelo de objeto paralelo.
+
+Uma precondição que apenas nomeia um registro não explica como obtê-lo. Quando o setup é material, o caso declara uma estratégia de aquisição e uma regra concreta, e detalhes procedurais vindos de evidência técnica, manual ou de implementação mantêm sua proveniência. Ambas as lacunas impedem que um caso apareça como simplesmente `READY`.
+
+`operational-scenarios.md` é uma projeção determinística e opcional do estado canônico: um catálogo de revisão que liga Test Cases já existentes, nunca um segundo modelo de TC. Um mesmo TC canônico pode aparecer na suíte por requisito e em suítes estáticas orientadas a risco no Azure DevOps sem ser clonado.
 
 Subtests encontrados em artefatos legados são normalizados: condições independentes viram TCs e ações sequenciais dependentes viram steps. O output final nunca contém `subtests`.
 
@@ -270,11 +282,17 @@ scripts/render_markdown.py     Markdown determinístico por TC
 scripts/render_report.py       Relatório HTML offline
 scripts/diagnostics.py         Diagnóstico opcional de execução
 scripts/generation_orchestrator.py  Pipeline compartilhado e gates reais de geração
+scripts/source_accounting.py        Ledger das fontes selecionadas e revisão independente
+scripts/test_asset_inventory.py     Inventário estático de ativos de teste selecionados
+scripts/risk_coverage.py            Matriz de risco e revisão de fluxos para E2E
+scripts/render_operational_scenarios.py  Catálogo operacional opcional
+scripts/run_operational_benchmarks.py    Execução dos packs sintéticos de benchmark
 scripts/scenario_opportunities.py   Auditoria de oportunidades selecionadas
 scripts/scenario_independence.py  Candidate-first e freeze da identidade
 scripts/procedural_execution.py   Síntese procedural pós-freeze
 scripts/parallel_evidence.py      Coleta paralela e grupos ordenados
 scripts/procedural_pipeline.py    Workers procedurais e feedback aditivo
+benchmarks/operational-workflows/  Packs sintéticos realistas A-D
 examples/                      Exemplo sintético multi-source
 tests/                         Testes de escopo, contrato e renderização
 ```

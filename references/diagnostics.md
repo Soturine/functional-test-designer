@@ -22,6 +22,14 @@ python scripts/diagnostics.py end diagnostics/run-metrics.json scope_resolution 
 
 Use 1-5 short `--done` entries. Record metrics only when observable; never estimate.
 
+An unobservable metric is reported as unavailable, not as zero. When the host cannot measure source reads, rereads, worker count, maximum concurrency, or agent reasoning duration, set `source_read_telemetry_available` to `false` and leave those metrics `null`. A fabricated zero claims the selected sources were never opened.
+
+A diagnostics-enabled run describes the whole workflow. Record run wall clock, attributed stage wall clock, and the unattributed remainder, so a fast final materialization is never presented as the duration of the entire run.
+
+The enforced shared path also reports selected-source accounting (`resolved_selected_sources`, `sources_inspected_content`, `sources_metadata_only`, `sources_irrelevant_with_reason`, `sources_failed`, `sources_unaccounted`), independent review (`primary_atomic_claims`, `independent_review_source_behaviors`, `structural_units_inventoried`, `source_behavior_gaps`), Test Asset inventory (`test_files_selected`, `test_functions_inventory_count`, `test_asset_business_behaviors`, `test_asset_technical_only_behaviors`, `test_asset_missing_dispositions`), opportunity discovery (`adversarial_opportunities`, `negative_opportunities`, `operator_error_opportunities`, `resilience_opportunities`, `recovery_opportunities`, `concurrency_opportunities`, `e2e_opportunities`, `characterization_risk_candidates`), step granularity (`one_step_cases`, `legitimate_one_step_cases`, `path_compression_warnings`), and readiness (`cases_missing_setup_acquisition`, `cases_missing_procedural_provenance`, `human_execution_ready`, `human_execution_not_ready`, `automation_execution_ready`, `automation_execution_not_ready`).
+
+Never copy selected source content into diagnostics.
+
 ## Stages
 
 1. `scope_resolution`

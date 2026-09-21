@@ -1,5 +1,7 @@
 # Per-Requirement Source Coverage Audit
 
+Read [source-accounting.md](source-accounting.md) first: it covers the selected-source ledger, honest read telemetry, and the independence and structural-inventory requirements that make this audit meaningful.
+
 Read this after the candidate Test Case suite exists and before finalization. This is distinct from the clause-to-Coverage-Point audit: reconsult each selected normative source from the source outward, not from generated clauses backward.
 
 For each RF/RN/requirement, preserve a Source Item with its requirement owner, source refs, and faithful source text. Run the executable atomicity review before Clause creation. Identify every independently observable normative claim, including bullets, acceptance criteria, alternatives, exceptions, transitions, restrictions, side effects, messages, audit records, and distinct search/filter dimensions. A bullet or sentence is not automatically one claim. Split observable `and` outcomes, `or` alternatives, and enumerated effects when one can be wrong while another remains correct. Do not split inseparable representations merely because punctuation or a connector exists.

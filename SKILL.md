@@ -22,9 +22,9 @@ Read [output-contract.md](references/output-contract.md) and [performance-orches
 ## Pipeline
 
 ```text
-Selected sources -> Scope lock -> Evidence collection/barrier
--> Source-first inventory -> Atomic source claims -> Clauses -> Coverage Points
--> Selected-evidence opportunity audit
+Selected sources -> Scope lock -> Source accounting ledger -> Evidence collection/barrier
+-> Independent source-first review -> Atomic source claims -> Clauses -> Coverage Points
+-> Selected-evidence opportunity audit (Test Assets, risk matrix, use-case flows)
 -> Independent candidates -> Scenario cohesion -> Frozen Test identities
 -> Procedural enrichment -> Readiness -> Validation
 -> Canonical run state -> Selected public projections
@@ -34,7 +34,9 @@ With no explicit source order, analyze independent selected sources concurrently
 
 Read these detailed contracts only when their stage is relevant:
 
+- [source-accounting.md](references/source-accounting.md): selected-source ledger, honest read telemetry, independent source-first review, structural inventory.
 - [source-coverage-audit.md](references/source-coverage-audit.md): source-first atomic extraction, clause/CP lineage, one bounded recovery.
+- [adversarial-coverage.md](references/adversarial-coverage.md): Test Asset inventory, evidence-grounded risk matrix, resilience and recovery, bounded E2E, operational catalog.
 - [test-design.md](references/test-design.md): contextual BVA, EP, state, decision-table, pairwise, and risk techniques.
 - [evidence-enrichment.md](references/evidence-enrichment.md): selected-source Evidence Packs and provenance.
 - [scenario-opportunities.md](references/scenario-opportunities.md): dispositions for normative, divergence, implementation, QA-asset, and bounded E2E opportunities.
@@ -43,6 +45,9 @@ Read these detailed contracts only when their stage is relevant:
 
 ## Atomicity and identity
 
+- Account for every resolved selected source before reasoning about its content; a source that stays unread needs a recorded reason, and a source with no disposition fails the run.
+- Produce the source-first inventory as a genuinely separate reading that withholds the final scenario, Test Case, and suite-size counts. A reformatted copy of the primary claims is not a second opinion.
+- Inventory structural units before summarizing them. One requirement heading plus N acceptance bullets is not one Claim by default, and a unit that yields no behavior records why.
 - Extract atomic normative clauses before summarizing them into logical Requirements.
 - Extract atomic source claims before Requirement normalization. Every claim must reach exactly one explicit destination.
 - Review suspicious compound Claims and Clauses again after materialization; an upstream summary cannot bypass atomicity merely by arriving pre-compressed.
@@ -63,6 +68,8 @@ the existence of one CP for a Requirement proves nothing about its remaining cla
 
 Atomic does not mean single-step. Use the documented natural sequence from legitimate preconditions to trigger and observable outcome. Do not inflate steps or hide setup in preconditions. Preserve a one-step case when one supported action is sufficient.
 
+Where setup is material, state how the record or starting state is obtained rather than only asserting that it exists; an unobtainable precondition is not executable. Keep the provenance of procedural detail that came from selected implementation, manual, or technical evidence.
+
 Each step has one executable action and supported observable expected result. Unsupported detail stays visible as a Question, `NEEDS_REVIEW`, or `needs_clarification`; it is never guessed. Classify human and automation readiness without changing the suite to improve the counts.
 
 Reject path compression when one vague action hides a selected-evidence sequence. A testable case is `READY` only when its procedure, data acquisition, trigger, and observations are supported well enough for execution; preserve its frozen identity while using `NEEDS_REVIEW` for material procedural blockers.
@@ -73,7 +80,7 @@ Read [commands.md](references/commands.md). Ordinary requests and command aliase
 
 For clarification, read [clarification.md](references/clarification.md). Record answers as `USER_CLARIFICATION`; conflicts with approved authority remain visible unless explicitly supplied as an authoritative correction.
 
-For output selection, read [output-selection.md](references/output-selection.md). Persist one private canonical state when enabled and render only requested HTML, JSON, Markdown, and diagnostics. Do not publish dead cross-format links.
+For output selection, read [output-selection.md](references/output-selection.md). Persist one private canonical state when enabled and render only requested HTML, JSON, Markdown, diagnostics, and the optional operational scenario catalog. Do not publish dead cross-format links.
 
 For integrations, read [mcp-integration.md](references/mcp-integration.md). MCP is transport, never canonical truth. Preview and validate first; require explicit approval for writes; never delete by default; detect external conflicts; use deterministic fallback exports when transport is unavailable.
 
@@ -81,8 +88,9 @@ Before completion:
 
 - validate scope proof, atomic lineage, scenario/TC independence, Questions, Findings, and source provenance;
 - account for every meaningful selected-evidence opportunity and link each divergence to coverage or an explicit non-executable disposition;
+- account for every discovered Test Asset behavior, every evidence-supported risk condition, and every documented use-case flow, using characterization plus a focused Question wherever the expected behavior is undefined;
 - confirm human/automation readiness classifications and reason codes;
 - validate canonical state and selected projections;
 - confirm render did not reread project sources;
 - preserve schema `1.2`, exact artifact destination, offline HTML, Mermaid parity, and zero `subtests`;
-- report real diagnostics only, without source content, answers, credentials, or secrets.
+- report real diagnostics only, without source content, answers, credentials, or secrets, marking unobservable read, concurrency, and reasoning telemetry as unavailable instead of zero.
