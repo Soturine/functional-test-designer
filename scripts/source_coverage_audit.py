@@ -14,6 +14,10 @@ ALLOWED_KEEP_ATOMIC_REASONS = {
     "INSEPARABLE_RELATION",
     "SINGLE_OBSERVABLE_OUTCOME",
 }
+CONTRADICTORY_SINGLE_OUTCOME_SIGNALS = {
+    "MULTIPLE_OBSERVABLE_VERBS",
+    "MULTIPLE_OBSERVABLE_OBJECTS",
+}
 FORBIDDEN_KEEP_ATOMIC_REASONS = {
     "SAME_SENTENCE",
     "SAME_BULLET",
@@ -128,6 +132,14 @@ def review_source_items(source_items: list[dict[str, Any]]) -> dict[str, Any]:
                 raise ValueError(f"Source item {item_id} uses forbidden KEEP_ATOMIC reason {reason}")
             if reason not in ALLOWED_KEEP_ATOMIC_REASONS:
                 raise ValueError(f"Source item {item_id} requires a valid KEEP_ATOMIC reason")
+            if reason == "SINGLE_OBSERVABLE_OUTCOME" and (
+                set(signals) & CONTRADICTORY_SINGLE_OUTCOME_SIGNALS
+            ):
+                raise ValueError(
+                    f"Source item {item_id} claims SINGLE_OBSERVABLE_OUTCOME but describes "
+                    "several independently observable outcomes; split it or record why the "
+                    "observations are inseparable"
+                )
             if signals:
                 suspicious_kept += 1
         else:
@@ -144,6 +156,13 @@ def review_source_items(source_items: list[dict[str, Any]]) -> dict[str, Any]:
                     raise ValueError(
                         f"Atomic claim in {item_id} remains compound after SPLIT; "
                         "split it again or record a valid keep_atomic_reason"
+                    )
+                if residual_reason == "SINGLE_OBSERVABLE_OUTCOME" and (
+                    set(residual_signals) & CONTRADICTORY_SINGLE_OUTCOME_SIGNALS
+                ):
+                    raise ValueError(
+                        f"Atomic claim in {item_id} remains compound after SPLIT and cannot "
+                        "claim SINGLE_OBSERVABLE_OUTCOME"
                     )
             claim = dict(part)
             claim["id"] = f"CLAIM-{len(claims) + 1:03d}"

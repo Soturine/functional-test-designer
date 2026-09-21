@@ -1,0 +1,629 @@
+{
+  "id": "benchmark-b",
+  "title": "Implementation-heavy legacy pricing workflow",
+  "description": "A legacy route whose rounding diverges from the Functional Authority, existing tests that characterize the implementation, and a technical test that must not become a functional Test Case.",
+  "files": {
+    "requirements.md": "# Legacy pricing workflow\n\n## RF-010 Apply a discount\n\nAcceptance criteria:\n\n- Applying a valid discount code reduces the total and records the applied code.\n\n## RF-011 Refuse an expired discount\n\nAcceptance criteria:\n\n- An expired discount code is refused and the total remains unchanged.\n",
+    "legacy_service.py": "\"\"\"Legacy pricing service.\"\"\"\n\nSTATUS_REFUSED = \"REFUSED\"\nLEGACY_ROUNDING = \"FLOOR\"\n\n\ndef apply_discount(total, code, expired):\n    if expired:\n        return total, STATUS_REFUSED\n    # The legacy route floors the discounted total instead of rounding it.\n    return int(total * 0.9), \"APPLIED\"\n",
+    "legacy_test_pricing.py": "\"\"\"Existing legacy pricing tests.\"\"\"\n\n\ndef test_expired_code_is_refused():\n    \"\"\"An expired discount code is refused.\"\"\"\n    assert True\n\n\ndef test_discount_uses_floor_rounding():\n    assert True\n\n\nclass TestSerializers:\n    def test_payload_shape(self):\n        assert True\n"
+  },
+  "request": {
+    "run_id": "benchmark-b",
+    "formats": [
+      "JSON",
+      "DIAGNOSTICS"
+    ],
+    "diagnostic": true,
+    "generated_at": "2026-01-01T00:00:00Z",
+    "selectors": [
+      "requirements.md",
+      "legacy_service.py",
+      "legacy_test_pricing.py"
+    ],
+    "sources": [
+      {
+        "path": "requirements.md",
+        "role": "FUNCTIONAL_AUTHORITY"
+      },
+      {
+        "path": "legacy_service.py",
+        "role": "IMPLEMENTATION_EVIDENCE"
+      },
+      {
+        "path": "legacy_test_pricing.py",
+        "role": "TEST_ASSET"
+      }
+    ],
+    "requirements": [
+      {
+        "id": "REQ-010",
+        "statement": "A valid discount reduces the total.",
+        "status": "TESTABLE",
+        "source_refs": [
+          {
+            "source": "requirements.md",
+            "reference": "RF-010#AC-1"
+          }
+        ]
+      },
+      {
+        "id": "REQ-011",
+        "statement": "An expired discount is refused.",
+        "status": "TESTABLE",
+        "source_refs": [
+          {
+            "source": "requirements.md",
+            "reference": "RF-011#AC-1"
+          }
+        ]
+      }
+    ],
+    "source_items": [
+      {
+        "id": "SRC-001",
+        "requirement_ref": "REQ-010",
+        "source_text": "Applying a valid discount code reduces the total and records the applied code.",
+        "source_refs": [
+          {
+            "source": "requirements.md",
+            "reference": "RF-010#AC-1"
+          }
+        ],
+        "atomicity_review": {
+          "decision": "SPLIT",
+          "claims": [
+            {
+              "normalized_claim": "The total is reduced.",
+              "coverage_statement": "The total is reduced."
+            },
+            {
+              "normalized_claim": "The applied code is recorded.",
+              "coverage_statement": "The applied code is recorded."
+            }
+          ]
+        }
+      },
+      {
+        "id": "SRC-002",
+        "requirement_ref": "REQ-011",
+        "source_text": "An expired discount code is refused and the total remains unchanged.",
+        "source_refs": [
+          {
+            "source": "requirements.md",
+            "reference": "RF-011#AC-1"
+          }
+        ],
+        "atomicity_review": {
+          "decision": "SPLIT",
+          "claims": [
+            {
+              "normalized_claim": "The discount code is refused.",
+              "coverage_statement": "The discount code is refused."
+            },
+            {
+              "normalized_claim": "The total is unchanged.",
+              "coverage_statement": "The total is unchanged."
+            }
+          ]
+        }
+      }
+    ],
+    "source_ledger": [
+      {
+        "source": "requirements.md",
+        "source_role": "FUNCTIONAL_AUTHORITY",
+        "content_type": "text/markdown",
+        "disposition": "INSPECTED_CONTENT",
+        "inspection_method": "FULL_TEXT_READ",
+        "evidence_records": 2,
+        "source_behaviors": 4
+      },
+      {
+        "source": "legacy_service.py",
+        "source_role": "IMPLEMENTATION_EVIDENCE",
+        "content_type": "text/x-python",
+        "disposition": "INSPECTED_CONTENT",
+        "inspection_method": "FULL_TEXT_READ",
+        "evidence_records": 2,
+        "opportunities": 2,
+        "divergences": 1
+      },
+      {
+        "source": "legacy_test_pricing.py",
+        "source_role": "TEST_ASSET",
+        "content_type": "text/x-python",
+        "disposition": "INSPECTED_CONTENT",
+        "inspection_method": "STATIC_AST_DISCOVERY",
+        "evidence_records": 1,
+        "test_asset_behaviors": 3
+      }
+    ],
+    "source_review": {
+      "method": "SUBAGENT_INDEPENDENT",
+      "anchoring_inputs_withheld": [
+        "final_scenario_count",
+        "final_test_case_count",
+        "desired_suite_size"
+      ],
+      "structural_units": [
+        {
+          "id": "UNIT-001",
+          "kind": "ACCEPTANCE_CRITERION",
+          "source": "requirements.md",
+          "reference": "RF-010#AC-1"
+        },
+        {
+          "id": "UNIT-002",
+          "kind": "ACCEPTANCE_CRITERION",
+          "source": "requirements.md",
+          "reference": "RF-010#AC-1"
+        },
+        {
+          "id": "UNIT-003",
+          "kind": "ACCEPTANCE_CRITERION",
+          "source": "requirements.md",
+          "reference": "RF-011#AC-1"
+        },
+        {
+          "id": "UNIT-004",
+          "kind": "ACCEPTANCE_CRITERION",
+          "source": "requirements.md",
+          "reference": "RF-011#AC-1"
+        }
+      ],
+      "behaviors": [
+        {
+          "requirement_ref": "REQ-010",
+          "normalized_claim": "The total is reduced.",
+          "structural_unit_ref": "UNIT-001"
+        },
+        {
+          "requirement_ref": "REQ-010",
+          "normalized_claim": "The applied code is recorded.",
+          "structural_unit_ref": "UNIT-002"
+        },
+        {
+          "requirement_ref": "REQ-011",
+          "normalized_claim": "The discount code is refused.",
+          "structural_unit_ref": "UNIT-003"
+        },
+        {
+          "requirement_ref": "REQ-011",
+          "normalized_claim": "The total is unchanged.",
+          "structural_unit_ref": "UNIT-004"
+        }
+      ]
+    },
+    "evidence_manifest": [
+      "requirements.md",
+      "legacy_service.py",
+      "legacy_test_pricing.py"
+    ],
+    "selected_evidence": [
+      {
+        "source_role": "FUNCTIONAL_AUTHORITY",
+        "source_ref": {
+          "source": "requirements.md",
+          "reference": "RF-010#AC-1"
+        },
+        "meaningful_behavior": true
+      },
+      {
+        "source_role": "FUNCTIONAL_AUTHORITY",
+        "source_ref": {
+          "source": "requirements.md",
+          "reference": "RF-011#AC-1"
+        },
+        "meaningful_behavior": true
+      },
+      {
+        "source_role": "IMPLEMENTATION_EVIDENCE",
+        "source_ref": {
+          "source": "legacy_service.py",
+          "reference": "apply_discount#rounding"
+        },
+        "meaningful_behavior": true
+      },
+      {
+        "source_role": "IMPLEMENTATION_EVIDENCE",
+        "source_ref": {
+          "source": "legacy_service.py",
+          "reference": "apply_discount#guard"
+        },
+        "meaningful_behavior": true
+      },
+      {
+        "source_role": "TEST_ASSET",
+        "source_ref": {
+          "source": "legacy_test_pricing.py",
+          "reference": "test_discount_uses_floor_rounding"
+        },
+        "meaningful_behavior": true
+      }
+    ],
+    "opportunities": [
+      {
+        "id": "OPP-001",
+        "source_role": "FUNCTIONAL_AUTHORITY",
+        "source_ref": {
+          "source": "requirements.md",
+          "reference": "RF-010#AC-1"
+        },
+        "authority_status": "NORMATIVE",
+        "disposition": "NEW_NORMATIVE_SCENARIO",
+        "target_refs": [
+          "SCN-001"
+        ],
+        "normative_support_refs": [
+          {
+            "source": "requirements.md",
+            "reference": "RF-010#AC-1"
+          }
+        ]
+      },
+      {
+        "id": "OPP-002",
+        "source_role": "FUNCTIONAL_AUTHORITY",
+        "source_ref": {
+          "source": "requirements.md",
+          "reference": "RF-011#AC-1"
+        },
+        "authority_status": "NORMATIVE",
+        "disposition": "NEW_NORMATIVE_SCENARIO",
+        "target_refs": [
+          "SCN-002"
+        ],
+        "normative_support_refs": [
+          {
+            "source": "requirements.md",
+            "reference": "RF-011#AC-1"
+          }
+        ]
+      },
+      {
+        "id": "OPP-003",
+        "source_role": "IMPLEMENTATION_EVIDENCE",
+        "source_ref": {
+          "source": "legacy_service.py",
+          "reference": "apply_discount#rounding"
+        },
+        "authority_status": "DIVERGENCE",
+        "disposition": "DIVERGENCE_SCENARIO",
+        "target_refs": [
+          "SCN-001"
+        ],
+        "finding_refs": [
+          "FND-001"
+        ],
+        "risk_condition_ref": "RISK-001",
+        "normative_support_refs": [
+          {
+            "source": "requirements.md",
+            "reference": "RF-010#AC-1"
+          }
+        ]
+      },
+      {
+        "id": "OPP-004",
+        "source_role": "IMPLEMENTATION_EVIDENCE",
+        "source_ref": {
+          "source": "legacy_service.py",
+          "reference": "apply_discount#guard"
+        },
+        "authority_status": "IMPLEMENTATION",
+        "disposition": "COVERED_BY_EXISTING_SCENARIO",
+        "target_refs": [
+          "SCN-002"
+        ]
+      },
+      {
+        "id": "OPP-005",
+        "source_role": "TEST_ASSET",
+        "source_ref": {
+          "source": "legacy_test_pricing.py",
+          "reference": "test_discount_uses_floor_rounding"
+        },
+        "authority_status": "IMPLEMENTATION",
+        "disposition": "IMPLEMENTATION_CHARACTERIZATION",
+        "target_refs": [
+          "Q-001"
+        ],
+        "question_refs": [
+          "Q-001"
+        ]
+      }
+    ],
+    "risk_conditions": [
+      {
+        "id": "RISK-001",
+        "risk_class": "DATA_INTEGRITY",
+        "dimension": "value_boundary",
+        "condition_support_refs": [
+          {
+            "source": "legacy_service.py",
+            "reference": "apply_discount#rounding"
+          }
+        ],
+        "oracle_support": "NORMATIVE"
+      }
+    ],
+    "use_case_flows": [],
+    "test_asset_inventory": {
+      "discovered": [
+        {
+          "id": "TA-001",
+          "source": "legacy_test_pricing.py",
+          "test_class": null,
+          "test_function": "test_expired_code_is_refused",
+          "reference": "test_expired_code_is_refused",
+          "documented": true,
+          "parametrized_cases": null,
+          "referenced_constants": []
+        },
+        {
+          "id": "TA-002",
+          "source": "legacy_test_pricing.py",
+          "test_class": null,
+          "test_function": "test_discount_uses_floor_rounding",
+          "reference": "test_discount_uses_floor_rounding",
+          "documented": false,
+          "parametrized_cases": null,
+          "referenced_constants": []
+        },
+        {
+          "id": "TA-003",
+          "source": "legacy_test_pricing.py",
+          "test_class": "TestSerializers",
+          "test_function": "test_payload_shape",
+          "reference": "TestSerializers::test_payload_shape",
+          "documented": false,
+          "parametrized_cases": null,
+          "referenced_constants": []
+        }
+      ],
+      "classifications": [
+        {
+          "reference": "test_expired_code_is_refused",
+          "classification": "DUPLICATE_EXISTING_COVERAGE",
+          "reason": "Already covered by the refusal scenario for REQ-011."
+        },
+        {
+          "reference": "test_discount_uses_floor_rounding",
+          "classification": "IMPLEMENTATION_CHARACTERIZATION"
+        },
+        {
+          "reference": "TestSerializers::test_payload_shape",
+          "classification": "TECHNICAL_ONLY"
+        }
+      ]
+    },
+    "scenario_profiles": {
+      "CP-001": {
+        "title": "Apply a valid discount",
+        "behavior": "Apply a valid discount",
+        "scenario_type": "HAPPY_PATH",
+        "normative_oracle": "The total is reduced.",
+        "assertion_oracle": "The total is reduced.",
+        "observation_target": "order total",
+        "actor": "pricing operator with discount permission",
+        "setup": "documented setup",
+        "state": "an open order with a total exists",
+        "input_partition": "a valid discount code",
+        "trigger": "select Apply discount",
+        "execution_boundary": "one apply action",
+        "objective": "Apply a valid discount code and observe the total and the recorded code.",
+        "material_preconditions": [
+          "A pricing operator with discount permission is authenticated."
+        ],
+        "merge_reason": "SHARED_EXECUTION_OBSERVATIONS",
+        "execution_family": "apply-discount",
+        "observation_from_same_execution": true,
+        "requires_independent_rerun": false
+      },
+      "CP-002": {
+        "title": "Apply a valid discount",
+        "behavior": "Apply a valid discount",
+        "scenario_type": "HAPPY_PATH",
+        "normative_oracle": "The applied code is recorded.",
+        "assertion_oracle": "The applied code is recorded.",
+        "observation_target": "applied code",
+        "actor": "pricing operator with discount permission",
+        "setup": "documented setup",
+        "state": "an open order with a total exists",
+        "input_partition": "a valid discount code",
+        "trigger": "select Apply discount",
+        "execution_boundary": "one apply action",
+        "objective": "Apply a valid discount code and observe the total and the recorded code.",
+        "material_preconditions": [
+          "A pricing operator with discount permission is authenticated."
+        ],
+        "merge_reason": "SHARED_EXECUTION_OBSERVATIONS",
+        "execution_family": "apply-discount",
+        "observation_from_same_execution": true,
+        "requires_independent_rerun": false
+      },
+      "CP-003": {
+        "title": "Refuse an expired discount",
+        "behavior": "Refuse an expired discount",
+        "scenario_type": "NEGATIVE",
+        "normative_oracle": "The discount code is refused.",
+        "assertion_oracle": "The discount code is refused.",
+        "observation_target": "refusal message",
+        "actor": "pricing operator with discount permission",
+        "setup": "documented setup",
+        "state": "an open order with a total exists",
+        "input_partition": "an expired discount code",
+        "trigger": "select Apply discount",
+        "execution_boundary": "one apply action",
+        "objective": "Apply an expired discount code and observe the refusal.",
+        "material_preconditions": [
+          "A pricing operator with discount permission is authenticated."
+        ],
+        "merge_reason": "SHARED_EXECUTION_OBSERVATIONS",
+        "execution_family": "refuse-discount",
+        "observation_from_same_execution": true,
+        "requires_independent_rerun": false
+      },
+      "CP-004": {
+        "title": "Refuse an expired discount",
+        "behavior": "Refuse an expired discount",
+        "scenario_type": "NEGATIVE",
+        "normative_oracle": "The total is unchanged.",
+        "assertion_oracle": "The total is unchanged.",
+        "observation_target": "order total",
+        "actor": "pricing operator with discount permission",
+        "setup": "documented setup",
+        "state": "an open order with a total exists",
+        "input_partition": "an expired discount code",
+        "trigger": "select Apply discount",
+        "execution_boundary": "one apply action",
+        "objective": "Apply an expired discount code and observe the refusal.",
+        "material_preconditions": [
+          "A pricing operator with discount permission is authenticated."
+        ],
+        "merge_reason": "SHARED_EXECUTION_OBSERVATIONS",
+        "execution_family": "refuse-discount",
+        "observation_from_same_execution": true,
+        "requires_independent_rerun": false
+      }
+    },
+    "evidence_packs": {
+      "TC-001": {
+        "priority": "HIGH",
+        "execution_surface": "Pricing screen",
+        "execution_surface_required": true,
+        "setup_required": true,
+        "setup": {
+          "strategy": "REUSE_EXISTING_WITH_QUERY_RULE",
+          "acquisition_rule": "Select an existing open order with a total of 100 and record its id."
+        },
+        "actions": [
+          {
+            "action": "Open the order, enter the discount code, then select Apply discount.",
+            "expected_result": "The total is reduced.",
+            "evidence_source": {
+              "source": "legacy_service.py",
+              "reference": "apply_discount#rounding"
+            }
+          }
+        ],
+        "test_data": [
+          {
+            "name": "order total",
+            "description": "total = 100"
+          }
+        ],
+        "source_refs": [
+          {
+            "source": "legacy_service.py",
+            "reference": "apply_discount#rounding"
+          }
+        ],
+        "preconditions": [],
+        "postconditions": [],
+        "cleanup": [
+          "Restore the record to its starting state."
+        ],
+        "tags": [
+          "pricing",
+          "data-integrity"
+        ]
+      },
+      "TC-002": {
+        "priority": "HIGH",
+        "execution_surface": "Pricing screen",
+        "execution_surface_required": true,
+        "setup_required": true,
+        "setup": {
+          "strategy": "REUSE_EXISTING_WITH_QUERY_RULE",
+          "acquisition_rule": "Select an existing open order with a total of 100 and record its id."
+        },
+        "actions": [
+          {
+            "action": "Open the order, enter the expired discount code, then select Apply discount.",
+            "expected_result": "The discount code is refused.",
+            "evidence_source": {
+              "source": "legacy_service.py",
+              "reference": "apply_discount#guard"
+            }
+          }
+        ],
+        "test_data": [
+          {
+            "name": "order total",
+            "description": "total = 100"
+          }
+        ],
+        "source_refs": [
+          {
+            "source": "legacy_service.py",
+            "reference": "apply_discount#guard"
+          }
+        ],
+        "preconditions": [],
+        "postconditions": [],
+        "cleanup": [
+          "Restore the record to its starting state."
+        ],
+        "tags": [
+          "pricing",
+          "negative"
+        ]
+      }
+    },
+    "operational_scenarios": [],
+    "findings": [
+      {
+        "id": "FND-001",
+        "type": "IMPLEMENTATION_DIVERGENCE",
+        "statement": "The Functional Authority requires the reduced total; the selected legacy route floors it instead. The Expected Result stays the documented behavior.",
+        "requirement_refs": [
+          "REQ-010"
+        ],
+        "source_refs": [
+          {
+            "source": "requirements.md",
+            "reference": "RF-010#AC-1"
+          },
+          {
+            "source": "legacy_service.py",
+            "reference": "apply_discount#rounding"
+          }
+        ]
+      }
+    ],
+    "questions": [
+      {
+        "id": "Q-001",
+        "related_test_cases": [
+          "TC-001"
+        ],
+        "requirement_refs": [
+          "REQ-010"
+        ],
+        "source_refs": [
+          {
+            "source": "legacy_test_pricing.py",
+            "reference": "test_discount_uses_floor_rounding"
+          }
+        ],
+        "question": "Is the legacy floor rounding an accepted behavior or a defect?",
+        "reason": "An existing test characterizes it, but no authority defines it.",
+        "blocking": false
+      }
+    ]
+  },
+  "expected_invariants": {
+    "coverage_points_exact": 4,
+    "test_cases_exact": 2,
+    "source_behavior_gaps_exact": 0,
+    "sources_unaccounted_exact": 0,
+    "divergence_opportunities_linked_min": 1,
+    "test_functions_inventory_count_exact": 3,
+    "test_asset_technical_only_behaviors_exact": 1,
+    "test_asset_characterization_behaviors_exact": 1,
+    "test_asset_behaviors_promoted_exact": 0,
+    "test_asset_missing_dispositions_exact": 0,
+    "cases_missing_procedural_provenance_exact": 0
+  }
+}

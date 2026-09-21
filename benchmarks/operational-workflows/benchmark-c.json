@@ -1,0 +1,574 @@
+{
+  "id": "benchmark-c",
+  "title": "Integration and concurrency settlement workflow",
+  "description": "Idempotency, simultaneous operators, and a retry whose second-timeout recovery is documented only as a transient failure.",
+  "files": {
+    "requirements.md": "# Settlement integration\n\n## RF-020 Settle a confirmed order\n\nAcceptance criteria:\n\n- Settling a confirmed order marks it Settled and sends one settlement message.\n\n## RF-021 Ignore a repeated settlement\n\nAcceptance criteria:\n\n- A repeated settlement request for the same order is ignored and no second message is sent.\n",
+    "integration_notes.md": "# Integration notes\n\nNote INT-1: settlement calls the ledger endpoint with an idempotency key.\nNote INT-2: when two operators settle the same order at the same time the second\nrequest observes the order already Settled.\nNote INT-3: when the ledger endpoint times out the request is retried once; a second\ntimeout leaves the order Confirmed and reports a transient failure.\n"
+  },
+  "request": {
+    "run_id": "benchmark-c",
+    "formats": [
+      "JSON",
+      "DIAGNOSTICS"
+    ],
+    "diagnostic": true,
+    "generated_at": "2026-01-01T00:00:00Z",
+    "selectors": [
+      "requirements.md",
+      "integration_notes.md"
+    ],
+    "sources": [
+      {
+        "path": "requirements.md",
+        "role": "FUNCTIONAL_AUTHORITY"
+      },
+      {
+        "path": "integration_notes.md",
+        "role": "TECHNICAL_CONTEXT"
+      }
+    ],
+    "requirements": [
+      {
+        "id": "REQ-020",
+        "statement": "A confirmed order can be settled.",
+        "status": "TESTABLE",
+        "source_refs": [
+          {
+            "source": "requirements.md",
+            "reference": "RF-020#AC-1"
+          }
+        ]
+      },
+      {
+        "id": "REQ-021",
+        "statement": "A repeated settlement is ignored.",
+        "status": "TESTABLE",
+        "source_refs": [
+          {
+            "source": "requirements.md",
+            "reference": "RF-021#AC-1"
+          }
+        ]
+      }
+    ],
+    "source_items": [
+      {
+        "id": "SRC-001",
+        "requirement_ref": "REQ-020",
+        "source_text": "Settling a confirmed order marks it Settled and sends one settlement message.",
+        "source_refs": [
+          {
+            "source": "requirements.md",
+            "reference": "RF-020#AC-1"
+          }
+        ],
+        "atomicity_review": {
+          "decision": "SPLIT",
+          "claims": [
+            {
+              "normalized_claim": "The order is marked Settled.",
+              "coverage_statement": "The order is Settled."
+            },
+            {
+              "normalized_claim": "One settlement message is sent.",
+              "coverage_statement": "One settlement message exists."
+            }
+          ]
+        }
+      },
+      {
+        "id": "SRC-002",
+        "requirement_ref": "REQ-021",
+        "source_text": "A repeated settlement request for the same order is ignored and no second message is sent.",
+        "source_refs": [
+          {
+            "source": "requirements.md",
+            "reference": "RF-021#AC-1"
+          }
+        ],
+        "atomicity_review": {
+          "decision": "SPLIT",
+          "claims": [
+            {
+              "normalized_claim": "The repeated request is ignored.",
+              "coverage_statement": "The repeated request is ignored."
+            },
+            {
+              "normalized_claim": "No second message is sent.",
+              "coverage_statement": "No second message exists."
+            }
+          ]
+        }
+      }
+    ],
+    "source_ledger": [
+      {
+        "source": "requirements.md",
+        "source_role": "FUNCTIONAL_AUTHORITY",
+        "content_type": "text/markdown",
+        "disposition": "INSPECTED_CONTENT",
+        "inspection_method": "FULL_TEXT_READ",
+        "evidence_records": 2,
+        "source_behaviors": 4
+      },
+      {
+        "source": "integration_notes.md",
+        "source_role": "TECHNICAL_CONTEXT",
+        "content_type": "text/markdown",
+        "disposition": "INSPECTED_CONTENT",
+        "inspection_method": "FULL_TEXT_READ",
+        "evidence_records": 3,
+        "opportunities": 3
+      }
+    ],
+    "source_review": {
+      "method": "SUBAGENT_INDEPENDENT",
+      "anchoring_inputs_withheld": [
+        "final_scenario_count",
+        "final_test_case_count",
+        "desired_suite_size"
+      ],
+      "structural_units": [
+        {
+          "id": "UNIT-001",
+          "kind": "ACCEPTANCE_CRITERION",
+          "source": "requirements.md",
+          "reference": "RF-020#AC-1"
+        },
+        {
+          "id": "UNIT-002",
+          "kind": "ACCEPTANCE_CRITERION",
+          "source": "requirements.md",
+          "reference": "RF-020#AC-1"
+        },
+        {
+          "id": "UNIT-003",
+          "kind": "ACCEPTANCE_CRITERION",
+          "source": "requirements.md",
+          "reference": "RF-021#AC-1"
+        },
+        {
+          "id": "UNIT-004",
+          "kind": "ACCEPTANCE_CRITERION",
+          "source": "requirements.md",
+          "reference": "RF-021#AC-1"
+        }
+      ],
+      "behaviors": [
+        {
+          "requirement_ref": "REQ-020",
+          "normalized_claim": "The order is marked Settled.",
+          "structural_unit_ref": "UNIT-001"
+        },
+        {
+          "requirement_ref": "REQ-020",
+          "normalized_claim": "One settlement message is sent.",
+          "structural_unit_ref": "UNIT-002"
+        },
+        {
+          "requirement_ref": "REQ-021",
+          "normalized_claim": "The repeated request is ignored.",
+          "structural_unit_ref": "UNIT-003"
+        },
+        {
+          "requirement_ref": "REQ-021",
+          "normalized_claim": "No second message is sent.",
+          "structural_unit_ref": "UNIT-004"
+        }
+      ]
+    },
+    "evidence_manifest": [
+      "requirements.md",
+      "integration_notes.md"
+    ],
+    "selected_evidence": [
+      {
+        "source_role": "FUNCTIONAL_AUTHORITY",
+        "source_ref": {
+          "source": "requirements.md",
+          "reference": "RF-020#AC-1"
+        },
+        "meaningful_behavior": true
+      },
+      {
+        "source_role": "FUNCTIONAL_AUTHORITY",
+        "source_ref": {
+          "source": "requirements.md",
+          "reference": "RF-021#AC-1"
+        },
+        "meaningful_behavior": true
+      },
+      {
+        "source_role": "TECHNICAL_CONTEXT",
+        "source_ref": {
+          "source": "integration_notes.md",
+          "reference": "INT-1"
+        },
+        "meaningful_behavior": true
+      },
+      {
+        "source_role": "TECHNICAL_CONTEXT",
+        "source_ref": {
+          "source": "integration_notes.md",
+          "reference": "INT-2"
+        },
+        "meaningful_behavior": true
+      },
+      {
+        "source_role": "TECHNICAL_CONTEXT",
+        "source_ref": {
+          "source": "integration_notes.md",
+          "reference": "INT-3"
+        },
+        "meaningful_behavior": true
+      }
+    ],
+    "opportunities": [
+      {
+        "id": "OPP-001",
+        "source_role": "FUNCTIONAL_AUTHORITY",
+        "source_ref": {
+          "source": "requirements.md",
+          "reference": "RF-020#AC-1"
+        },
+        "authority_status": "NORMATIVE",
+        "disposition": "NEW_NORMATIVE_SCENARIO",
+        "target_refs": [
+          "SCN-001"
+        ],
+        "normative_support_refs": [
+          {
+            "source": "requirements.md",
+            "reference": "RF-020#AC-1"
+          }
+        ]
+      },
+      {
+        "id": "OPP-002",
+        "source_role": "FUNCTIONAL_AUTHORITY",
+        "source_ref": {
+          "source": "requirements.md",
+          "reference": "RF-021#AC-1"
+        },
+        "authority_status": "NORMATIVE",
+        "disposition": "NEW_NORMATIVE_SCENARIO",
+        "target_refs": [
+          "SCN-002"
+        ],
+        "normative_support_refs": [
+          {
+            "source": "requirements.md",
+            "reference": "RF-021#AC-1"
+          }
+        ]
+      },
+      {
+        "id": "OPP-003",
+        "source_role": "TECHNICAL_CONTEXT",
+        "source_ref": {
+          "source": "integration_notes.md",
+          "reference": "INT-1"
+        },
+        "authority_status": "PROCEDURAL",
+        "disposition": "COVERED_BY_EXISTING_SCENARIO",
+        "target_refs": [
+          "SCN-002"
+        ],
+        "risk_condition_ref": "RISK-001",
+        "normative_support_refs": [
+          {
+            "source": "requirements.md",
+            "reference": "RF-021#AC-1"
+          }
+        ]
+      },
+      {
+        "id": "OPP-004",
+        "source_role": "TECHNICAL_CONTEXT",
+        "source_ref": {
+          "source": "integration_notes.md",
+          "reference": "INT-2"
+        },
+        "authority_status": "PROCEDURAL",
+        "disposition": "COVERED_BY_EXISTING_SCENARIO",
+        "target_refs": [
+          "SCN-002"
+        ],
+        "risk_condition_ref": "RISK-002",
+        "normative_support_refs": [
+          {
+            "source": "requirements.md",
+            "reference": "RF-021#AC-1"
+          }
+        ]
+      },
+      {
+        "id": "OPP-005",
+        "source_role": "TECHNICAL_CONTEXT",
+        "source_ref": {
+          "source": "integration_notes.md",
+          "reference": "INT-3"
+        },
+        "authority_status": "PROCEDURAL",
+        "disposition": "IMPLEMENTATION_CHARACTERIZATION",
+        "target_refs": [
+          "Q-001"
+        ],
+        "risk_condition_ref": "RISK-003",
+        "question_refs": [
+          "Q-001"
+        ]
+      }
+    ],
+    "risk_conditions": [
+      {
+        "id": "RISK-001",
+        "risk_class": "NEGATIVE",
+        "dimension": "duplicate_replay",
+        "condition_support_refs": [
+          {
+            "source": "integration_notes.md",
+            "reference": "INT-1"
+          }
+        ],
+        "oracle_support": "NORMATIVE"
+      },
+      {
+        "id": "RISK-002",
+        "risk_class": "CONCURRENCY",
+        "dimension": "concurrency",
+        "condition_support_refs": [
+          {
+            "source": "integration_notes.md",
+            "reference": "INT-2"
+          }
+        ],
+        "oracle_support": "NORMATIVE"
+      },
+      {
+        "id": "RISK-003",
+        "risk_class": "RECOVERY",
+        "dimension": "time_timeout",
+        "condition_support_refs": [
+          {
+            "source": "integration_notes.md",
+            "reference": "INT-3"
+          }
+        ],
+        "oracle_support": "UNDEFINED"
+      }
+    ],
+    "use_case_flows": [],
+    "test_asset_inventory": {
+      "discovered": [],
+      "classifications": []
+    },
+    "scenario_profiles": {
+      "CP-001": {
+        "title": "Settle a confirmed order",
+        "behavior": "Settle a confirmed order",
+        "scenario_type": "HAPPY_PATH",
+        "normative_oracle": "The order is Settled.",
+        "assertion_oracle": "The order is Settled.",
+        "observation_target": "order state",
+        "actor": "settlement operator with settle permission",
+        "setup": "documented setup",
+        "state": "one confirmed order exists",
+        "input_partition": "a confirmed order with one line",
+        "trigger": "select Settle",
+        "execution_boundary": "one settle action",
+        "objective": "Settle a confirmed order and observe the state and the settlement message.",
+        "material_preconditions": [
+          "A settlement operator with settle permission is authenticated."
+        ],
+        "merge_reason": "SHARED_EXECUTION_OBSERVATIONS",
+        "execution_family": "settle-order",
+        "observation_from_same_execution": true,
+        "requires_independent_rerun": false
+      },
+      "CP-002": {
+        "title": "Settle a confirmed order",
+        "behavior": "Settle a confirmed order",
+        "scenario_type": "HAPPY_PATH",
+        "normative_oracle": "One settlement message exists.",
+        "assertion_oracle": "One settlement message exists.",
+        "observation_target": "settlement message",
+        "actor": "settlement operator with settle permission",
+        "setup": "documented setup",
+        "state": "one confirmed order exists",
+        "input_partition": "a confirmed order with one line",
+        "trigger": "select Settle",
+        "execution_boundary": "one settle action",
+        "objective": "Settle a confirmed order and observe the state and the settlement message.",
+        "material_preconditions": [
+          "A settlement operator with settle permission is authenticated."
+        ],
+        "merge_reason": "SHARED_EXECUTION_OBSERVATIONS",
+        "execution_family": "settle-order",
+        "observation_from_same_execution": true,
+        "requires_independent_rerun": false
+      },
+      "CP-003": {
+        "title": "Repeat a settlement",
+        "behavior": "Repeat a settlement",
+        "scenario_type": "NEGATIVE",
+        "normative_oracle": "The repeated request is ignored.",
+        "assertion_oracle": "The repeated request is ignored.",
+        "observation_target": "settlement result",
+        "actor": "settlement operator with settle permission",
+        "setup": "documented setup",
+        "state": "one settled order exists",
+        "input_partition": "a settled order with one line",
+        "trigger": "select Settle a second time",
+        "execution_boundary": "one repeated settle action",
+        "objective": "Repeat a settlement and observe that it is ignored.",
+        "material_preconditions": [
+          "A settlement operator with settle permission is authenticated."
+        ],
+        "merge_reason": "SHARED_EXECUTION_OBSERVATIONS",
+        "execution_family": "repeat-settlement",
+        "observation_from_same_execution": true,
+        "requires_independent_rerun": false
+      },
+      "CP-004": {
+        "title": "Repeat a settlement",
+        "behavior": "Repeat a settlement",
+        "scenario_type": "NEGATIVE",
+        "normative_oracle": "No second message exists.",
+        "assertion_oracle": "No second message exists.",
+        "observation_target": "settlement message count",
+        "actor": "settlement operator with settle permission",
+        "setup": "documented setup",
+        "state": "one settled order exists",
+        "input_partition": "a settled order with one line",
+        "trigger": "select Settle a second time",
+        "execution_boundary": "one repeated settle action",
+        "objective": "Repeat a settlement and observe that it is ignored.",
+        "material_preconditions": [
+          "A settlement operator with settle permission is authenticated."
+        ],
+        "merge_reason": "SHARED_EXECUTION_OBSERVATIONS",
+        "execution_family": "repeat-settlement",
+        "observation_from_same_execution": true,
+        "requires_independent_rerun": false
+      }
+    },
+    "evidence_packs": {
+      "TC-001": {
+        "priority": "HIGH",
+        "execution_surface": "Settlement screen",
+        "execution_surface_required": true,
+        "setup_required": true,
+        "setup": {
+          "strategy": "REUSE_EXISTING_WITH_QUERY_RULE",
+          "acquisition_rule": "Select an existing order in state Confirmed with one line and record its id."
+        },
+        "actions": [
+          {
+            "action": "Open the confirmed order and select Settle.",
+            "expected_result": "The order is Settled.",
+            "evidence_source": {
+              "source": "integration_notes.md",
+              "reference": "INT-1"
+            }
+          }
+        ],
+        "test_data": [
+          {
+            "name": "order lines",
+            "description": "lines = 1"
+          }
+        ],
+        "source_refs": [
+          {
+            "source": "integration_notes.md",
+            "reference": "INT-1"
+          }
+        ],
+        "preconditions": [],
+        "postconditions": [],
+        "cleanup": [
+          "Restore the record to its starting state."
+        ],
+        "tags": [
+          "settlement",
+          "concurrency"
+        ]
+      },
+      "TC-002": {
+        "priority": "HIGH",
+        "execution_surface": "Settlement screen",
+        "execution_surface_required": true,
+        "setup_required": true,
+        "setup": {
+          "strategy": "REUSE_EXISTING_WITH_QUERY_RULE",
+          "acquisition_rule": "Select an existing order in state Settled with one line and record its id."
+        },
+        "actions": [
+          {
+            "action": "Open the settled order and select Settle again.",
+            "expected_result": "The repeated request is ignored.",
+            "evidence_source": {
+              "source": "integration_notes.md",
+              "reference": "INT-1"
+            }
+          }
+        ],
+        "test_data": [
+          {
+            "name": "order lines",
+            "description": "lines = 1"
+          }
+        ],
+        "source_refs": [
+          {
+            "source": "integration_notes.md",
+            "reference": "INT-1"
+          }
+        ],
+        "preconditions": [],
+        "postconditions": [],
+        "cleanup": [
+          "Restore the record to its starting state."
+        ],
+        "tags": [
+          "settlement",
+          "negative",
+          "concurrency"
+        ]
+      }
+    },
+    "operational_scenarios": [],
+    "findings": [],
+    "questions": [
+      {
+        "id": "Q-001",
+        "related_test_cases": [
+          "TC-001"
+        ],
+        "requirement_refs": [
+          "REQ-020"
+        ],
+        "source_refs": [
+          {
+            "source": "integration_notes.md",
+            "reference": "INT-3"
+          }
+        ],
+        "question": "What is the expected order state and operator message after a second ledger timeout?",
+        "reason": "The notes report a transient failure without a documented recovery rule.",
+        "blocking": false
+      }
+    ]
+  },
+  "expected_invariants": {
+    "coverage_points_exact": 4,
+    "test_cases_exact": 2,
+    "concurrency_opportunities_min": 1,
+    "recovery_opportunities_min": 1,
+    "characterization_risk_candidates_min": 1,
+    "source_behavior_gaps_exact": 0,
+    "sources_unaccounted_exact": 0
+  }
+}

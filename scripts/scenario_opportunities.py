@@ -57,9 +57,16 @@ def audit_scenario_opportunities(
         if authority == "DIVERGENCE":
             if disposition not in {"DIVERGENCE_SCENARIO", "FINDING", "QUESTION", "NOT_TESTABLE"}:
                 raise ValueError("Every divergence requires an explicit coverage disposition")
-            if disposition == "DIVERGENCE_SCENARIO" and not (target_refs & scenario_ids):
+            if (
+                disposition == "DIVERGENCE_SCENARIO"
+                and scenario_ids
+                and not (target_refs & scenario_ids)
+            ):
                 raise ValueError("Divergence scenario disposition requires a linked Scenario")
-            if not (set(map(str, item.get("finding_refs", []))) & finding_ids):
+            finding_refs = set(map(str, item.get("finding_refs", [])))
+            if not finding_refs:
+                raise ValueError("Every divergence opportunity requires a linked Finding")
+            if finding_ids and not (finding_refs & finding_ids):
                 raise ValueError("Every divergence opportunity requires a linked Finding")
             divergence_linked += 1
         if disposition in {"COVERED_BY_EXISTING_SCENARIO", "NEW_NORMATIVE_SCENARIO", "DIVERGENCE_SCENARIO"}:

@@ -1,0 +1,623 @@
+{
+  "id": "benchmark-d",
+  "title": "Operator and device scanning workflow",
+  "description": "A physical workflow with a location, a handheld device, a wrong-object operator error, and an offline queue whose application time the manual leaves undefined.",
+  "files": {
+    "requirements.md": "# Scanning workflow\n\n## RF-030 Scan an item into a bin\n\nAcceptance criteria:\n\n- Scanning an item into a bin increases the bin count and records the scan event.\n\n## RF-031 Refuse an item that belongs to another bin\n\nAcceptance criteria:\n\n- Scanning an item that belongs to another bin is refused and the bin count is unchanged.\n",
+    "device-manual.md": "# Device manual\n\nStep DEV-1: at the receiving station, wake the handheld scanner and open Scan to bin.\nStep DEV-2: scan the bin label, then scan the item label.\nStep DEV-3: an operator who scans an item belonging to another bin sees the scan refused.\nStep DEV-4: if the handheld loses network during a scan the screen shows Offline and the\nscan is queued. The manual does not state when the queued scan is applied.\n"
+  },
+  "request": {
+    "run_id": "benchmark-d",
+    "formats": [
+      "JSON",
+      "OPERATIONAL",
+      "DIAGNOSTICS"
+    ],
+    "diagnostic": true,
+    "generated_at": "2026-01-01T00:00:00Z",
+    "selectors": [
+      "requirements.md",
+      "device-manual.md"
+    ],
+    "sources": [
+      {
+        "path": "requirements.md",
+        "role": "FUNCTIONAL_AUTHORITY"
+      },
+      {
+        "path": "device-manual.md",
+        "role": "TECHNICAL_CONTEXT"
+      }
+    ],
+    "requirements": [
+      {
+        "id": "REQ-030",
+        "statement": "A scanned item increases the bin count.",
+        "status": "TESTABLE",
+        "source_refs": [
+          {
+            "source": "requirements.md",
+            "reference": "RF-030#AC-1"
+          }
+        ]
+      },
+      {
+        "id": "REQ-031",
+        "statement": "An item from another bin is refused.",
+        "status": "TESTABLE",
+        "source_refs": [
+          {
+            "source": "requirements.md",
+            "reference": "RF-031#AC-1"
+          }
+        ]
+      }
+    ],
+    "source_items": [
+      {
+        "id": "SRC-001",
+        "requirement_ref": "REQ-030",
+        "source_text": "Scanning an item into a bin increases the bin count and records the scan event.",
+        "source_refs": [
+          {
+            "source": "requirements.md",
+            "reference": "RF-030#AC-1"
+          }
+        ],
+        "atomicity_review": {
+          "decision": "SPLIT",
+          "claims": [
+            {
+              "normalized_claim": "The bin count is increased.",
+              "coverage_statement": "The bin count is increased."
+            },
+            {
+              "normalized_claim": "The scan event is recorded.",
+              "coverage_statement": "The scan event is recorded."
+            }
+          ]
+        }
+      },
+      {
+        "id": "SRC-002",
+        "requirement_ref": "REQ-031",
+        "source_text": "Scanning an item that belongs to another bin is refused and the bin count is unchanged.",
+        "source_refs": [
+          {
+            "source": "requirements.md",
+            "reference": "RF-031#AC-1"
+          }
+        ],
+        "atomicity_review": {
+          "decision": "SPLIT",
+          "claims": [
+            {
+              "normalized_claim": "The scan is refused.",
+              "coverage_statement": "The scan is refused."
+            },
+            {
+              "normalized_claim": "The bin count is unchanged.",
+              "coverage_statement": "The bin count is unchanged."
+            }
+          ]
+        }
+      }
+    ],
+    "source_ledger": [
+      {
+        "source": "requirements.md",
+        "source_role": "FUNCTIONAL_AUTHORITY",
+        "content_type": "text/markdown",
+        "disposition": "INSPECTED_CONTENT",
+        "inspection_method": "FULL_TEXT_READ",
+        "evidence_records": 2,
+        "source_behaviors": 4
+      },
+      {
+        "source": "device-manual.md",
+        "source_role": "TECHNICAL_CONTEXT",
+        "content_type": "text/markdown",
+        "disposition": "INSPECTED_CONTENT",
+        "inspection_method": "FULL_TEXT_READ",
+        "evidence_records": 4,
+        "opportunities": 4
+      }
+    ],
+    "source_review": {
+      "method": "SUBAGENT_INDEPENDENT",
+      "anchoring_inputs_withheld": [
+        "final_scenario_count",
+        "final_test_case_count",
+        "desired_suite_size"
+      ],
+      "structural_units": [
+        {
+          "id": "UNIT-001",
+          "kind": "ACCEPTANCE_CRITERION",
+          "source": "requirements.md",
+          "reference": "RF-030#AC-1"
+        },
+        {
+          "id": "UNIT-002",
+          "kind": "ACCEPTANCE_CRITERION",
+          "source": "requirements.md",
+          "reference": "RF-030#AC-1"
+        },
+        {
+          "id": "UNIT-003",
+          "kind": "ACCEPTANCE_CRITERION",
+          "source": "requirements.md",
+          "reference": "RF-031#AC-1"
+        },
+        {
+          "id": "UNIT-004",
+          "kind": "ACCEPTANCE_CRITERION",
+          "source": "requirements.md",
+          "reference": "RF-031#AC-1"
+        }
+      ],
+      "behaviors": [
+        {
+          "requirement_ref": "REQ-030",
+          "normalized_claim": "The bin count is increased.",
+          "structural_unit_ref": "UNIT-001"
+        },
+        {
+          "requirement_ref": "REQ-030",
+          "normalized_claim": "The scan event is recorded.",
+          "structural_unit_ref": "UNIT-002"
+        },
+        {
+          "requirement_ref": "REQ-031",
+          "normalized_claim": "The scan is refused.",
+          "structural_unit_ref": "UNIT-003"
+        },
+        {
+          "requirement_ref": "REQ-031",
+          "normalized_claim": "The bin count is unchanged.",
+          "structural_unit_ref": "UNIT-004"
+        }
+      ]
+    },
+    "evidence_manifest": [
+      "requirements.md",
+      "device-manual.md"
+    ],
+    "selected_evidence": [
+      {
+        "source_role": "FUNCTIONAL_AUTHORITY",
+        "source_ref": {
+          "source": "requirements.md",
+          "reference": "RF-030#AC-1"
+        },
+        "meaningful_behavior": true
+      },
+      {
+        "source_role": "FUNCTIONAL_AUTHORITY",
+        "source_ref": {
+          "source": "requirements.md",
+          "reference": "RF-031#AC-1"
+        },
+        "meaningful_behavior": true
+      },
+      {
+        "source_role": "TECHNICAL_CONTEXT",
+        "source_ref": {
+          "source": "device-manual.md",
+          "reference": "DEV-1"
+        },
+        "meaningful_behavior": true
+      },
+      {
+        "source_role": "TECHNICAL_CONTEXT",
+        "source_ref": {
+          "source": "device-manual.md",
+          "reference": "DEV-2"
+        },
+        "meaningful_behavior": true
+      },
+      {
+        "source_role": "TECHNICAL_CONTEXT",
+        "source_ref": {
+          "source": "device-manual.md",
+          "reference": "DEV-3"
+        },
+        "meaningful_behavior": true
+      },
+      {
+        "source_role": "TECHNICAL_CONTEXT",
+        "source_ref": {
+          "source": "device-manual.md",
+          "reference": "DEV-4"
+        },
+        "meaningful_behavior": true
+      }
+    ],
+    "opportunities": [
+      {
+        "id": "OPP-001",
+        "source_role": "FUNCTIONAL_AUTHORITY",
+        "source_ref": {
+          "source": "requirements.md",
+          "reference": "RF-030#AC-1"
+        },
+        "authority_status": "NORMATIVE",
+        "disposition": "NEW_NORMATIVE_SCENARIO",
+        "target_refs": [
+          "SCN-001"
+        ],
+        "normative_support_refs": [
+          {
+            "source": "requirements.md",
+            "reference": "RF-030#AC-1"
+          }
+        ]
+      },
+      {
+        "id": "OPP-002",
+        "source_role": "FUNCTIONAL_AUTHORITY",
+        "source_ref": {
+          "source": "requirements.md",
+          "reference": "RF-031#AC-1"
+        },
+        "authority_status": "NORMATIVE",
+        "disposition": "NEW_NORMATIVE_SCENARIO",
+        "target_refs": [
+          "SCN-002"
+        ],
+        "normative_support_refs": [
+          {
+            "source": "requirements.md",
+            "reference": "RF-031#AC-1"
+          }
+        ]
+      },
+      {
+        "id": "OPP-003",
+        "source_role": "TECHNICAL_CONTEXT",
+        "source_ref": {
+          "source": "device-manual.md",
+          "reference": "DEV-1"
+        },
+        "authority_status": "PROCEDURAL",
+        "disposition": "COVERED_BY_EXISTING_SCENARIO",
+        "target_refs": [
+          "SCN-001"
+        ]
+      },
+      {
+        "id": "OPP-004",
+        "source_role": "TECHNICAL_CONTEXT",
+        "source_ref": {
+          "source": "device-manual.md",
+          "reference": "DEV-2"
+        },
+        "authority_status": "PROCEDURAL",
+        "disposition": "COVERED_BY_EXISTING_SCENARIO",
+        "target_refs": [
+          "SCN-001"
+        ]
+      },
+      {
+        "id": "OPP-005",
+        "source_role": "TECHNICAL_CONTEXT",
+        "source_ref": {
+          "source": "device-manual.md",
+          "reference": "DEV-3"
+        },
+        "authority_status": "PROCEDURAL",
+        "disposition": "COVERED_BY_EXISTING_SCENARIO",
+        "target_refs": [
+          "SCN-002"
+        ],
+        "risk_condition_ref": "RISK-001",
+        "normative_support_refs": [
+          {
+            "source": "requirements.md",
+            "reference": "RF-031#AC-1"
+          }
+        ]
+      },
+      {
+        "id": "OPP-006",
+        "source_role": "TECHNICAL_CONTEXT",
+        "source_ref": {
+          "source": "device-manual.md",
+          "reference": "DEV-4"
+        },
+        "authority_status": "PROCEDURAL",
+        "disposition": "QUESTION",
+        "target_refs": [
+          "Q-001"
+        ],
+        "risk_condition_ref": "RISK-002",
+        "question_refs": [
+          "Q-001"
+        ]
+      }
+    ],
+    "risk_conditions": [
+      {
+        "id": "RISK-001",
+        "risk_class": "OPERATOR_ERROR",
+        "dimension": "unexpected_object",
+        "condition_support_refs": [
+          {
+            "source": "device-manual.md",
+            "reference": "DEV-3"
+          }
+        ],
+        "oracle_support": "NORMATIVE"
+      },
+      {
+        "id": "RISK-002",
+        "risk_class": "RESILIENCE",
+        "dimension": "device",
+        "condition_support_refs": [
+          {
+            "source": "device-manual.md",
+            "reference": "DEV-4"
+          }
+        ],
+        "oracle_support": "UNDEFINED"
+      }
+    ],
+    "use_case_flows": [],
+    "test_asset_inventory": {
+      "discovered": [],
+      "classifications": []
+    },
+    "scenario_profiles": {
+      "CP-001": {
+        "title": "Scan an item into a bin",
+        "behavior": "Scan an item into a bin",
+        "scenario_type": "HAPPY_PATH",
+        "normative_oracle": "The bin count is increased.",
+        "assertion_oracle": "The bin count is increased.",
+        "observation_target": "bin count",
+        "actor": "warehouse operator with scan permission",
+        "setup": "documented setup",
+        "state": "an open bin at the receiving station",
+        "input_partition": "an item assigned to the open bin",
+        "trigger": "scan the item label",
+        "execution_boundary": "one scan action",
+        "objective": "Scan an assigned item into a bin and observe the count and the scan event.",
+        "material_preconditions": [
+          "A warehouse operator with scan permission holds a woken handheld scanner."
+        ],
+        "merge_reason": "SHARED_EXECUTION_OBSERVATIONS",
+        "execution_family": "scan-into-bin",
+        "observation_from_same_execution": true,
+        "requires_independent_rerun": false
+      },
+      "CP-002": {
+        "title": "Scan an item into a bin",
+        "behavior": "Scan an item into a bin",
+        "scenario_type": "HAPPY_PATH",
+        "normative_oracle": "The scan event is recorded.",
+        "assertion_oracle": "The scan event is recorded.",
+        "observation_target": "scan event",
+        "actor": "warehouse operator with scan permission",
+        "setup": "documented setup",
+        "state": "an open bin at the receiving station",
+        "input_partition": "an item assigned to the open bin",
+        "trigger": "scan the item label",
+        "execution_boundary": "one scan action",
+        "objective": "Scan an assigned item into a bin and observe the count and the scan event.",
+        "material_preconditions": [
+          "A warehouse operator with scan permission holds a woken handheld scanner."
+        ],
+        "merge_reason": "SHARED_EXECUTION_OBSERVATIONS",
+        "execution_family": "scan-into-bin",
+        "observation_from_same_execution": true,
+        "requires_independent_rerun": false
+      },
+      "CP-003": {
+        "title": "Scan an item from another bin",
+        "behavior": "Scan an item from another bin",
+        "scenario_type": "NEGATIVE",
+        "normative_oracle": "The scan is refused.",
+        "assertion_oracle": "The scan is refused.",
+        "observation_target": "refusal message",
+        "actor": "warehouse operator with scan permission",
+        "setup": "documented setup",
+        "state": "an open bin at the receiving station",
+        "input_partition": "an item assigned to another bin",
+        "trigger": "scan the item label",
+        "execution_boundary": "one scan action",
+        "objective": "Scan an item belonging to another bin and observe the refusal.",
+        "material_preconditions": [
+          "A warehouse operator with scan permission holds a woken handheld scanner."
+        ],
+        "merge_reason": "SHARED_EXECUTION_OBSERVATIONS",
+        "execution_family": "scan-wrong-bin",
+        "observation_from_same_execution": true,
+        "requires_independent_rerun": false
+      },
+      "CP-004": {
+        "title": "Scan an item from another bin",
+        "behavior": "Scan an item from another bin",
+        "scenario_type": "NEGATIVE",
+        "normative_oracle": "The bin count is unchanged.",
+        "assertion_oracle": "The bin count is unchanged.",
+        "observation_target": "bin count",
+        "actor": "warehouse operator with scan permission",
+        "setup": "documented setup",
+        "state": "an open bin at the receiving station",
+        "input_partition": "an item assigned to another bin",
+        "trigger": "scan the item label",
+        "execution_boundary": "one scan action",
+        "objective": "Scan an item belonging to another bin and observe the refusal.",
+        "material_preconditions": [
+          "A warehouse operator with scan permission holds a woken handheld scanner."
+        ],
+        "merge_reason": "SHARED_EXECUTION_OBSERVATIONS",
+        "execution_family": "scan-wrong-bin",
+        "observation_from_same_execution": true,
+        "requires_independent_rerun": false
+      }
+    },
+    "evidence_packs": {
+      "TC-001": {
+        "priority": "HIGH",
+        "execution_surface": "Handheld scanner at the receiving station",
+        "execution_surface_required": true,
+        "setup_required": true,
+        "setup": {
+          "strategy": "REUSE_EXISTING_WITH_QUERY_RULE",
+          "acquisition_rule": "Select an existing open bin with a count of 3 and record its label."
+        },
+        "actions": [
+          {
+            "action": "Wake the handheld scanner and open Scan to bin.",
+            "expected_result": "The Scan to bin screen is displayed.",
+            "evidence_source": {
+              "source": "device-manual.md",
+              "reference": "DEV-1"
+            }
+          },
+          {
+            "action": "Scan the bin label, then scan the item label.",
+            "expected_result": "The bin count is increased.",
+            "evidence_source": {
+              "source": "device-manual.md",
+              "reference": "DEV-2"
+            },
+            "depends_on_previous_step": true
+          }
+        ],
+        "test_data": [
+          {
+            "name": "starting bin count",
+            "description": "bin_count = 3"
+          }
+        ],
+        "source_refs": [
+          {
+            "source": "device-manual.md",
+            "reference": "DEV-1"
+          }
+        ],
+        "preconditions": [],
+        "postconditions": [],
+        "cleanup": [
+          "Restore the record to its starting state."
+        ],
+        "tags": [
+          "scanning"
+        ]
+      },
+      "TC-002": {
+        "priority": "HIGH",
+        "execution_surface": "Handheld scanner at the receiving station",
+        "execution_surface_required": true,
+        "setup_required": true,
+        "setup": {
+          "strategy": "REUSE_EXISTING_WITH_QUERY_RULE",
+          "acquisition_rule": "Select an existing open bin with a count of 3 and record its label."
+        },
+        "actions": [
+          {
+            "action": "Wake the handheld scanner and open Scan to bin.",
+            "expected_result": "The Scan to bin screen is displayed.",
+            "evidence_source": {
+              "source": "device-manual.md",
+              "reference": "DEV-1"
+            }
+          },
+          {
+            "action": "Scan the bin label, then scan the label of an item assigned to another bin.",
+            "expected_result": "The scan is refused.",
+            "evidence_source": {
+              "source": "device-manual.md",
+              "reference": "DEV-3"
+            },
+            "depends_on_previous_step": true
+          }
+        ],
+        "test_data": [
+          {
+            "name": "starting bin count",
+            "description": "bin_count = 3"
+          }
+        ],
+        "source_refs": [
+          {
+            "source": "device-manual.md",
+            "reference": "DEV-1"
+          }
+        ],
+        "preconditions": [],
+        "postconditions": [],
+        "cleanup": [
+          "Restore the record to its starting state."
+        ],
+        "tags": [
+          "scanning",
+          "operator-error",
+          "negative"
+        ]
+      }
+    },
+    "operational_scenarios": [
+      {
+        "id": "OPS-001",
+        "title": "Operator scans an item assigned to another bin",
+        "test_case_refs": [
+          "TC-002"
+        ],
+        "requirement_refs": [
+          "REQ-031",
+          "CP-003"
+        ],
+        "actor": "Warehouse operator with scan permission",
+        "location": "Receiving station",
+        "tools": "Handheld scanner",
+        "starting_state": "An open bin with a count of 3",
+        "trigger": "An item assigned to another bin is scanned",
+        "risk": "The wrong physical item is accepted into the bin",
+        "oracle_source": "requirements.md RF-031#AC-1",
+        "recovery": "Return the item to its assigned bin",
+        "tags": [
+          "operator-error",
+          "negative"
+        ],
+        "open_questions": [
+          "Q-001"
+        ]
+      }
+    ],
+    "findings": [],
+    "questions": [
+      {
+        "id": "Q-001",
+        "related_test_cases": [
+          "TC-001"
+        ],
+        "requirement_refs": [
+          "REQ-030"
+        ],
+        "source_refs": [
+          {
+            "source": "device-manual.md",
+            "reference": "DEV-4"
+          }
+        ],
+        "question": "When is a scan queued offline applied to the bin count?",
+        "reason": "The manual documents the queue but not when it is applied.",
+        "blocking": false
+      }
+    ]
+  },
+  "expected_invariants": {
+    "coverage_points_exact": 4,
+    "test_cases_exact": 2,
+    "operator_error_opportunities_min": 1,
+    "resilience_opportunities_min": 1,
+    "risk_dimensions_exercised_min": 2,
+    "operational_scenario_families_exact": 1,
+    "source_behavior_gaps_exact": 0,
+    "sources_unaccounted_exact": 0,
+    "cases_missing_setup_acquisition_exact": 0
+  }
+}
