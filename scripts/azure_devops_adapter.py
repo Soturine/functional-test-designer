@@ -39,16 +39,73 @@ def map_test_case(case: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+RISK_SUITE_TAGS = (
+    "negative", "operator-error", "adversarial", "resilience", "fault-injection",
+    "recovery", "concurrency", "e2e", "cross-cutting", "security", "data-integrity",
+)
+
+
+def build_suite_mapping(
+    cases: list[dict[str, Any]],
+    *,
+    requirement_suite: str,
+    risk_suites: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    """Place one canonical Test Case in several organizational views without cloning it.
+
+    Azure DevOps suites are folders over the same work item. A requirement-backed
+    case belongs to its requirement suite and may also appear in a risk-oriented
+    static suite; the semantic Test Case is never duplicated to achieve that.
+    """
+    risk_suites = risk_suites or {tag: f"Operational {tag}" for tag in RISK_SUITE_TAGS}
+    unsupported = sorted(set(risk_suites) - set(RISK_SUITE_TAGS))
+    if unsupported:
+        raise ValueError("Unsupported risk suite tags: " + ", ".join(unsupported))
+    suites: dict[str, list[str]] = {}
+    memberships: list[dict[str, Any]] = []
+    for case in cases:
+        local_id = str(case["id"])
+        tags = [str(value).strip().casefold() for value in case.get("tags", [])]
+        targets = []
+        if case.get("requirement_refs"):
+            targets.append({"suite": requirement_suite, "suite_type": "REQUIREMENT_BASED"})
+        for tag in RISK_SUITE_TAGS:
+            if tag in tags and tag in risk_suites:
+                targets.append({
+                    "suite": risk_suites[tag], "suite_type": "STATIC", "tag": tag,
+                })
+        if not targets:
+            targets.append({"suite": requirement_suite, "suite_type": "REQUIREMENT_BASED"})
+        for target in targets:
+            suites.setdefault(target["suite"], []).append(local_id)
+        memberships.append({
+            "local_id": local_id,
+            "requirement_refs": list(case.get("requirement_refs", [])),
+            "suites": targets,
+        })
+    return {
+        "requirement_suite": requirement_suite,
+        "memberships": memberships,
+        "suite_members": {name: sorted(dict.fromkeys(ids)) for name, ids in sorted(suites.items())},
+        "canonical_test_cases": len({item["local_id"] for item in memberships}),
+        "suite_placements": sum(len(item["suites"]) for item in memberships),
+        "cloned_test_cases": 0,
+    }
+
+
 def build_preview(
     cases: list[dict[str, Any]], mapping: dict[str, Any], *,
     project: str, plan: str, suite: str, include_needs_review: bool = False,
     external_versions: dict[str, str] | None = None,
+    suite_mapping: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     external_versions = external_versions or {}
     result: dict[str, Any] = {
         "target": {"project": project, "plan": plan, "suite": suite},
         "create": [], "update": [], "unchanged": [], "skipped": [], "conflicts": [],
     }
+    if suite_mapping is not None:
+        result["suite_mapping"] = suite_mapping
     entries = mapping.get("test_cases", {})
     for case in cases:
         payload = map_test_case(case)

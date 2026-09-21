@@ -13,6 +13,7 @@ from typing import Any, Callable
 from canonical_state import OutputSelection, persist_canonical_suite, render_selected_outputs
 from procedural_pipeline import reconcile_additive_feedback, run_procedural_tasks
 from procedural_readiness import align_public_status, audit_execution_readiness
+from render_operational_scenarios import build_operational_catalog
 from resolve_artifacts import resolve_artifact_paths
 from resolve_scope import resolve_selected_scope
 from run_state import RunStateStore, source_manifest
@@ -290,8 +291,10 @@ def run_generation(request: dict[str, Any]) -> dict[str, Any]:
         "test_cases": entries,
     }
     questions_document = {"schema_version": "1.2", "questions": questions}
+    catalog = build_operational_catalog(request.get("operational_scenarios", []), cases)
     canonical_path = phase("validation", lambda: persist_canonical_suite(
         artifact_root, run_id, index=index, questions=questions_document, cases=cases,
+        operational_catalog=catalog,
     ))
     store.save("VALIDATED", {"canonical_suite": canonical_path.name}, hashes)
     metrics["checkpoint_events"].append({"checkpoint": "VALIDATED", "event": "created"})
@@ -319,6 +322,7 @@ def run_generation(request: dict[str, Any]) -> dict[str, Any]:
         "cases_missing_setup_acquisition": sum(
             "MISSING_SETUP_ACQUISITION" in item["reason_codes"] for item in readiness
         ),
+        "operational_scenario_families": catalog["family_count"],
         "cases_missing_procedural_provenance": sum(
             "MISSING_PROCEDURAL_PROVENANCE" in item["reason_codes"] for item in readiness
         ),

@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from azure_devops_adapter import build_preview, write_fallback_export
+from azure_devops_adapter import build_preview, build_suite_mapping, write_fallback_export
 from canonical_state import OutputSelection, render_selected_outputs
 from clarification import rank_questions
 from suite_check import check_suite
@@ -55,11 +55,18 @@ def dispatch(intent: str, **request: Any) -> Any:
     if intent == "ftd-render":
         selection = OutputSelection.normalize(request.get("formats"))
         return render_selected_outputs(request["canonical_path"], request["artifact_root"], selection)
+    suite_mapping = None
+    if request.get("risk_suites") is not None or request.get("map_risk_suites"):
+        suite_mapping = build_suite_mapping(
+            request["cases"], requirement_suite=request["suite"],
+            risk_suites=request.get("risk_suites"),
+        )
     preview = build_preview(
         request["cases"], request.get("mapping", {}), project=request["project"],
         plan=request["plan"], suite=request["suite"],
         include_needs_review=request.get("include_needs_review", False),
         external_versions=request.get("external_versions"),
+        suite_mapping=suite_mapping,
     )
     if not request.get("mcp_available", False):
         preview["fallback_exports"] = [

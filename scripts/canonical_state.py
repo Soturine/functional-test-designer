@@ -10,12 +10,13 @@ from pathlib import Path
 from typing import Any, Iterable
 
 from render_markdown import render_markdown
+from render_operational_scenarios import render_operational_scenarios
 from render_report import render_report
 from semantic_regression import fingerprint
 from validate_output import validate
 
 
-PUBLIC_FORMATS = {"HTML", "JSON", "MARKDOWN", "DIAGNOSTICS"}
+PUBLIC_FORMATS = {"HTML", "JSON", "MARKDOWN", "DIAGNOSTICS", "OPERATIONAL"}
 
 
 @dataclass(frozen=True)
@@ -50,8 +51,10 @@ def persist_canonical_suite(
     index: dict[str, Any],
     questions: dict[str, Any],
     cases: list[dict[str, Any]],
+    operational_catalog: dict[str, Any] | None = None,
 ) -> Path:
     run_dir = artifact_root.resolve() / ".ftd" / "runs" / run_id
+    catalog = operational_catalog or {"families": [], "family_count": 0}
     document = {
         "internal_schema_version": "1",
         "public_schema_version": "1.2",
@@ -59,6 +62,7 @@ def persist_canonical_suite(
         "index": index,
         "questions": questions,
         "cases": cases,
+        "operational_catalog": catalog,
     }
     path = run_dir / "canonical-suite.json"
     _write_json(path, document)
@@ -127,6 +131,11 @@ def render_selected_outputs(
     if "HTML" in selection.formats:
         shutil.copy2(report, output / "report.html")
         rendered.append("HTML")
+    if "OPERATIONAL" in selection.formats:
+        catalog = canonical.get("operational_catalog", {"families": []})
+        destination = output / "operational-scenarios.md"
+        destination.write_text(render_operational_scenarios(catalog), encoding="utf-8")
+        rendered.append("OPERATIONAL")
     return {
         "requested_public_formats": sorted(selection.formats),
         "rendered_public_formats": sorted(rendered),
