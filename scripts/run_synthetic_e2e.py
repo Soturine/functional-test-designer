@@ -249,7 +249,13 @@ def run(artifact_root: Path) -> dict[str, Any]:
         "Ran candidate-first independence review and froze Test Case identities.",
         lambda result: result["metrics"],
     )
-    timed(metrics_path, "early_deduplication", lambda: design["merge_decisions"], "Applied only explicit conservative merge decisions.")
+    timed(
+        metrics_path,
+        "early_deduplication",
+        lambda: design["merge_decisions"],
+        "Applied only explicit conservative merge decisions.",
+        lambda _: {"scenario_cohesion_audit_trail": design["cohesion_audit_trail"]},
+    )
 
     packs = timed(
         metrics_path,

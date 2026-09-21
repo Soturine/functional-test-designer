@@ -87,6 +87,9 @@ class DiagnosticsTests(unittest.TestCase):
         self.assertIn("source_coverage_verification", DIAGNOSTICS.STAGE_NAMES)
         self.assertIn("cross_rf_audit", DIAGNOSTICS.STAGE_NAMES)
         self.assertNotIn("test_data_design", DIAGNOSTICS.STAGE_NAMES)
+        self.assertEqual(13, len(DIAGNOSTICS.DIAGNOSTIC_PHASES))
+        self.assertIn("source_inventory", DIAGNOSTICS.DIAGNOSTIC_PHASES)
+        self.assertIn("integration_export", DIAGNOSTICS.DIAGNOSTIC_PHASES)
 
     def test_stage_timer_wraps_work_between_begin_and_end(self) -> None:
         DIAGNOSTICS.start_run(self.metrics)

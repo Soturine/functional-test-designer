@@ -47,6 +47,8 @@ Coleta/análise de evidência
             ↓
  Enriquecimento procedural
             ↓
+ Estado canônico privado
+            ↓
  JSON / Markdown / HTML offline
 ```
 
@@ -70,6 +72,21 @@ LLM não deve inventar autoridade.
 ```
 
 ## Uso
+
+A interface principal é linguagem natural. Os atalhos `ftd-gen`, `ftd-clarify`,
+`ftd-check`, `ftd-render` e `ftd-mcp` são opcionais e usam exatamente o mesmo
+core, as mesmas regras de autoridade e o mesmo estado canônico.
+
+```text
+"Gere Test Cases destas fontes e entregue somente HTML."
+"Pergunte o que ainda está ambíguo e pode mudar o desenho dos testes."
+"Audite se os TCs podem ser executados por alguém que não conhece o produto."
+"Renderize a última execução em JSON e Markdown."
+"Prepare a suíte para Azure DevOps e mostre o preview antes de qualquer escrita."
+```
+
+Em hosts que suportam comandos, as formas `/ftd-gen` ou `$ftd-gen` são apenas
+aliases ergonômicos. Não é necessário memorizar comandos.
 
 Exemplo simples:
 
@@ -177,6 +194,27 @@ TC-001 no report.html
 
 O JSON continua sendo a fonte de verdade. Markdown e HTML apenas apresentam o mesmo conteúdo de formas mais fáceis de revisar e executar.
 
+Quando o usuário pede formatos específicos, apenas essas projeções públicas são
+materializadas. A renderização parte do estado canônico privado da execução,
+não relê fontes do projeto e não refaz Test Design. Um HTML isolado não contém
+links para JSON ou Markdown que não foram publicados.
+
+## Clarificação, auditoria e integração
+
+A clarificação prioriza até cinco dúvidas de alto impacto e registra respostas
+como `USER_CLARIFICATION`, sem fingir que vieram das fontes originais. Conflitos
+com autoridade aprovada permanecem visíveis.
+
+A auditoria é read-only e pode focar procedimento, automação, coesão, cobertura
+ou outputs. Readiness para automação significa que o caso pode ser traduzido de
+forma determinística; não significa execução de navegador nesta versão.
+
+A integração inicial com Azure DevOps Test Plans é preview-first. Ela separa
+criações, atualizações, itens inalterados, ignorados e conflitos; não cria
+`NEEDS_REVIEW` por padrão, não deleta itens ausentes e exige aprovação explícita
+antes de qualquer escrita. Sem MCP disponível, gera apenas um export determinístico
+de preview e não afirma que houve publicação.
+
 Quando `Diagnostic: true` é usado, métricas separadas são escritas em `diagnostics/`, com tempos, contagens, escopo analisado, releituras e overhead, sem copiar o conteúdo das fontes.
 
 Antes da finalização, uma auditoria source-first por RF/RN procura claims normativos omitidos independentemente do mapeamento clause→CP; uma única recuperação passa novamente pelo pipeline completo. A análise Cross-RF apenas sinaliza sobreposição e possíveis duplicatas para revisão, sem mesclar ou remover TCs automaticamente.
@@ -235,7 +273,10 @@ tests/                         Testes de escopo, contrato e renderização
 
 ## Limites atuais
 
-A skill não automatiza testes, não cria Shared Steps, não faz indexação automática do repositório e não integra diretamente com APIs de Test Management. O contrato dos TCs permanece simples de adaptar futuramente para TMS/MCP, preservando `title`, prioridade, preconditions e `steps` com `Action + Expected Result`.
+A skill não executa testes em navegador, não cria Shared Steps reais, não faz
+indexação global/RAG do repositório e não escreve em Test Management sem preview
+e aprovação explícita. `ftd-run` fica reservado para uma versão futura. O estado
+canônico continua independente do payload de qualquer integração.
 
 ## License and Attribution
 

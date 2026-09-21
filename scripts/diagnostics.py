@@ -47,6 +47,38 @@ STAGE_NAMES = (
     "final_summary",
 )
 
+DIAGNOSTIC_PHASES = (
+    "scope_resolution", "source_inventory", "source_collection",
+    "evidence_reconciliation", "source_atomicity", "coverage_design",
+    "scenario_reasoning", "scenario_engine", "procedural_reasoning",
+    "procedural_engine", "validation", "rendering", "integration_export",
+)
+
+# Stable conceptual phases make legacy fine-grained timers comparable to v2.1 runs.
+STAGE_PHASES = {
+    "scope_resolution": "scope_resolution",
+    "source_read": "source_collection",
+    "evidence_normalization": "source_atomicity",
+    "coverage_point_extraction": "coverage_design",
+    "coverage_extraction_audit": "coverage_design",
+    "testability_and_questions": "coverage_design",
+    "test_design_and_scenarios": "scenario_reasoning",
+    "early_deduplication": "scenario_engine",
+    "evidence_enrichment": "evidence_reconciliation",
+    "execution_path_synthesis": "procedural_reasoning",
+    "test_case_generation": "procedural_engine",
+    "source_coverage_audit": "coverage_design",
+    "source_coverage_recovery": "coverage_design",
+    "source_coverage_verification": "coverage_design",
+    "cross_rf_audit": "scenario_engine",
+    "json_write": "integration_export",
+    "validation": "validation",
+    "validation_fixes": "validation",
+    "markdown_render": "rendering",
+    "html_render": "rendering",
+    "final_summary": "integration_export",
+}
+
 SCOPE_PROOF_METRICS = (
     "selected_scope_roots",
     "resolved_scope_paths",
@@ -183,6 +215,7 @@ AGGREGATION_STRATEGIES = {
     "mcp_preview_skipped": "last",
     "mcp_preview_conflicts": "last",
     "external_writes": "sum",
+    "scenario_cohesion_audit_trail": "last",
 }
 
 ABSTRACT_ACTION_PATTERNS = (
@@ -256,6 +289,7 @@ def start_run(path: Path) -> dict[str, Any]:
         "stages": [
             {
                 "name": name,
+                "phase": STAGE_PHASES[name],
                 "started_at": None,
                 "finished_at": None,
                 "elapsed_seconds": None,
@@ -270,6 +304,7 @@ def start_run(path: Path) -> dict[str, Any]:
         "totals": {},
         "scope_proof": {},
         "warnings": [],
+        "phase_contract": list(DIAGNOSTIC_PHASES),
         "observed_bottlenecks": [],
         "optimization_candidates": [],
     }

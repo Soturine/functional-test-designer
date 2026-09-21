@@ -440,6 +440,28 @@ def build_scenario_pipeline(
     observed = metrics(len(coverage_points), candidates, scenarios, decisions)
     observed["testable_coverage_points"] = len(testable)
     observed["possible_scenario_overcompression_warnings"] = len(warnings)
+    cohesion_audit_trail = []
+    for number, decision in enumerate(decisions, 1):
+        resulting = next(
+            scenario for scenario in scenarios
+            if set(decision["candidate_ids"]).issubset(set(scenario["candidate_ids"]))
+        )
+        signature = resulting.get("execution_signature") or execution_signature(resulting)
+        cohesion_audit_trail.append({
+            "decision_id": f"COH-{number:03d}",
+            "candidate_refs": list(decision["candidate_ids"]),
+            "coverage_point_refs": list(resulting.get("coverage_point_refs", [])),
+            "execution_signature": {
+                "actor_permission": signature.actor_permission,
+                "starting_state": signature.starting_state,
+                "input_partition": signature.input_partition,
+                "trigger": signature.trigger,
+                "execution_boundary": signature.execution_boundary,
+            },
+            "reason": decision["reason"],
+            "observation_compatibility": decision["reason"] in ALLOWED_MERGE_REASONS,
+            "resulting_scenario": resulting["id"],
+        })
     return {
         "candidates": candidates,
         "merge_decisions": decisions,
@@ -447,4 +469,5 @@ def build_scenario_pipeline(
         "test_identities": identities,
         "warnings": warnings,
         "metrics": observed,
+        "cohesion_audit_trail": cohesion_audit_trail,
     }

@@ -68,6 +68,12 @@ class ScenarioCohesionTests(unittest.TestCase):
         self.assertEqual(tuple(point["id"] for point in points), identity.coverage_point_refs)
         self.assertEqual(4, len(identity.assertions))
         self.assertIn("CP-004: Effect 4 is observable.", identity.normative_oracle)
+        trail = result["cohesion_audit_trail"]
+        self.assertEqual(3, len(trail))
+        self.assertEqual("COH-001", trail[0]["decision_id"])
+        self.assertEqual("SCN-001", trail[0]["resulting_scenario"])
+        self.assertTrue(trail[0]["observation_compatibility"])
+        self.assertEqual(["CP-001", "CP-002", "CP-003", "CP-004"], trail[-1]["coverage_point_refs"])
 
     def test_three_independent_triggers_remain_three_test_cases(self) -> None:
         points = [coverage(number) for number in range(1, 4)]
