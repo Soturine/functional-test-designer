@@ -37,6 +37,22 @@ class EvidenceMapTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "outside the resolved selected scope"):
             evidence.source("neighbor.md", lambda: "must not load")
 
+    def test_raw_reread_requires_and_records_a_reason(self) -> None:
+        evidence = EVIDENCE.EvidenceMap({"requirements.md"})
+        evidence.source("requirements.md", lambda: "first")
+        with self.assertRaisesRegex(ValueError, "explicit reason"):
+            evidence.source("requirements.md", lambda: "second", reopen=True)
+
+        observed = evidence.source(
+            "requirements.md",
+            lambda: "confirmed",
+            reopen=True,
+            reread_reason="provenance confirmation",
+        )
+
+        self.assertEqual("confirmed", observed)
+        self.assertEqual(["provenance confirmation"], evidence.metrics()["source_reread_reasons"])
+
 
 if __name__ == "__main__":
     unittest.main()

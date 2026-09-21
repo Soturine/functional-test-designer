@@ -117,6 +117,8 @@ AGGREGATION_STRATEGIES = {
     "evidence_map_misses": "sum",
     "source_files_opened_once": "last",
     "source_files_reopened": "sum",
+    "source_reread_reasons": "last",
+    "evidence_records_reused": "sum",
     "tc_generation_reuse_hits": "sum",
     "source_analysis_workers_started": "last",
     "source_analysis_workers_completed": "last",
@@ -134,6 +136,9 @@ AGGREGATION_STRATEGIES = {
     "source_analysis_order_constraints": "last",
     "source_analysis_parallel_groups": "last",
     "source_analysis_serialized_groups": "last",
+    "source_parallelism_available": "last",
+    "source_parallelism_used": "last",
+    "source_parallelism_fallback_reason": "last",
     "varied_execution_paths_available": "last",
     "possible_step_underspecification_warnings": "last",
     "hidden_subtest_warnings": "last",
@@ -151,6 +156,12 @@ AGGREGATION_STRATEGIES = {
     "pending_additive_follow_up": "last",
     "procedural_wall_clock_seconds": "last",
     "procedural_aggregate_worker_seconds": "last",
+    "procedural_parallelism_available": "last",
+    "procedural_parallelism_used": "last",
+    "procedural_parallelism_fallback_reason": "last",
+    "diagnostics_compatibility_checked": "last",
+    "diagnostics_stage_count": "last",
+    "diagnostics_metric_count": "last",
 }
 
 ABSTRACT_ACTION_PATTERNS = (
@@ -527,6 +538,16 @@ def finish_run(
     unattributed = round(max(0.0, total_elapsed - known_stage_time), 6)
     run["unattributed_seconds"] = unattributed
     run["unattributed_percent"] = round(100 * unattributed / total_elapsed, 2) if total_elapsed else 0.0
+    run["run_wall_clock_seconds"] = total_elapsed
+    run["sum_stage_wall_seconds"] = round(known_stage_time, 6)
+    ordered_measured = sorted(measured, key=lambda item: item["started_at"])
+    gaps = []
+    for previous, current in zip(ordered_measured, ordered_measured[1:]):
+        gap = elapsed(previous["finished_at"], current["started_at"])
+        if gap:
+            gaps.append({"after": previous["name"], "before": current["name"], "seconds": gap})
+    run["inter_stage_gap_seconds"] = round(sum(item["seconds"] for item in gaps), 6)
+    run["inter_stage_gaps"] = gaps
     if run["unattributed_percent"] > 20:
         document["warnings"].append(
             {
@@ -602,6 +623,18 @@ def finish_run(
                 "code": "POSSIBLE_SCENARIO_OVERCOMPRESSION",
                 "message": "One or more multi-CP scenarios require semantic independence review.",
                 "count": scenario_warning_count,
+            }
+        )
+    if (
+        document["totals"].get("source_parallelism_available") is True
+        and document["totals"].get("source_files_assigned", 0) > 1
+        and document["totals"].get("source_analysis_order_constraints", 0) == 0
+        and document["totals"].get("source_analysis_max_concurrency", 0) <= 1
+    ):
+        document["warnings"].append(
+            {
+                "code": "PARALLELISM_NOT_USED",
+                "message": "Independent selected sources were available, but observed source concurrency remained one.",
             }
         )
     document["scope_proof"] = {

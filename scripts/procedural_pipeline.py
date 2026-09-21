@@ -226,7 +226,9 @@ def procedural_worker(identity: TestIdentity, pack: dict[str, Any]) -> Procedura
 
 
 def run_procedural_tasks(
-    tasks: list[tuple[TestIdentity, dict[str, Any]]], *, max_workers: int = 4
+    tasks: list[tuple[TestIdentity, dict[str, Any]]], *, max_workers: int = 4,
+    parallelism_available: bool = True,
+    fallback_reason: str = "",
 ) -> ProceduralBatch:
     """Enrich frozen identities concurrently and return deterministic result order."""
     if max_workers < 1:
@@ -251,13 +253,20 @@ def run_procedural_tasks(
 
     began = time.perf_counter()
     results: dict[int, ProceduralResult] = {}
-    with ThreadPoolExecutor(max_workers=min(max_workers, max(1, len(tasks)))) as executor:
-        futures = {
-            executor.submit(work, index, identity, pack): index
-            for index, (identity, pack) in enumerate(tasks)
-        }
-        for future in as_completed(futures):
-            index, result = future.result()
+    if parallelism_available:
+        with ThreadPoolExecutor(max_workers=min(max_workers, max(1, len(tasks)))) as executor:
+            futures = {
+                executor.submit(work, index, identity, pack): index
+                for index, (identity, pack) in enumerate(tasks)
+            }
+            for future in as_completed(futures):
+                index, result = future.result()
+                results[index] = result
+    else:
+        if len(tasks) > 1 and not fallback_reason.strip():
+            raise ValueError("Serial procedural synthesis requires an honest fallback reason")
+        for index, (identity, pack) in enumerate(tasks):
+            _, result = work(index, identity, pack)
             results[index] = result
     wall_clock = time.perf_counter() - began
     ordered = tuple(results[index] for index in range(len(tasks)))
@@ -277,6 +286,9 @@ def run_procedural_tasks(
         "procedural_aggregate_worker_seconds": round(
             sum(result.worker_seconds for result in ordered), 6
         ),
+        "procedural_parallelism_available": parallelism_available,
+        "procedural_parallelism_used": maximum > 1,
+        "procedural_parallelism_fallback_reason": "" if parallelism_available else fallback_reason,
     }
     return ProceduralBatch(ordered, metrics)
 

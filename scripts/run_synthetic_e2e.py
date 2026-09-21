@@ -24,6 +24,7 @@ from procedural_pipeline import (
 from resolve_artifacts import resolve_artifact_paths
 from render_markdown import render_markdown
 from render_report import render_report
+from run_state import diagnostics_compatibility_self_check
 from scenario_independence import build_scenario_pipeline
 from semantic_regression import build_snapshots
 from source_coverage_audit import (
@@ -164,6 +165,9 @@ def run(artifact_root: Path) -> dict[str, Any]:
     if output.exists():
         raise ValueError(f"Synthetic E2E output already exists: {output}")
     diagnostics.start_run(metrics_path)
+    diagnostic_compatibility = diagnostics_compatibility_self_check(
+        diagnostics.STAGE_NAMES, diagnostics.AGGREGATION_STRATEGIES
+    )
 
     fixture = json.loads(FIXTURE.read_text(encoding="utf-8"))
     source_paths = [item["path"] for item in fixture["sources"]]
@@ -181,6 +185,7 @@ def run(artifact_root: Path) -> dict[str, Any]:
             "files_skipped_out_of_scope": 0,
             "temporary_files_created": 0,
             **artifact_paths,
+            **diagnostic_compatibility,
         },
     )
     assignments = [

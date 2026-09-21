@@ -109,6 +109,8 @@ def analyze_selected_sources(
     analyzer: Callable[[SourceAssignment], list[EvidenceRecord | dict[str, Any]]],
     *,
     max_workers: int = 4,
+    parallelism_available: bool = True,
+    fallback_reason: str = "",
 ) -> EvidenceAnalysisResult:
     """Analyze each selected file once and return only after the fan-in barrier."""
     if max_workers < 1:
@@ -151,14 +153,22 @@ def analyze_selected_sources(
                 completed += 1
 
     wall_started = time.perf_counter()
-    with ThreadPoolExecutor(max_workers=min(max_workers, max(1, len(assignments)))) as executor:
-        futures = {
-            executor.submit(work, index, assignment): index
-            for index, assignment in enumerate(assignments)
-        }
-        for future in as_completed(futures):
-            index, records, duration = future.result()
-            results[index] = records
+    if parallelism_available:
+        with ThreadPoolExecutor(max_workers=min(max_workers, max(1, len(assignments)))) as executor:
+            futures = {
+                executor.submit(work, index, assignment): index
+                for index, assignment in enumerate(assignments)
+            }
+            for future in as_completed(futures):
+                index, records, duration = future.result()
+                results[index] = records
+                durations[index] = duration
+    else:
+        if len(assignments) > 1 and not fallback_reason.strip():
+            raise ValueError("Serial source analysis requires an honest fallback reason")
+        for index, assignment in enumerate(assignments):
+            _, records_for_source, duration = work(index, assignment)
+            results[index] = records_for_source
             durations[index] = duration
     wall_clock = time.perf_counter() - wall_started
 
@@ -184,6 +194,9 @@ def analyze_selected_sources(
         "source_analysis_barrier_wait_seconds": round(max(0.0, wall_clock - shortest), 6),
         "stage_wall_clock_seconds": round(wall_clock, 6),
         "aggregate_worker_seconds": round(sum(durations.values()), 6),
+        "source_parallelism_available": parallelism_available,
+        "source_parallelism_used": maximum > 1,
+        "source_parallelism_fallback_reason": "" if parallelism_available else fallback_reason,
     }
     return EvidenceAnalysisResult(
         records=ordered,
@@ -199,6 +212,8 @@ def analyze_source_inspection_plan(
     analyzer: Callable[[SourceAssignment], list[EvidenceRecord | dict[str, Any]]],
     *,
     max_workers: int = 4,
+    parallelism_available: bool = True,
+    fallback_reason: str = "",
 ) -> EvidenceAnalysisResult:
     """Honor ordered source groups while retaining safe concurrency within each group.
 
@@ -245,6 +260,7 @@ def analyze_source_inspection_plan(
     for group in plan.groups:
         result = analyze_selected_sources(
             list(group), selected_sources, analyzer, max_workers=max_workers
+            , parallelism_available=parallelism_available, fallback_reason=fallback_reason
         )
         if not result.barrier_complete:
             raise ValueError("A source group advanced before its evidence barrier")
@@ -284,6 +300,11 @@ def analyze_source_inspection_plan(
         "source_analysis_order_constraints": max(0, len(plan.groups) - 1),
         "source_analysis_parallel_groups": sum(len(group) > 1 for group in plan.groups),
         "source_analysis_serialized_groups": sum(len(group) == 1 for group in plan.groups),
+        "source_parallelism_available": parallelism_available,
+        "source_parallelism_used": any(
+            item["source_parallelism_used"] for item in group_metrics
+        ),
+        "source_parallelism_fallback_reason": "" if parallelism_available else fallback_reason,
     }
     return EvidenceAnalysisResult(
         records=tuple(records),

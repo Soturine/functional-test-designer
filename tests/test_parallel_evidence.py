@@ -94,6 +94,38 @@ class ParallelEvidenceTests(unittest.TestCase):
                 [self.assignments[0]], {self.assignments[0].source}, analyzer
             )
 
+    def test_serial_fallback_is_explicit_and_metrics_are_honest(self) -> None:
+        result = analyze_selected_sources(
+            self.assignments[:2],
+            {item.source for item in self.assignments[:2]},
+            lambda assignment: [EvidenceRecord(
+                source=assignment.source,
+                source_role=assignment.source_role,
+                source_ref=assignment.source_ref,
+                source_excerpt_ref="line 1",
+                observation_or_claim="Observed serially.",
+            )],
+            parallelism_available=False,
+            fallback_reason="host does not expose concurrent workers",
+        )
+
+        self.assertEqual(1, result.metrics["source_analysis_max_concurrency"])
+        self.assertFalse(result.metrics["source_parallelism_available"])
+        self.assertFalse(result.metrics["source_parallelism_used"])
+        self.assertEqual(
+            "host does not expose concurrent workers",
+            result.metrics["source_parallelism_fallback_reason"],
+        )
+
+    def test_serial_fallback_reason_is_required_for_multiple_sources(self) -> None:
+        with self.assertRaisesRegex(ValueError, "honest fallback reason"):
+            analyze_selected_sources(
+                self.assignments[:2],
+                {item.source for item in self.assignments[:2]},
+                lambda _: [],
+                parallelism_available=False,
+            )
+
     def test_role_fan_in_preserves_provenance(self) -> None:
         result = analyze_selected_sources(
             self.assignments[:2],
