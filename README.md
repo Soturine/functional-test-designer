@@ -41,6 +41,8 @@ Coleta/análise de evidência
             ↓
  Atomic Claims → Clauses → CPs
             ↓
+ Oportunidades em evidências selecionadas
+            ↓
       Scenario Cohesion
             ↓
      Test Cases → Freeze
@@ -219,9 +221,13 @@ Quando `Diagnostic: true` é usado, métricas separadas são escritas em `diagno
 
 Antes da finalização, uma auditoria source-first por RF/RN procura claims normativos omitidos independentemente do mapeamento clause→CP; uma única recuperação passa novamente pelo pipeline completo. A análise Cross-RF apenas sinaliza sobreposição e possíveis duplicatas para revisão, sem mesclar ou remover TCs automaticamente.
 
+Depois da cobertura normativa, as demais evidências selecionadas passam por uma auditoria de oportunidades. Branches observáveis, divergências, ativos de QA e fluxos contínuos Cross-RF/E2E recebem um destino explícito sem transformar código ou testes legados em autoridade. Uma divergência fica ligada à cobertura normativa, caracterização, Question, Finding ou justificativa não executável — nunca apenas como prosa desconectada.
+
 Claims preservam efeitos e alternativas observáveis de forma atômica, inclusive regras RN/CU explicitamente aplicáveis e disponíveis no escopo. Cada CP testável passa por um candidate independente e toda redução candidate→Scenario exige uma decisão explícita antes que a identidade do TC seja congelada. Depois desse freeze, Evidence Packs enriquecem somente preconditions, dados, caminho, Steps, provenance e observabilidade; o Expected final continua pertencendo à autoridade normativa. O Test Design define o que testar e congela a identidade do TC antes que evidência técnica ou de interface detalhe como uma pessoa executa o caso. Uma lacuna de procedimento permanece visível como Question/`NEEDS_REVIEW`, sem menus, botões ou endpoints inventados.
 
 Steps seguem a complexidade natural do caminho documentado: navegação, busca, seleção, trigger e observação permanecem ações operacionais separadas quando a sequência suportada exige isso, enquanto um comportamento de uma única ação pode continuar com um Step. O relatório offline permanece uma projeção determinística e leve do JSON validado.
+
+Uma ação vaga não pode comprimir um caminho detalhado disponível nas fontes. Casos com lacuna material de superfície, aquisição de dados, trigger ou observação ficam `NEEDS_REVIEW`; `READY` indica que uma pessoa nova no produto consegue executar o procedimento no nível sustentado pelas evidências. Readiness de automação é mais estrita e não autoriza inventar seletores ou código de runner.
 
 Subtests encontrados em artefatos legados são normalizados: condições independentes viram TCs e ações sequenciais dependentes viram steps. O output final nunca contém `subtests`.
 
@@ -263,6 +269,8 @@ scripts/validate_output.py     Validação JSON e cross-file
 scripts/render_markdown.py     Markdown determinístico por TC
 scripts/render_report.py       Relatório HTML offline
 scripts/diagnostics.py         Diagnóstico opcional de execução
+scripts/generation_orchestrator.py  Pipeline compartilhado e gates reais de geração
+scripts/scenario_opportunities.py   Auditoria de oportunidades selecionadas
 scripts/scenario_independence.py  Candidate-first e freeze da identidade
 scripts/procedural_execution.py   Síntese procedural pós-freeze
 scripts/parallel_evidence.py      Coleta paralela e grupos ordenados

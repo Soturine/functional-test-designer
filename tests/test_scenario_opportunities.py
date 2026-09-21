@@ -62,6 +62,17 @@ class ScenarioOpportunityTests(unittest.TestCase):
         result = audit_scenario_opportunities(selected, [opportunity], scenario_ids={"SCN-010"})
         self.assertEqual(1, result["cross_cutting_opportunities"])
 
+    def test_negative_cross_requirement_e2e_remains_a_traced_continuous_execution(self) -> None:
+        selected = [evidence("FUNCTIONAL_AUTHORITY", "rejected lifecycle handoff")]
+        opportunity = {
+            **selected[0], "id": "OPP-001", "authority_status": "NORMATIVE",
+            "disposition": "NEW_NORMATIVE_SCENARIO", "target_refs": ["SCN-011"],
+            "family": "NEGATIVE_E2E", "cross_cutting": True, "continuous_execution": True,
+            "coverage_point_refs": ["CP-002", "CP-005"],
+        }
+        result = audit_scenario_opportunities(selected, [opportunity], scenario_ids={"SCN-011"})
+        self.assertEqual(1, result["cross_cutting_opportunities"])
+
     def test_negative_recovery_opportunity_can_be_question_when_oracle_is_missing(self) -> None:
         selected = [evidence("TECHNICAL_CONTEXT", "manual recovery")]
         opportunity = {

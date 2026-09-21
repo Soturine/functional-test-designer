@@ -23,7 +23,8 @@ Read [output-contract.md](references/output-contract.md) and [performance-orches
 
 ```text
 Selected sources -> Scope lock -> Evidence collection/barrier
--> Atomic source claims -> Clauses -> Coverage Points
+-> Source-first inventory -> Atomic source claims -> Clauses -> Coverage Points
+-> Selected-evidence opportunity audit
 -> Independent candidates -> Scenario cohesion -> Frozen Test identities
 -> Procedural enrichment -> Readiness -> Validation
 -> Canonical run state -> Selected public projections
@@ -36,6 +37,7 @@ Read these detailed contracts only when their stage is relevant:
 - [source-coverage-audit.md](references/source-coverage-audit.md): source-first atomic extraction, clause/CP lineage, one bounded recovery.
 - [test-design.md](references/test-design.md): contextual BVA, EP, state, decision-table, pairwise, and risk techniques.
 - [evidence-enrichment.md](references/evidence-enrichment.md): selected-source Evidence Packs and provenance.
+- [scenario-opportunities.md](references/scenario-opportunities.md): dispositions for normative, divergence, implementation, QA-asset, and bounded E2E opportunities.
 - [procedural-execution.md](references/procedural-execution.md) and [procedural-readiness.md](references/procedural-readiness.md): post-freeze steps and human/automation readiness.
 - [cross-rf-audit.md](references/cross-rf-audit.md): advisory overlap analysis without automatic deletion or merge.
 
@@ -43,6 +45,7 @@ Read these detailed contracts only when their stage is relevant:
 
 - Extract atomic normative clauses before summarizing them into logical Requirements.
 - Extract atomic source claims before Requirement normalization. Every claim must reach exactly one explicit destination.
+- Review suspicious compound Claims and Clauses again after materialization; an upstream summary cannot bypass atomicity merely by arriving pre-compressed.
 - Create one independently reviewable candidate per testable CP before grouping.
 - Merge only proven same-execution observations or true semantic duplicates. Shared RF, actor, screen, setup, Evidence Pack, title, or a desire for fewer tests is never enough.
 - A TC represents an independently repeatable execution, not one assertion. Several discriminable observations from the same trigger/transaction may share it.
@@ -62,6 +65,8 @@ Atomic does not mean single-step. Use the documented natural sequence from legit
 
 Each step has one executable action and supported observable expected result. Unsupported detail stays visible as a Question, `NEEDS_REVIEW`, or `needs_clarification`; it is never guessed. Classify human and automation readiness without changing the suite to improve the counts.
 
+Reject path compression when one vague action hides a selected-evidence sequence. A testable case is `READY` only when its procedure, data acquisition, trigger, and observations are supported well enough for execution; preserve its frozen identity while using `NEEDS_REVIEW` for material procedural blockers.
+
 ## Intents and completion
 
 Read [commands.md](references/commands.md). Ordinary requests and command aliases must normalize to the same shared dispatcher: generation, clarification, read-only audit, rendering from canonical state, and preview-first external mapping.
@@ -75,6 +80,7 @@ For integrations, read [mcp-integration.md](references/mcp-integration.md). MCP 
 Before completion:
 
 - validate scope proof, atomic lineage, scenario/TC independence, Questions, Findings, and source provenance;
+- account for every meaningful selected-evidence opportunity and link each divergence to coverage or an explicit non-executable disposition;
 - confirm human/automation readiness classifications and reason codes;
 - validate canonical state and selected projections;
 - confirm render did not reread project sources;
