@@ -134,7 +134,8 @@ def render_selected_outputs(
     if "OPERATIONAL" in selection.formats:
         catalog = canonical.get("operational_catalog", {"families": []})
         destination = output / "operational-scenarios.md"
-        destination.write_text(render_operational_scenarios(catalog), encoding="utf-8")
+        with destination.open("w", encoding="utf-8", newline="\n") as handle:
+            handle.write(render_operational_scenarios(catalog))
         rendered.append("OPERATIONAL")
     return {
         "requested_public_formats": sorted(selection.formats),

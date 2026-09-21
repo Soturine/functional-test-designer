@@ -136,6 +136,14 @@ class OperationalOutputSelectionTests(unittest.TestCase):
             self.assertEqual(["JSON"], rendered["rendered_public_formats"])
             self.assertFalse((root / "output" / "operational-scenarios.md").exists())
 
+    def test_the_catalog_bytes_are_identical_on_every_host(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self.render(["JSON", "OPERATIONAL"], root)
+            raw = (root / "output" / "operational-scenarios.md").read_bytes()
+            self.assertNotIn(b"\r\n", raw)
+            self.assertIn("OPS-001 — ", raw.decode("utf-8"))
+
     def test_the_catalog_is_rendered_from_canonical_state_when_requested(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
