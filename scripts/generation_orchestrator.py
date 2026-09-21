@@ -151,10 +151,18 @@ def run_generation(request: dict[str, Any]) -> dict[str, Any]:
         }
 
     collection = phase("source_collection", collect)
+    ledger_entries = collection["ledger"]["entries"]
     metrics.update({
         "source_files_assigned": collection["files"],
         "source_records_received": collection["records"],
         **collection["ledger"]["metrics"],
+        "test_files_selected": sum(
+            entry["source_role"] == "TEST_ASSET" for entry in ledger_entries
+        ),
+        "functional_authority_source_behaviors": sum(
+            entry["source_behaviors"] for entry in ledger_entries
+            if entry["source_role"] == "FUNCTIONAL_AUTHORITY"
+        ),
     })
     store.save("SOURCE_ACCOUNTING_COMPLETE", {
         "dispositions": collection["ledger"]["dispositions"],
@@ -323,6 +331,14 @@ def run_generation(request: dict[str, Any]) -> dict[str, Any]:
             "MISSING_SETUP_ACQUISITION" in item["reason_codes"] for item in readiness
         ),
         "operational_scenario_families": catalog["family_count"],
+        "one_step_cases": sum(len(case["steps"]) == 1 for case in cases),
+        "legitimate_one_step_cases": sum(
+            len(case["steps"]) == 1 and "PATH_COMPRESSION" not in audit["reason_codes"]
+            for case, audit in zip(cases, readiness)
+        ),
+        "path_compression_warnings": sum(
+            "PATH_COMPRESSION" in item["reason_codes"] for item in readiness
+        ),
         "cases_missing_procedural_provenance": sum(
             "MISSING_PROCEDURAL_PROVENANCE" in item["reason_codes"] for item in readiness
         ),
