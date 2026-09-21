@@ -20,7 +20,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 from generation_orchestrator import GenerationContractError, run_generation  # noqa: E402
 from risk_coverage import RiskCoverageError  # noqa: E402
-from run_operational_benchmarks import load_pack, materialize  # noqa: E402
+from run_operational_benchmarks import load_pack, materialize, run_pack  # noqa: E402
 from source_accounting import SourceAccountingError  # noqa: E402
 from test_asset_inventory import TestAssetInventoryError  # noqa: E402
 
@@ -195,6 +195,47 @@ class DegradedRunTests(unittest.TestCase):
 
         with self.assertRaisesRegex(SourceAccountingError, "UNIT-004"):
             self.run_degraded("benchmark-a.json", degrade)
+
+
+class AdHocGeneratorTests(unittest.TestCase):
+    def test_ordinary_generation_creates_no_project_specific_generator_script(self) -> None:
+        pack = load_pack(PACKS / "benchmark-a.json")
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            result = run_pack(pack, root, root / "artifacts")
+            created = sorted(
+                path.name for path in root.rglob("*.py")
+                if "artifacts" not in path.parts
+            )
+            self.assertEqual([], created)
+            self.assertTrue(Path(result["canonical_path"]).is_file())
+            self.assertIn(".ftd", Path(result["canonical_path"]).parts)
+
+    def test_an_ad_hoc_generator_written_during_a_run_is_refused(self) -> None:
+        import generation_orchestrator
+
+        pack = load_pack(PACKS / "benchmark-a.json")
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            materialize(pack, root)
+            request = copy.deepcopy(pack["request"])
+            request.update({
+                "workspace": root, "artifact_root": root / "artifacts", "run_id": "ad-hoc",
+            })
+            original = generation_orchestrator.render_selected_outputs
+
+            def leaking_render(*args, **kwargs):
+                (root / "build_suite.py").write_text("raise SystemExit\n", encoding="utf-8")
+                return original(*args, **kwargs)
+
+            generation_orchestrator.render_selected_outputs = leaking_render
+            try:
+                with self.assertRaisesRegex(
+                    GenerationContractError, "ad-hoc executable source"
+                ):
+                    run_generation(request)
+            finally:
+                generation_orchestrator.render_selected_outputs = original
 
 
 class BenchmarkPackTests(unittest.TestCase):
