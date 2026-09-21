@@ -25,6 +25,7 @@ from resolve_artifacts import resolve_artifact_paths
 from render_markdown import render_markdown
 from render_report import render_report
 from scenario_independence import build_scenario_pipeline
+from semantic_regression import build_snapshots
 from source_coverage_audit import (
     audit_atomic_chain,
     materialize_atomic_coverage,
@@ -338,6 +339,16 @@ def run(artifact_root: Path) -> dict[str, Any]:
         "scenarios": scenarios,
         "test_cases": entries,
     }
+    semantic = build_snapshots(
+        sources=fixture["sources"],
+        source_items=fixture["source_items"],
+        inventory=inventory,
+        chain=chain,
+        design=design,
+        cases=cases,
+        questions=reconciliation["questions"],
+        findings=index["findings"],
+    )
 
     def materialize() -> int:
         write_json(output / "test-cases.json", index)
@@ -381,6 +392,7 @@ def run(artifact_root: Path) -> dict[str, Any]:
             automation_execution_audit(case, identity)
             for case, identity in zip(cases, design["test_identities"])
         ],
+        "semantic_regression": semantic,
     }
 
 
