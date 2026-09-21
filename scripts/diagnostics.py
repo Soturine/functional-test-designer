@@ -218,6 +218,20 @@ AGGREGATION_STRATEGIES = {
     "scenario_cohesion_audit_trail": "last",
     "materialized_compound_items_reviewed": "last",
     "materialized_compound_items_unreviewed": "last",
+    "one_step_cases": "last",
+    "legitimate_one_step_cases": "last",
+    "path_compression_warnings": "last",
+    "generic_observation_warnings": "last",
+    "missing_record_acquisition_rule": "last",
+    "missing_execution_surface": "last",
+    "missing_intermediate_observation": "last",
+    "selected_evidence_behaviors": "last",
+    "scenario_opportunities": "last",
+    "opportunity_dispositions": "last",
+    "divergence_opportunities_linked": "last",
+    "test_asset_behaviors_accounted": "last",
+    "cross_cutting_opportunities": "last",
+    "unaccounted_selected_evidence_behaviors": "last",
 }
 
 ABSTRACT_ACTION_PATTERNS = (

@@ -26,6 +26,13 @@ INDEPENDENT_VARIANTS = re.compile(
     r"cada variante|válido e inválido|separadamente|conclusão,? reversão|reversão e cancelamento)\b",
     re.IGNORECASE,
 )
+PATH_COMPRESSION = re.compile(
+    r"\b(?:perform|execute|complete|validate|process|run|carry out|"
+    r"realizar|executar|completar|validar|processar)\b[^.]{0,80}\b"
+    r"(?:flow|process|operation|scenario|workflow|fluxo|processo|opera[cç][aã]o|cen[aá]rio)\b|"
+    r"\b(?:both platforms|other portal|ambas as plataformas|outro portal)\b",
+    re.IGNORECASE,
+)
 
 
 def hidden_subtest_signals(action: str) -> list[str]:
@@ -90,7 +97,32 @@ def step_underspecification_warnings(cases: list[dict[str, Any]]) -> list[dict[s
     ]
 
 
-def step_distribution(cases: list[dict[str, Any]]) -> dict[str, Any]:
+def path_compression_warnings(
+    cases: list[dict[str, Any]], known_path_lengths: dict[str, int] | None = None
+) -> list[dict[str, Any]]:
+    """Flag objective-like actions only when selected evidence has a richer path."""
+    known_path_lengths = known_path_lengths or {}
+    warnings = []
+    for case in cases:
+        case_id = str(case.get("id", ""))
+        steps = case.get("steps", [])
+        if known_path_lengths.get(case_id, 0) < 2:
+            continue
+        for step in steps:
+            action = str(step.get("action", ""))
+            if PATH_COMPRESSION.search(action) or (
+                len(steps) == 1 and len(ACTION_VERB.findall(action)) >= 2
+            ):
+                warnings.append({
+                    "code": "PATH_COMPRESSION", "test_case_id": case_id,
+                    "step": step.get("step"), "known_path_actions": known_path_lengths[case_id],
+                })
+    return warnings
+
+
+def step_distribution(
+    cases: list[dict[str, Any]], known_path_lengths: dict[str, int] | None = None
+) -> dict[str, Any]:
     counts = [len(case.get("steps", [])) for case in cases]
     histogram = Counter(counts)
     return {
@@ -100,4 +132,10 @@ def step_distribution(cases: list[dict[str, Any]]) -> dict[str, Any]:
             step_underspecification_warnings(cases)
         ),
         "hidden_subtest_warnings": len(hidden_subtest_warnings(cases)),
+        "one_step_cases": sum(count == 1 for count in counts),
+        "legitimate_one_step_cases": sum(
+            count == 1 and (known_path_lengths or {}).get(str(case.get("id")), 1) <= 1
+            for case, count in zip(cases, counts)
+        ),
+        "path_compression_warnings": len(path_compression_warnings(cases, known_path_lengths)),
     }

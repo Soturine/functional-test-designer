@@ -7,7 +7,7 @@ import re
 from dataclasses import asdict
 from typing import Any
 
-from execution_quality import hidden_subtest_warnings
+from execution_quality import hidden_subtest_warnings, path_compression_warnings
 from scenario_independence import TestIdentity
 
 
@@ -73,7 +73,10 @@ def classify_test_data(items: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
-def procedural_reason_codes(case: dict[str, Any], identity: TestIdentity | None = None) -> list[str]:
+def procedural_reason_codes(
+    case: dict[str, Any], identity: TestIdentity | None = None,
+    execution_context: dict[str, Any] | None = None,
+) -> list[str]:
     reasons: list[str] = []
     actions = [str(step.get("action", "")) for step in case.get("steps", [])]
     expected = [step.get("expected_result") for step in case.get("steps", [])]
@@ -96,6 +99,17 @@ def procedural_reason_codes(case: dict[str, Any], identity: TestIdentity | None 
         reasons.append("PROCEDURE_GAP")
     if hidden_subtest_warnings([case]):
         reasons.append("HIDDEN_SUBTEST")
+    context = execution_context or {}
+    known_length = int(context.get("known_path_actions", len(actions) or 0))
+    if path_compression_warnings([case], {str(case.get("id")): known_length}):
+        reasons.append("PATH_COMPRESSION")
+    if context.get("execution_surface_required") and not context.get("execution_surface"):
+        reasons.append("MISSING_EXECUTION_SURFACE")
+    if context.get("record_required") and classify_test_data(case.get("test_data", []))["classification"] != "READY":
+        reasons.append("MISSING_RECORD_ACQUISITION_RULE")
+    if context.get("intermediate_observation_required") and len(actions) > 1:
+        if any(value is None for value in expected[:-1]):
+            reasons.append("MISSING_INTERMEDIATE_OBSERVATION")
     if identity is not None:
         if not identity.execution_boundary:
             reasons.append("MISSING_EXECUTION_BOUNDARY")
@@ -120,8 +134,11 @@ def procedural_reason_codes(case: dict[str, Any], identity: TestIdentity | None 
     return list(dict.fromkeys(reasons))
 
 
-def audit_execution_readiness(case: dict[str, Any], identity: TestIdentity | None = None) -> dict[str, Any]:
-    reasons = procedural_reason_codes(case, identity)
+def audit_execution_readiness(
+    case: dict[str, Any], identity: TestIdentity | None = None,
+    execution_context: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    reasons = procedural_reason_codes(case, identity, execution_context)
     human_blockers = set(reasons) - {"MISSING_EXECUTION_BOUNDARY", "MISSING_DATA_PARTITION"}
     return {
         "test_case_id": case.get("id"),
@@ -131,6 +148,20 @@ def audit_execution_readiness(case: dict[str, Any], identity: TestIdentity | Non
         "test_data": classify_test_data(case.get("test_data", [])),
         "assertions": [asdict(item) for item in identity.assertions] if identity else [],
     }
+
+
+def align_public_status(case: dict[str, Any], audit: dict[str, Any]) -> dict[str, Any]:
+    """Prevent a materially non-executable case from being presented as simply READY."""
+    material = {
+        "ABSTRACT_TRIGGER", "ABSTRACT_NAVIGATION", "MISSING_OBSERVABLE_ASSERTION",
+        "PROCEDURE_GAP", "HIDDEN_SUBTEST", "PATH_COMPRESSION",
+        "MISSING_EXECUTION_SURFACE", "MISSING_RECORD_ACQUISITION_RULE",
+        "MISSING_INTERMEDIATE_OBSERVATION", "PLACEHOLDER_TEST_DATA",
+        "NONDETERMINISTIC_TEST_DATA", "MISSING_TEST_DATA",
+    }
+    if case.get("status") == "READY" and material.intersection(audit.get("reason_codes", [])):
+        case["status"] = "NEEDS_REVIEW"
+    return case
 
 
 def automation_plan(case: dict[str, Any], identity: TestIdentity) -> dict[str, Any]:

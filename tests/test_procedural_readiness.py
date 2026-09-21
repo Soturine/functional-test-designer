@@ -9,6 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from procedural_readiness import (  # noqa: E402
+    align_public_status,
     audit_execution_readiness,
     automation_plan,
     classify_test_data,
@@ -73,6 +74,43 @@ def ready_case() -> dict:
 
 
 class ProceduralReadinessTests(unittest.TestCase):
+    def test_supported_multi_action_path_cannot_be_compressed_to_one_generic_step(self) -> None:
+        case = ready_case()
+        case["steps"] = [{
+            "step": 1, "action": "Perform the complete workflow.",
+            "expected_result": "The reservation is confirmed.", "needs_clarification": False,
+        }]
+        audit = audit_execution_readiness(
+            case, execution_context={"known_path_actions": 4, "execution_surface": "operator UI"},
+        )
+        self.assertIn("PATH_COMPRESSION", audit["reason_codes"])
+        self.assertEqual("NEEDS_REVIEW", align_public_status(case, audit)["status"])
+
+    def test_legitimate_one_action_path_is_not_path_compression(self) -> None:
+        case = ready_case()
+        case["steps"] = [{
+            "step": 1, "action": "Select Refresh.",
+            "expected_result": "The counter is updated.", "needs_clarification": False,
+        }]
+        audit = audit_execution_readiness(
+            case, execution_context={"known_path_actions": 1, "execution_surface": "dashboard"},
+        )
+        self.assertNotIn("PATH_COMPRESSION", audit["reason_codes"])
+
+    def test_missing_surface_and_record_acquisition_block_novice_readiness(self) -> None:
+        case = ready_case()
+        case["test_data"] = [{"name": "record", "description": "<existing object>"}]
+        audit = audit_execution_readiness(
+            case,
+            execution_context={
+                "known_path_actions": len(case["steps"]),
+                "execution_surface_required": True,
+                "record_required": True,
+            },
+        )
+        self.assertIn("MISSING_EXECUTION_SURFACE", audit["reason_codes"])
+        self.assertIn("MISSING_RECORD_ACQUISITION_RULE", audit["reason_codes"])
+
     def test_novice_ready_fixture_passes_human_and_automation_gates(self) -> None:
         audit = audit_execution_readiness(ready_case(), ready_identity())
 

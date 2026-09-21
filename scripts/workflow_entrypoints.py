@@ -3,12 +3,13 @@
 
 from __future__ import annotations
 
-from typing import Any, Callable
+from typing import Any
 
 from azure_devops_adapter import build_preview, write_fallback_export
 from canonical_state import OutputSelection, render_selected_outputs
 from clarification import rank_questions
 from suite_check import check_suite
+from generation_orchestrator import run_generation
 
 
 INTENTS = ("ftd-gen", "ftd-clarify", "ftd-check", "ftd-render", "ftd-mcp")
@@ -43,10 +44,7 @@ def dispatch(intent: str, **request: Any) -> Any:
     if intent not in INTENTS:
         raise ValueError(f"Unknown workflow intent: {intent}")
     if intent == "ftd-gen":
-        generator: Callable[..., Any] | None = request.get("generator")
-        if generator is None:
-            return {"intent": intent, "handoff": "shared-generation-core", "request": request}
-        return generator(request)
+        return run_generation(request)
     if intent == "ftd-clarify":
         return rank_questions(request.get("questions", []), request.get("limit", 5))
     if intent == "ftd-check":
