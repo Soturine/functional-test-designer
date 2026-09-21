@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sys
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -22,6 +23,15 @@ V21_PROCEDURE_FINGERPRINT = "7a2f1bac61f1e361f1eea39ac8fece7df8e434d92bd3cd6c43b
 
 
 class SemanticRegressionTests(unittest.TestCase):
+    def test_explicit_public_known_good_baseline_is_not_rederived_from_current_run(self) -> None:
+        baseline = json.loads(
+            (ROOT / "benchmarks" / "semantic-baseline.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(BASELINE_CORE_FINGERPRINT, baseline["core_fingerprint"])
+        self.assertEqual(5, baseline["atomic_claims"])
+        self.assertEqual(5, baseline["coverage_points"])
+        self.assertGreater(baseline["coverage_points"], baseline["final_scenarios"])
+
     def test_runtime_noise_does_not_change_fingerprint(self) -> None:
         left = {"id": "TC-001", "generated_at": "2026-01-01", "run_id": "one"}
         right = {"id": "TC-001", "generated_at": "2027-01-01", "run_id": "two"}

@@ -30,6 +30,7 @@ from scenario_independence import build_scenario_pipeline
 from semantic_regression import build_snapshots
 from source_coverage_audit import (
     audit_atomic_chain,
+    audit_materialized_atomicity,
     materialize_atomic_coverage,
     review_source_items,
 )
@@ -237,7 +238,10 @@ def run(artifact_root: Path) -> dict[str, Any]:
     timed(
         metrics_path,
         "coverage_extraction_audit",
-        lambda: audit_atomic_chain(inventory, chain),
+        lambda: {
+            **audit_atomic_chain(inventory, chain),
+            **audit_materialized_atomicity(inventory, chain),
+        },
         "Verified source-first Claim to Clause to Coverage Point lineage.",
         lambda value: value,
     )

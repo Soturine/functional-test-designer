@@ -216,6 +216,8 @@ AGGREGATION_STRATEGIES = {
     "mcp_preview_conflicts": "last",
     "external_writes": "sum",
     "scenario_cohesion_audit_trail": "last",
+    "materialized_compound_items_reviewed": "last",
+    "materialized_compound_items_unreviewed": "last",
 }
 
 ABSTRACT_ACTION_PATTERNS = (

@@ -187,6 +187,32 @@ class AtomicSourceClaimTests(unittest.TestCase):
         self.assertEqual("QUESTION", chain["normative_clauses"][0]["destination_type"])
         self.assertEqual(1, AUDIT.audit_atomic_chain(inventory, chain)["source_claims_represented"])
 
+    def test_materialized_compound_claim_cannot_bypass_residual_review(self) -> None:
+        inventory = {
+            "claims": [{
+                "id": "CLAIM-001", "requirement_ref": "REQ-001",
+                "authority": "FUNCTIONAL_AUTHORITY",
+                "normalized_claim": "Reject the request and keep the state unchanged and show an alert.",
+                "semantic_key": "compressed behavior",
+                "source_refs": [{"source": "requirements.md", "reference": "R1"}],
+            }]
+        }
+        chain = AUDIT.materialize_atomic_coverage(inventory)
+
+        with self.assertRaisesRegex(ValueError, "Residual compound"):
+            AUDIT.audit_materialized_atomicity(inventory, chain)
+
+    def test_same_execution_can_keep_atomic_cps_above_final_tc_count(self) -> None:
+        source_items = json.loads(
+            (ROOT / "benchmarks/source-atomicity/source-items.json").read_text(encoding="utf-8")
+        )[:1]
+        inventory = AUDIT.review_source_items(source_items)
+        chain = AUDIT.materialize_atomic_coverage(inventory)
+        AUDIT.audit_materialized_atomicity(inventory, chain)
+
+        self.assertEqual(2, len(chain["coverage_points"]))
+        self.assertEqual(2, inventory["atomic_source_claims_identified"])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -154,6 +154,12 @@ def review_source_items(source_items: list[dict[str, Any]]) -> dict[str, Any]:
             claim["semantic_key"] = str(
                 part.get("semantic_key", canonical_claim(part["normalized_claim"]))
             )
+            if residual_signals:
+                claim["materialized_atomicity_review"] = {
+                    "signals": residual_signals,
+                    "decision": "KEEP_ATOMIC",
+                    "reason": str(part.get("keep_atomic_reason", reason or "")),
+                }
             claims.append(claim)
     return {
         "source_items": len(source_items),
@@ -300,6 +306,49 @@ def audit_atomic_chain(inventory: dict[str, Any], chain: dict[str, Any]) -> dict
         "source_coverage_gaps": 0,
         "normative_clauses_mapped": len(clauses),
         "unmapped_normative_clauses": 0,
+    }
+
+
+def audit_materialized_atomicity(
+    inventory: dict[str, Any], chain: dict[str, Any]
+) -> dict[str, Any]:
+    """Reject residual compound Claims/Clauses without an explicit narrow disposition."""
+    claim_by_id = {str(item["id"]): item for item in inventory.get("claims", [])}
+    clause_to_claims: dict[str, list[dict[str, Any]]] = {}
+    for claim_id, clause_id in chain.get("claim_destinations", {}).items():
+        if claim_id in claim_by_id:
+            clause_to_claims.setdefault(str(clause_id), []).append(claim_by_id[claim_id])
+    reviewed: list[dict[str, Any]] = []
+    failures: list[str] = []
+    for claim in inventory.get("claims", []):
+        signals = compound_signals(str(claim.get("normalized_claim", "")))
+        if not signals:
+            continue
+        review = claim.get("materialized_atomicity_review")
+        reason = review.get("reason") if isinstance(review, dict) else None
+        if reason not in ALLOWED_KEEP_ATOMIC_REASONS:
+            failures.append(str(claim.get("id")))
+        else:
+            reviewed.append({"id": claim["id"], "signals": signals, "reason": reason})
+    for clause in chain.get("normative_clauses", []):
+        signals = compound_signals(str(clause.get("normalized_claim", "")))
+        if not signals:
+            continue
+        supporting = clause_to_claims.get(str(clause.get("id")), [])
+        if not supporting or any(
+            item.get("materialized_atomicity_review", {}).get("reason")
+            not in ALLOWED_KEEP_ATOMIC_REASONS
+            for item in supporting
+        ):
+            failures.append(str(clause.get("id")))
+    if failures:
+        raise ValueError(
+            "Residual compound Claims/Clauses require reviewed atomicity dispositions: "
+            + ", ".join(sorted(set(failures)))
+        )
+    return {
+        "materialized_compound_items_reviewed": len(reviewed),
+        "materialized_compound_items_unreviewed": 0,
     }
 
 
