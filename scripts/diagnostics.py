@@ -162,6 +162,15 @@ AGGREGATION_STRATEGIES = {
     "diagnostics_compatibility_checked": "last",
     "diagnostics_stage_count": "last",
     "diagnostics_metric_count": "last",
+    "human_execution_ready": "last",
+    "human_execution_not_ready": "last",
+    "automation_execution_ready": "last",
+    "automation_execution_not_ready": "last",
+    "abstract_trigger_warnings": "last",
+    "abstract_navigation_warnings": "last",
+    "abstract_observation_warnings": "last",
+    "placeholder_test_data_warnings": "last",
+    "assertion_discrimination_warnings": "last",
 }
 
 ABSTRACT_ACTION_PATTERNS = (

@@ -12,9 +12,10 @@ from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any
 
-from execution_quality import hidden_subtest_signals, hidden_subtest_warnings
+from execution_quality import hidden_subtest_signals
 from parallel_evidence import EvidenceRecord
 from procedural_execution import assert_identity_preserved, synthesize_test_case
+from procedural_readiness import audit_execution_readiness
 from scenario_independence import TestIdentity
 
 
@@ -69,7 +70,7 @@ def operator_actions_from_evidence(records: list[EvidenceRecord]) -> list[dict[s
         actions.append(
             {
                 "action": f"{verb} {label}.",
-                "expected_result": f"The documented path makes {next_label} available.",
+                "expected_result": f"The {next_label} control is displayed.",
                 "evidence_source": source_ref,
                 **({"depends_on_previous_step": True} if index else {}),
             }
@@ -350,30 +351,8 @@ def reconcile_additive_feedback(
 
 def automation_execution_audit(case: dict[str, Any], identity: TestIdentity) -> dict[str, Any]:
     """Return an objective readiness classification, never a subjective score."""
-    reasons = []
-    if case.get("status") != "READY":
-        reasons.append("STATUS_NOT_READY")
-    if not identity.execution_boundary:
-        reasons.append("MISSING_EXECUTION_BOUNDARY")
-    if not case.get("preconditions"):
-        reasons.append("MISSING_DETERMINISTIC_SETUP")
-    if not case.get("test_data"):
-        reasons.append("MISSING_TEST_DATA")
-    elif any(
-        "<" in str(item.get("description", ""))
-        for item in case.get("test_data", [])
-        if isinstance(item, dict)
-    ):
-        reasons.append("PLACEHOLDER_TEST_DATA")
-    if any(step.get("needs_clarification") for step in case.get("steps", [])):
-        reasons.append("UNSUPPORTED_STEP")
-    if hidden_subtest_warnings([case]):
-        reasons.append("HIDDEN_SUBTEST")
-    if not identity.assertions:
-        reasons.append("MISSING_TRACEABLE_ASSERTIONS")
-    if not case.get("steps") or case["steps"][-1].get("expected_result") != identity.normative_oracle:
-        reasons.append("NORMATIVE_ORACLE_NOT_OBSERVABLE")
+    observed = audit_execution_readiness(case, identity)
     return {
-        "classification": "AUTOMATION_EXECUTION_READY" if not reasons else "AUTOMATION_EXECUTION_NOT_READY",
-        "reasons": reasons,
+        "classification": observed["automation_classification"],
+        "reasons": observed["reason_codes"],
     }

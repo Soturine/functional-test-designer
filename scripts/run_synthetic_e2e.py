@@ -17,10 +17,10 @@ from parallel_evidence import (
     analyze_selected_sources,
 )
 from procedural_pipeline import (
-    automation_execution_audit,
     reconcile_additive_feedback,
     run_procedural_tasks,
 )
+from procedural_readiness import audit_execution_readiness
 from resolve_artifacts import resolve_artifact_paths
 from render_markdown import render_markdown
 from render_report import render_report
@@ -273,6 +273,13 @@ def run(artifact_root: Path) -> dict[str, Any]:
     initial_cases = [result.case for result in procedural.results]
     reconciliation = reconcile_additive_feedback(initial_cases, procedural.results)
     cases = reconciliation["test_cases"]
+    readiness_audits = [
+        audit_execution_readiness(case, identity)
+        for case, identity in zip(cases, design["test_identities"])
+    ]
+    readiness_reasons = [
+        reason for audit in readiness_audits for reason in audit["reason_codes"]
+    ]
     timed(
         metrics_path,
         "test_case_generation",
@@ -281,6 +288,29 @@ def run(artifact_root: Path) -> dict[str, Any]:
         lambda values: {
             "test_cases_generated": len(values),
             **reconciliation["metrics"],
+            "human_execution_ready": sum(
+                item["human_classification"] == "HUMAN_EXECUTION_READY"
+                for item in readiness_audits
+            ),
+            "human_execution_not_ready": sum(
+                item["human_classification"] == "HUMAN_EXECUTION_NOT_READY"
+                for item in readiness_audits
+            ),
+            "automation_execution_ready": sum(
+                item["automation_classification"] == "AUTOMATION_EXECUTION_READY"
+                for item in readiness_audits
+            ),
+            "automation_execution_not_ready": sum(
+                item["automation_classification"] == "AUTOMATION_EXECUTION_NOT_READY"
+                for item in readiness_audits
+            ),
+            "abstract_trigger_warnings": readiness_reasons.count("ABSTRACT_TRIGGER"),
+            "abstract_navigation_warnings": readiness_reasons.count("ABSTRACT_NAVIGATION"),
+            "abstract_observation_warnings": readiness_reasons.count("ABSTRACT_OBSERVATION"),
+            "placeholder_test_data_warnings": readiness_reasons.count("PLACEHOLDER_TEST_DATA"),
+            "assertion_discrimination_warnings": readiness_reasons.count(
+                "INSUFFICIENT_ASSERTION_DISCRIMINATION"
+            ),
         },
     )
     timed(
@@ -393,9 +423,13 @@ def run(artifact_root: Path) -> dict[str, Any]:
         "source_analysis": evidence_analysis.metrics,
         "procedural": procedural.metrics,
         "additive_feedback": reconciliation["metrics"],
+        "readiness_audits": readiness_audits,
         "automation_audits": [
-            automation_execution_audit(case, identity)
-            for case, identity in zip(cases, design["test_identities"])
+            {
+                "classification": item["automation_classification"],
+                "reasons": item["reason_codes"],
+            }
+            for item in readiness_audits
         ],
         "semantic_regression": semantic,
     }

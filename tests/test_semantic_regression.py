@@ -17,7 +17,8 @@ from semantic_regression import (  # noqa: E402
 
 
 BASELINE_CORE_FINGERPRINT = "952bf5e0f908087d1644af9ded6f62ab4cecd8cacf21d924848463a893b4a953"
-BASELINE_PROCEDURE_FINGERPRINT = "692bb66f841249c51fc030fee1faf35636a23aa109fbfadbc420d8ef43edf7d8"
+V20_PROCEDURE_FINGERPRINT = "692bb66f841249c51fc030fee1faf35636a23aa109fbfadbc420d8ef43edf7d8"
+V21_PROCEDURE_FINGERPRINT = "7a2f1bac61f1e361f1eea39ac8fece7df8e434d92bd3cd6c43bfe152f7c29f0e"
 
 
 class SemanticRegressionTests(unittest.TestCase):
@@ -31,9 +32,8 @@ class SemanticRegressionTests(unittest.TestCase):
             observed = run(Path(value))["semantic_regression"]
 
         self.assertEqual(BASELINE_CORE_FINGERPRINT, observed["core_fingerprint"])
-        self.assertEqual(
-            BASELINE_PROCEDURE_FINGERPRINT, observed["procedure_fingerprint"]
-        )
+        self.assertEqual(V21_PROCEDURE_FINGERPRINT, observed["procedure_fingerprint"])
+        self.assertNotEqual(V20_PROCEDURE_FINGERPRINT, observed["procedure_fingerprint"])
 
     def test_projection_parity_rejects_semantic_mutation(self) -> None:
         canonical = [{"id": "TC-001", "objective": "Confirm order"}]
