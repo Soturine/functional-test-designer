@@ -10,7 +10,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-SPEC = importlib.util.spec_from_file_location("validate_output", ROOT / "scripts" / "validate_output.py")
+SPEC = importlib.util.spec_from_file_location("validation", ROOT / "scripts" / "validation.py")
 if SPEC is None or SPEC.loader is None:
     raise RuntimeError("Unable to load validator")
 VALIDATOR = importlib.util.module_from_spec(SPEC)

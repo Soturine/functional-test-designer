@@ -7,7 +7,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from azure_devops_adapter import (  # noqa: E402
+from integrations.azure_devops import (  # noqa: E402
     apply_preview, build_preview, map_test_case, persist_integration_state,
 )
 

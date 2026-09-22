@@ -25,150 +25,576 @@
     "notes"
   ],
   "properties": {
-    "schema_version": {"enum": ["1.2", "2.2"]},
-    "id": {"type": "string", "pattern": "^TC-[0-9]{3,}$"},
-    "title": {"type": "string", "minLength": 1},
-    "status": {"enum": ["READY", "NEEDS_REVIEW", "BLOCKED", "BLOCKED_REQUIREMENT", "BLOCKED_IMPLEMENTATION_GAP", "BLOCKED_ENVIRONMENT", "BLOCKED_TEST_DATA", "BLOCKED_EXTERNAL_DEPENDENCY", "EXPLORATORY"]},
-    "priority": {"enum": ["CRITICAL", "HIGH", "MEDIUM", "LOW"]},
-    "type": {"enum": ["FUNCTIONAL", "NEGATIVE", "BOUNDARY", "SECURITY", "AUTHORIZATION", "PERFORMANCE", "RESILIENCE", "RECOVERY", "CONCURRENCY", "RACE_CONDITION", "IDEMPOTENCY", "INTEGRATION", "CONTRACT", "DATA_INTEGRITY", "AUDIT", "STATE_TRANSITION", "E2E", "FIELD", "HARDWARE_INTEGRATION", "CHAOS", "EXPLORATORY"]},
-    "test_basis": {"enum": ["ACCEPTANCE", "CHARACTERIZATION", "DERIVED", "EXPLORATORY", "REGRESSION", "E2E"]},
-    "primary_type": {"enum": ["FUNCTIONAL", "NEGATIVE", "BOUNDARY", "SECURITY", "AUTHORIZATION", "PERFORMANCE", "RESILIENCE", "RECOVERY", "CONCURRENCY", "RACE_CONDITION", "IDEMPOTENCY", "INTEGRATION", "CONTRACT", "DATA_INTEGRITY", "AUDIT", "STATE_TRANSITION", "E2E", "FIELD", "HARDWARE_INTEGRATION", "CHAOS", "EXPLORATORY"]},
-    "secondary_tags": {"$ref": "#/$defs/uniqueStringList"},
-    "execution_status": {"enum": ["READY", "NEEDS_REVIEW", "BLOCKED_REQUIREMENT", "BLOCKED_IMPLEMENTATION_GAP", "BLOCKED_ENVIRONMENT", "BLOCKED_TEST_DATA", "BLOCKED_EXTERNAL_DEPENDENCY", "EXPLORATORY"]},
-    "question_refs": {"type": "array", "uniqueItems": true, "items": {"type": "string", "pattern": "^Q-[0-9]{3,}$"}},
-    "finding_refs": {"type": "array", "uniqueItems": true, "items": {"type": "string", "pattern": "^FND-[0-9]{3,}$"}},
-    "composes": {"type": "array", "uniqueItems": true, "items": {"type": "string", "pattern": "^TC-[0-9]{3,}$"}},
-    "automation_candidate": {"type": "boolean"},
-    "automation_layer": {"enum": ["UI", "API", "SERVICE", "INTEGRATION", "HARDWARE", "MIXED", "NONE"]},
-    "automation_tool_hint": {"enum": ["PLAYWRIGHT", "API_TEST", "TESTSPRITE", "PYTEST", "OTHER", "NONE"]},
-    "deterministic": {"type": "boolean"},
-    "automation_blocker": {
-      "type": ["string", "null"],
-      "enum": [null, "MISSING_EXECUTION_SURFACE", "MISSING_DETERMINISTIC_DATA", "AMBIGUOUS_ACTION", "MISSING_OBSERVATION", "HIDDEN_BRANCH", "PATH_COMPRESSION", "PROCEDURE_GAP", "EXTERNAL_DEPENDENCY", "ENVIRONMENT_GAP", "NOT_DETERMINISTIC"]
+    "schema_version": {
+      "enum": [
+        "1.2",
+        "2.2"
+      ]
     },
-    "priority_reason": {"type": "string", "minLength": 1},
+    "id": {
+      "type": "string",
+      "pattern": "^TC-[0-9]{3,}$"
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1
+    },
+    "status": {
+      "enum": [
+        "READY",
+        "NEEDS_REVIEW",
+        "BLOCKED",
+        "BLOCKED_REQUIREMENT",
+        "BLOCKED_IMPLEMENTATION_GAP",
+        "BLOCKED_ENVIRONMENT",
+        "BLOCKED_TEST_DATA",
+        "BLOCKED_EXTERNAL_DEPENDENCY",
+        "EXPLORATORY"
+      ]
+    },
+    "priority": {
+      "enum": [
+        "CRITICAL",
+        "HIGH",
+        "MEDIUM",
+        "LOW"
+      ]
+    },
+    "type": {
+      "enum": [
+        "FUNCTIONAL",
+        "NEGATIVE",
+        "BOUNDARY",
+        "SECURITY",
+        "AUTHORIZATION",
+        "PERFORMANCE",
+        "RESILIENCE",
+        "RECOVERY",
+        "CONCURRENCY",
+        "RACE_CONDITION",
+        "IDEMPOTENCY",
+        "INTEGRATION",
+        "CONTRACT",
+        "DATA_INTEGRITY",
+        "AUDIT",
+        "STATE_TRANSITION",
+        "E2E",
+        "FIELD",
+        "HARDWARE_INTEGRATION",
+        "CHAOS",
+        "EXPLORATORY"
+      ]
+    },
+    "test_basis": {
+      "enum": [
+        "ACCEPTANCE",
+        "CHARACTERIZATION",
+        "DERIVED",
+        "EXPLORATORY",
+        "REGRESSION",
+        "E2E"
+      ]
+    },
+    "primary_type": {
+      "enum": [
+        "FUNCTIONAL",
+        "NEGATIVE",
+        "BOUNDARY",
+        "SECURITY",
+        "AUTHORIZATION",
+        "PERFORMANCE",
+        "RESILIENCE",
+        "RECOVERY",
+        "CONCURRENCY",
+        "RACE_CONDITION",
+        "IDEMPOTENCY",
+        "INTEGRATION",
+        "CONTRACT",
+        "DATA_INTEGRITY",
+        "AUDIT",
+        "STATE_TRANSITION",
+        "E2E",
+        "FIELD",
+        "HARDWARE_INTEGRATION",
+        "CHAOS",
+        "EXPLORATORY"
+      ]
+    },
+    "secondary_tags": {
+      "$ref": "#/$defs/uniqueStringList"
+    },
+    "execution_status": {
+      "enum": [
+        "READY",
+        "NEEDS_REVIEW",
+        "BLOCKED_REQUIREMENT",
+        "BLOCKED_IMPLEMENTATION_GAP",
+        "BLOCKED_ENVIRONMENT",
+        "BLOCKED_TEST_DATA",
+        "BLOCKED_EXTERNAL_DEPENDENCY",
+        "EXPLORATORY"
+      ]
+    },
+    "question_refs": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^Q-[0-9]{3,}$"
+      }
+    },
+    "finding_refs": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^FND-[0-9]{3,}$"
+      }
+    },
+    "composes": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^TC-[0-9]{3,}$"
+      }
+    },
+    "automation_candidate": {
+      "type": "boolean"
+    },
+    "automation_layer": {
+      "enum": [
+        "UI",
+        "API",
+        "SERVICE",
+        "INTEGRATION",
+        "HARDWARE",
+        "MIXED",
+        "NONE"
+      ]
+    },
+    "automation_tool_hint": {
+      "enum": [
+        "PLAYWRIGHT",
+        "API_TEST",
+        "TESTSPRITE",
+        "PYTEST",
+        "OTHER",
+        "NONE"
+      ]
+    },
+    "deterministic": {
+      "type": "boolean"
+    },
+    "automation_blocker": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        null,
+        "MISSING_EXECUTION_SURFACE",
+        "MISSING_DETERMINISTIC_DATA",
+        "AMBIGUOUS_ACTION",
+        "MISSING_OBSERVATION",
+        "HIDDEN_BRANCH",
+        "PATH_COMPRESSION",
+        "PROCEDURE_GAP",
+        "EXTERNAL_DEPENDENCY",
+        "ENVIRONMENT_GAP",
+        "NOT_DETERMINISTIC"
+      ]
+    },
+    "priority_reason": {
+      "type": "string",
+      "minLength": 1
+    },
     "claim_exercise_map": {
       "type": "array",
       "items": {
-        "type": "object", "additionalProperties": false,
-        "required": ["claim_id", "coverage_point_id", "test_case_id", "step_refs", "assertion_refs", "primary_type"],
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "claim_id",
+          "coverage_point_id",
+          "test_case_id",
+          "step_refs",
+          "assertion_refs",
+          "primary_type"
+        ],
         "properties": {
-          "claim_id": {"type": "string", "pattern": "^CLAIM-[0-9]{3,}$"},
-          "coverage_point_id": {"type": "string", "pattern": "^CP-[0-9]{3,}$"},
-          "test_case_id": {"type": "string", "pattern": "^TC-[0-9]{3,}$"},
-          "step_refs": {"type": "array", "minItems": 1, "items": {"type": "integer", "minimum": 1}},
-          "assertion_refs": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}},
-          "primary_type": {"type": "string", "minLength": 1}
+          "claim_id": {
+            "type": "string",
+            "pattern": "^CLAIM-[0-9]{3,}$"
+          },
+          "coverage_point_id": {
+            "type": "string",
+            "pattern": "^CP-[0-9]{3,}$"
+          },
+          "test_case_id": {
+            "type": "string",
+            "pattern": "^TC-[0-9]{3,}$"
+          },
+          "step_refs": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "assertion_refs": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "primary_type": {
+            "type": "string",
+            "minLength": 1
+          }
         }
       }
     },
     "atomicity_exception": {
-      "type": "object", "additionalProperties": false,
-      "required": ["reason", "shared_failure_domain", "claim_ids"],
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "reason",
+        "shared_failure_domain",
+        "claim_ids"
+      ],
       "properties": {
-        "reason": {"const": "INDIVISIBLE_CONTRACT"},
-        "shared_failure_domain": {"type": "string", "minLength": 1},
-        "claim_ids": {"type": "array", "minItems": 2, "uniqueItems": true, "items": {"type": "string", "pattern": "^CLAIM-[0-9]{3,}$"}}
+        "reason": {
+          "const": "INDIVISIBLE_CONTRACT"
+        },
+        "shared_failure_domain": {
+          "type": "string",
+          "minLength": 1
+        },
+        "claim_ids": {
+          "type": "array",
+          "minItems": 2,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^CLAIM-[0-9]{3,}$"
+          }
+        }
       }
     },
     "e2e_stage_map": {
       "type": "array",
       "items": {
-        "type": "object", "additionalProperties": false,
-        "required": ["atomic_test_ref", "trigger", "assertion_refs"],
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "atomic_test_ref",
+          "trigger",
+          "assertion_refs"
+        ],
         "properties": {
-          "atomic_test_ref": {"type": "string", "pattern": "^TC-[0-9]{3,}$"},
-          "trigger": {"type": "string", "minLength": 1},
-          "assertion_refs": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}}
+          "atomic_test_ref": {
+            "type": "string",
+            "pattern": "^TC-[0-9]{3,}$"
+          },
+          "trigger": {
+            "type": "string",
+            "minLength": 1
+          },
+          "assertion_refs": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
         }
       }
     },
-    "objective": {"type": "string", "minLength": 1},
+    "objective": {
+      "type": "string",
+      "minLength": 1
+    },
     "requirement_refs": {
       "type": "array",
       "minItems": 1,
       "uniqueItems": true,
-      "items": {"type": "string", "pattern": "^REQ-[0-9]{3,}$"}
+      "items": {
+        "type": "string",
+        "pattern": "^REQ-[0-9]{3,}$"
+      }
     },
     "scenario_refs": {
       "type": "array",
       "minItems": 1,
       "uniqueItems": true,
-      "items": {"type": "string", "pattern": "^SCN-[0-9]{3,}$"}
+      "items": {
+        "type": "string",
+        "pattern": "^SCN-[0-9]{3,}$"
+      }
     },
     "coverage_point_refs": {
       "type": "array",
       "minItems": 1,
       "uniqueItems": true,
-      "items": {"type": "string", "pattern": "^CP-[0-9]{3,}$"}
+      "items": {
+        "type": "string",
+        "pattern": "^CP-[0-9]{3,}$"
+      }
     },
     "source_refs": {
       "type": "array",
       "minItems": 1,
       "uniqueItems": true,
-      "items": {"$ref": "#/$defs/sourceRef"}
+      "items": {
+        "$ref": "#/$defs/sourceRef"
+      }
     },
-    "preconditions": {"$ref": "#/$defs/stringList"},
-    "test_data": {"type": "array", "items": {"$ref": "#/$defs/testData"}},
-    "steps": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/step"}},
-    "postconditions": {"$ref": "#/$defs/stringList"},
-    "cleanup": {"$ref": "#/$defs/stringList"},
-    "tags": {"$ref": "#/$defs/uniqueStringList"},
-    "notes": {"$ref": "#/$defs/stringList"}
+    "preconditions": {
+      "$ref": "#/$defs/stringList"
+    },
+    "test_data": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/testData"
+      }
+    },
+    "steps": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/step"
+      }
+    },
+    "postconditions": {
+      "$ref": "#/$defs/stringList"
+    },
+    "cleanup": {
+      "$ref": "#/$defs/stringList"
+    },
+    "tags": {
+      "$ref": "#/$defs/uniqueStringList"
+    },
+    "notes": {
+      "$ref": "#/$defs/stringList"
+    },
+    "automation_suitability": {
+      "enum": [
+        "HIGH",
+        "MEDIUM",
+        "LOW",
+        "MANUAL_ONLY"
+      ]
+    },
+    "automation_readiness": {
+      "enum": [
+        "READY",
+        "NEEDS_FIXTURE",
+        "NEEDS_SELECTOR",
+        "NEEDS_ENVIRONMENT",
+        "NEEDS_POLICY",
+        "BLOCKED_EXTERNAL_DEPENDENCY",
+        "NOT_APPLICABLE"
+      ]
+    },
+    "readiness_blockers": {
+      "$ref": "#/$defs/uniqueStringList"
+    },
+    "expansion_dimension": {
+      "enum": [
+        "NEGATIVE",
+        "BOUNDARY",
+        "OPERATOR_ERROR",
+        "MISUSE",
+        "STATE_TRANSITION",
+        "DECISION_TABLE",
+        "CONCURRENCY",
+        "RACE_CONDITION",
+        "IDEMPOTENCY",
+        "INTEGRATION",
+        "RECOVERY",
+        "CHAOS",
+        "SECURITY",
+        "AUTHORIZATION",
+        "DATA_INTEGRITY",
+        "CROSS_REQUIREMENT",
+        "E2E"
+      ]
+    },
+    "expansion_checklist_item": {
+      "type": "string",
+      "minLength": 1
+    },
+    "failure_domain": {
+      "type": "string",
+      "minLength": 1
+    },
+    "source_identifiers": {
+      "$ref": "#/$defs/uniqueStringList"
+    },
+    "single_step_reason": {
+      "type": "string",
+      "minLength": 1
+    }
   },
   "allOf": [
     {
-      "if": {"properties": {"schema_version": {"const": "2.2"}}, "required": ["schema_version"]},
-      "then": {"required": ["test_basis", "primary_type", "secondary_tags", "execution_status", "question_refs", "finding_refs", "composes", "automation_candidate", "automation_layer", "automation_tool_hint", "deterministic"]}
+      "if": {
+        "properties": {
+          "schema_version": {
+            "const": "2.2"
+          }
+        },
+        "required": [
+          "schema_version"
+        ]
+      },
+      "then": {
+        "required": [
+          "test_basis",
+          "primary_type",
+          "secondary_tags",
+          "execution_status",
+          "question_refs",
+          "finding_refs",
+          "composes",
+          "automation_candidate",
+          "automation_layer",
+          "automation_tool_hint",
+          "deterministic"
+        ]
+      }
     },
     {
-      "if": {"properties": {"status": {"const": "READY"}}, "required": ["status"]},
+      "if": {
+        "properties": {
+          "status": {
+            "const": "READY"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
       "then": {
         "properties": {
-          "steps": {"items": {"properties": {"needs_clarification": {"const": false}}}}
+          "steps": {
+            "items": {
+              "properties": {
+                "needs_clarification": {
+                  "const": false
+                }
+              }
+            }
+          }
         }
       }
     }
   ],
   "$defs": {
-    "stringList": {"type": "array", "items": {"type": "string", "minLength": 1}},
+    "stringList": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
     "uniqueStringList": {
       "type": "array",
       "uniqueItems": true,
-      "items": {"type": "string", "minLength": 1}
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
     },
     "sourceRef": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["source", "reference"],
+      "required": [
+        "source",
+        "reference"
+      ],
       "properties": {
-        "source": {"type": "string", "minLength": 1},
-        "reference": {"type": "string", "minLength": 1}
+        "source": {
+          "type": "string",
+          "minLength": 1
+        },
+        "reference": {
+          "type": "string",
+          "minLength": 1
+        }
       }
     },
     "testData": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["name", "description"],
+      "required": [
+        "name",
+        "description"
+      ],
       "properties": {
-        "name": {"type": "string", "minLength": 1},
-        "description": {"type": "string", "minLength": 1}
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1
+        }
       }
     },
     "step": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["step", "action", "expected_result", "needs_clarification"],
+      "required": [
+        "step",
+        "action",
+        "expected_result",
+        "needs_clarification"
+      ],
       "properties": {
-        "step": {"type": "integer", "minimum": 1},
-        "action": {"type": "string", "minLength": 1},
-        "expected_result": {"type": ["string", "null"], "minLength": 1},
-        "needs_clarification": {"type": "boolean"}
+        "step": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "action": {
+          "type": "string",
+          "minLength": 1
+        },
+        "expected_result": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
+        },
+        "needs_clarification": {
+          "type": "boolean"
+        }
       },
       "allOf": [
         {
-          "if": {"properties": {"expected_result": {"type": "null"}}, "required": ["expected_result"]},
-          "then": {"properties": {"needs_clarification": {"const": true}}}
+          "if": {
+            "properties": {
+              "expected_result": {
+                "type": "null"
+              }
+            },
+            "required": [
+              "expected_result"
+            ]
+          },
+          "then": {
+            "properties": {
+              "needs_clarification": {
+                "const": true
+              }
+            }
+          }
         }
       ]
     }

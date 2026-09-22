@@ -7,7 +7,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from clarification import privacy_safe_metrics, rank_questions, record_answer, should_stop  # noqa: E402
+from workflow import privacy_safe_metrics, rank_questions, record_answer, should_stop  # noqa: E402
 
 
 class ClarificationTests(unittest.TestCase):

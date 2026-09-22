@@ -1,0 +1,1012 @@
+{
+ "name": "saas-accounts",
+ "domain": "SaaS / account management",
+ "locale": "en",
+ "sources": {
+  "docs/requirements.md": {
+   "role": "FUNCTIONAL_AUTHORITY",
+   "text": "# Account Management Requirements\n\nFR-01 - Invite Team Member\nAn account owner can invite a user by email. The invitation expires after 7 days.\n\nFR-02 - Accept Invitation\nAn invited user who accepts a valid invitation joins the account with the Member role.\nAn expired invitation cannot be accepted and the page shows the message \"Invitation expired\".\n\nBR-01 - Seat Limit\nAn account cannot have more active members than the seat limit of its plan. An invitation that would exceed the limit is rejected with the message \"No seats available\".\n\nBR-02 - Role Permissions\nOnly the Owner can invite members. Only the Owner can remove members.\n\nUC-01 - Onboard a Teammate\nMain flow: the owner invites a teammate, the teammate accepts the invitation and the teammate appears in the member list with the Member role.\n"
+  },
+  "src/invitations.py": {
+   "role": "IMPLEMENTATION_EVIDENCE",
+   "text": "INVITATION_TTL_DAYS = 7\n\n\ndef invite(account, actor, email):\n    if actor.role != \"OWNER\":\n        raise PermissionError(\"forbidden\")\n    if account.active_members() + account.pending_invitations() >= account.plan.seat_limit:\n        raise ValueError(\"No seats available\")\n    return account.create_invitation(email, ttl_days=INVITATION_TTL_DAYS)\n"
+  },
+  "tests/test_invitations.py": {
+   "role": "TEST_ASSET",
+   "text": "def test_owner_can_invite(account, owner):\n    assert invite(account, owner, \"a@example.com\").status == \"PENDING\"\n\n\ndef test_invite_rejected_when_seats_full(full_account, owner):\n    with pytest.raises(ValueError):\n        invite(full_account, owner, \"b@example.com\")\n\n\ndef test_token_hash_is_sha256():\n    assert len(hash_token(\"x\")) == 64\n"
+  }
+ },
+ "stages": {
+  "design": {
+   "domain_model": {
+    "actors": [
+     "Owner",
+     "Member",
+     "invited user"
+    ],
+    "entities": [
+     "account",
+     "invitation",
+     "membership",
+     "plan"
+    ],
+    "states": [
+     "invitation pending",
+     "invitation accepted",
+     "invitation expired"
+    ],
+    "operations": [
+     "invite member",
+     "accept invitation",
+     "remove member"
+    ],
+    "invariants": [
+     "active members never exceed the plan seat limit"
+    ],
+    "permissions": [
+     "only Owner invites",
+     "only Owner removes"
+    ],
+    "integrations": [
+     "email delivery"
+    ],
+    "dependencies": [
+     "email provider"
+    ],
+    "observables": [
+     "member list",
+     "invitation status",
+     "error messages"
+    ],
+    "failure_surfaces": [
+     "email delivery failure",
+     "simultaneous acceptance"
+    ]
+   },
+   "requirements": [
+    {
+     "key": "FR-01",
+     "source_identifier": "FR-01",
+     "source_statement": "An account owner can invite a user by email; the invitation expires after 7 days."
+    },
+    {
+     "key": "FR-02",
+     "source_identifier": "FR-02",
+     "source_statement": "An invited user who accepts a valid invitation joins with the Member role; an expired invitation cannot be accepted."
+    },
+    {
+     "key": "BR-01",
+     "source_identifier": "BR-01",
+     "source_statement": "Active members never exceed the plan seat limit."
+    },
+    {
+     "key": "BR-02",
+     "source_identifier": "BR-02",
+     "source_statement": "Only the Owner can invite or remove members."
+    },
+    {
+     "key": "UC-01",
+     "source_identifier": "UC-01",
+     "source_statement": "Owner invites a teammate who accepts and appears in the member list."
+    }
+   ],
+   "claims": [
+    {
+     "key": "C1",
+     "requirement": "FR-01",
+     "text": "The owner invites a user by email and a pending invitation is created."
+    },
+    {
+     "key": "C2",
+     "requirement": "FR-01",
+     "text": "An invitation expires 7 days after it was sent."
+    },
+    {
+     "key": "C3",
+     "requirement": "FR-02",
+     "text": "Accepting a valid invitation adds the user to the account with the Member role."
+    },
+    {
+     "key": "C4",
+     "requirement": "FR-02",
+     "text": "An expired invitation cannot be accepted and the page shows \"Invitation expired\"."
+    },
+    {
+     "key": "C5",
+     "requirement": "BR-01",
+     "text": "An invitation that would exceed the seat limit is rejected with \"No seats available\"."
+    },
+    {
+     "key": "C6",
+     "requirement": "BR-02",
+     "text": "A Member cannot invite users."
+    },
+    {
+     "key": "C7",
+     "requirement": "BR-02",
+     "text": "A Member cannot remove members."
+    },
+    {
+     "key": "C8",
+     "requirement": "UC-01",
+     "text": "After onboarding, the teammate appears in the member list with the Member role."
+    }
+   ],
+   "tests": [
+    {
+     "key": "T1",
+     "claims": [
+      "C1"
+     ],
+     "title": "Owner invites a user by email",
+     "objective": "Verify that the owner can create a pending invitation for an email address.",
+     "family": "Invitations",
+     "actor": "Owner",
+     "state": "account with free seats",
+     "trigger": "owner submits an invitation for an email",
+     "expected": "A pending invitation is created for the email.",
+     "failure_domain": "invitation creation",
+     "primary_type": "FUNCTIONAL",
+     "priority": "HIGH",
+     "priority_reason": "Core onboarding flow."
+    },
+    {
+     "key": "T2",
+     "claims": [
+      "C2"
+     ],
+     "title": "Invitation expires after seven days",
+     "objective": "Verify that an invitation becomes expired seven days after it was sent.",
+     "family": "Invitations",
+     "actor": "invited user",
+     "state": "invitation sent eight days ago",
+     "trigger": "invited user opens the invitation",
+     "expected": "The invitation status is expired after 7 days.",
+     "failure_domain": "invitation expiry",
+     "primary_type": "BOUNDARY",
+     "priority": "MEDIUM",
+     "priority_reason": "Stale invitations must not grant access."
+    },
+    {
+     "key": "T3",
+     "claims": [
+      "C3"
+     ],
+     "title": "Valid invitation adds a member",
+     "objective": "Verify that accepting a valid invitation adds the user with the Member role.",
+     "family": "Invitations",
+     "actor": "invited user",
+     "state": "pending valid invitation",
+     "trigger": "invited user accepts the invitation",
+     "expected": "The user joins the account with the Member role.",
+     "failure_domain": "membership creation",
+     "primary_type": "FUNCTIONAL",
+     "priority": "HIGH",
+     "priority_reason": "Without it nobody can join."
+    },
+    {
+     "key": "T4",
+     "claims": [
+      "C4"
+     ],
+     "title": "Expired invitation cannot be accepted",
+     "objective": "Verify that an expired invitation is refused with the documented message.",
+     "family": "Invitations",
+     "actor": "invited user",
+     "state": "expired invitation",
+     "trigger": "invited user accepts the expired invitation",
+     "expected": "The page shows \"Invitation expired\" and no membership is created.",
+     "failure_domain": "expired invitation rejection",
+     "primary_type": "NEGATIVE",
+     "priority": "HIGH",
+     "priority_reason": "Prevents stale access.",
+     "indivisible_contract": "the refusal message and the absence of membership are one rejection outcome"
+    },
+    {
+     "key": "T5",
+     "claims": [
+      "C5"
+     ],
+     "title": "Invitation beyond the seat limit is rejected",
+     "objective": "Verify that an invitation exceeding the seat limit is rejected.",
+     "family": "Seat limit",
+     "actor": "Owner",
+     "state": "account with all seats used",
+     "trigger": "owner submits an invitation",
+     "expected": "The invitation is rejected with \"No seats available\".",
+     "failure_domain": "seat limit enforcement",
+     "primary_type": "NEGATIVE",
+     "priority": "CRITICAL",
+     "priority_reason": "Billing integrity."
+    },
+    {
+     "key": "T6",
+     "claims": [
+      "C6"
+     ],
+     "title": "Member cannot invite users",
+     "objective": "Verify that a Member is not allowed to invite users.",
+     "family": "Role permissions",
+     "actor": "Member",
+     "state": "account with free seats",
+     "trigger": "member submits an invitation",
+     "expected": "The invitation is refused as not permitted.",
+     "failure_domain": "invite authorization",
+     "primary_type": "AUTHORIZATION",
+     "priority": "HIGH",
+     "priority_reason": "Access control."
+    },
+    {
+     "key": "T7",
+     "claims": [
+      "C7"
+     ],
+     "title": "Member cannot remove members",
+     "objective": "Verify that a Member is not allowed to remove another member.",
+     "family": "Role permissions",
+     "actor": "Member",
+     "state": "account with two members",
+     "trigger": "member requests removal of another member",
+     "expected": "The removal is refused as not permitted.",
+     "failure_domain": "removal authorization",
+     "primary_type": "AUTHORIZATION",
+     "priority": "HIGH",
+     "priority_reason": "Access control."
+    },
+    {
+     "key": "T8",
+     "claims": [
+      "C8"
+     ],
+     "title": "New teammate is listed as Member",
+     "objective": "Verify that the onboarded teammate appears in the member list with the Member role.",
+     "family": "Invitations",
+     "actor": "Owner",
+     "state": "teammate accepted the invitation",
+     "trigger": "owner opens the member list",
+     "expected": "The teammate appears in the member list with the Member role.",
+     "failure_domain": "member list visibility",
+     "primary_type": "FUNCTIONAL",
+     "priority": "MEDIUM",
+     "priority_reason": "Confirms onboarding result."
+    }
+   ],
+   "questions": [
+    {
+     "key": "Q-REUSE",
+     "question": "What should happen when an already accepted invitation link is opened again?",
+     "reason": "The requirements define valid and expired invitations only.",
+     "requirements": [
+      "FR-02"
+     ],
+     "impact": "EXPECTED_RESULT"
+    },
+    {
+     "key": "Q-EMAIL",
+     "question": "What must the owner see when the email provider fails to deliver an invitation?",
+     "reason": "No delivery failure policy is documented.",
+     "requirements": [
+      "FR-01"
+     ],
+     "impact": "EXPECTED_RESULT"
+    }
+   ],
+   "findings": [
+    {
+     "key": "F-PENDING",
+     "type": "IMPLEMENTATION_DIVERGENCE",
+     "statement": "The implementation counts pending invitations against the seat limit, while the requirement limits active members only.",
+     "requirements": [
+      "BR-01"
+     ],
+     "source_refs": [
+      {
+       "source": "src/invitations.py",
+       "reference": "invite seat check"
+      }
+     ],
+     "coverage_disposition": "COVERED_BY_EXISTING_SCENARIO",
+     "tests": [
+      "T5"
+     ]
+    }
+   ]
+  },
+  "expansion": {
+   "dimensions": [
+    {
+     "dimension": "NEGATIVE",
+     "summary": "Invalid invitation uses were reviewed for every invitation state.",
+     "candidates": [
+      {
+       "key": "N1",
+       "description": "Reopening an invitation that was already accepted.",
+       "disposition": "QUESTION_REQUIRED",
+       "question": "Q-REUSE"
+      }
+     ]
+    },
+    {
+     "dimension": "BOUNDARY",
+     "summary": "Seat limit and expiry boundaries were reviewed.",
+     "candidates": [
+      {
+       "key": "B1",
+       "description": "Inviting the last free seat is still allowed.",
+       "disposition": "MATERIALIZED",
+       "test": {
+        "key": "D1",
+        "basis": "DERIVED",
+        "anchors": [
+         "C5"
+        ],
+        "oracle_source": {
+         "source": "docs/requirements.md",
+         "reference": "BR-01"
+        },
+        "title": "Last free seat can still be invited",
+        "objective": "Verify that an invitation that fills exactly the last seat is accepted.",
+        "family": "Seat limit",
+        "actor": "Owner",
+        "state": "account with one free seat",
+        "trigger": "owner submits an invitation",
+        "expected": "The invitation is created because the seat limit is not exceeded.",
+        "failure_domain": "seat limit off-by-one",
+        "primary_type": "BOUNDARY",
+        "priority": "HIGH",
+        "priority_reason": "Off-by-one would block paying customers."
+       }
+      }
+     ]
+    },
+    {
+     "dimension": "OPERATOR_ERROR",
+     "summary": "Owner and invited-user mistakes were reviewed against the invitation workflow.",
+     "candidates": [
+      {
+       "key": "O1",
+       "description": "A Member tries to invite someone as if they were the Owner.",
+       "pattern": "WRONG_ACTOR",
+       "disposition": "ALREADY_COVERED",
+       "covered_by": [
+        "T6"
+       ],
+       "intent": {
+        "actor": "Member",
+        "state": "account with free seats",
+        "trigger": "member submits an invitation",
+        "failure_domain": "invite authorization",
+        "expected": "the invitation is refused as not permitted"
+       }
+      },
+      {
+       "key": "O2",
+       "description": "The invited user opens the same accepted link a second time.",
+       "pattern": "REPEATED_ACTION",
+       "disposition": "QUESTION_REQUIRED",
+       "question": "Q-REUSE"
+      }
+     ],
+     "patterns_reviewed": [
+      {
+       "items": [
+        "WRONG_ACTOR",
+        "REPEATED_ACTION"
+       ],
+       "status": "CANDIDATES"
+      },
+      {
+       "items": [
+        "WRONG_RESOURCE",
+        "WRONG_ASSOCIATION",
+        "WRONG_STATE",
+        "WRONG_SEQUENCE",
+        "OMITTED_ACTION",
+        "STALE_OPERATION",
+        "PARTIAL_OPERATION",
+        "CROSS_CONTEXT_MISTAKE",
+        "PHYSICAL_DIGITAL_MISMATCH",
+        "WRONG_ACKNOWLEDGEMENT",
+        "MANUAL_AFTER_AUTOMATIC",
+        "ABANDONED_OPERATION"
+       ],
+       "status": "NOT_APPLICABLE",
+       "reason": "the product has a single invite and accept action per invitation and no physical objects or background automation"
+      }
+     ]
+    },
+    {
+     "dimension": "MISUSE",
+     "summary": "Deliberate misuse of invitation links was reviewed; the only case depends on the reuse policy question.",
+     "candidates": []
+    },
+    {
+     "dimension": "STATE_TRANSITION",
+     "summary": "Invitation states pending, accepted and expired were reviewed.",
+     "candidates": [
+      {
+       "key": "S1",
+       "description": "Pending invitation becomes a membership on acceptance.",
+       "disposition": "ALREADY_COVERED",
+       "covered_by": [
+        "T3"
+       ],
+       "intent": {
+        "actor": "invited user",
+        "state": "pending valid invitation",
+        "trigger": "invited user accepts the invitation",
+        "failure_domain": "membership creation",
+        "expected": "the user joins the account with the Member role"
+       }
+      }
+     ]
+    },
+    {
+     "dimension": "DECISION_TABLE",
+     "summary": "The role by action matrix has two roles and two actions, already covered by the permission tests.",
+     "candidates": []
+    },
+    {
+     "dimension": "CONCURRENCY",
+     "summary": "Simultaneous acceptance competing for the last seat was reviewed.",
+     "candidates": [
+      {
+       "key": "CC1",
+       "description": "Two invited users accept at the same time when one seat is left.",
+       "surface": "CONCURRENCY",
+       "disposition": "MATERIALIZED",
+       "test": {
+        "key": "D2",
+        "basis": "DERIVED",
+        "anchors": [
+         "C5"
+        ],
+        "oracle_source": {
+         "source": "docs/requirements.md",
+         "reference": "BR-01"
+        },
+        "title": "Simultaneous acceptance never exceeds the seat limit",
+        "objective": "Verify that concurrent acceptances cannot push active members beyond the seat limit.",
+        "family": "Seat limit",
+        "actor": "two invited users",
+        "state": "account with one free seat and two pending invitations",
+        "trigger": "both users accept at the same moment",
+        "expected": "Active members stay within the seat limit after both acceptances.",
+        "failure_domain": "seat limit under concurrency",
+        "primary_type": "CONCURRENCY",
+        "priority": "HIGH",
+        "priority_reason": "Race would break the billing invariant."
+       }
+      }
+     ]
+    },
+    {
+     "dimension": "RACE_CONDITION",
+     "summary": "Timing races reduce to the simultaneous acceptance candidate in CONCURRENCY.",
+     "candidates": []
+    },
+    {
+     "dimension": "IDEMPOTENCY",
+     "summary": "Repeated acceptance depends on the reuse policy question; no other repeatable operation exists.",
+     "candidates": []
+    },
+    {
+     "dimension": "INTEGRATION",
+     "summary": "The email delivery dependency was reviewed.",
+     "candidates": [
+      {
+       "key": "I1",
+       "description": "Email provider fails while sending an invitation.",
+       "surface": "EXTERNAL_DEPENDENCY",
+       "disposition": "MATERIALIZED",
+       "test": {
+        "key": "X1",
+        "basis": "EXPLORATORY",
+        "anchors": [
+         "C1"
+        ],
+        "questions": [
+         "Q-EMAIL"
+        ],
+        "title": "Invitation when email delivery fails",
+        "objective": "Explore what the owner observes when the email provider rejects the invitation email.",
+        "family": "Invitations",
+        "actor": "Owner",
+        "state": "email provider unavailable",
+        "trigger": "owner submits an invitation",
+        "expected": "No invitation is reported as delivered while the provider is failing.",
+        "failure_domain": "invitation delivery failure",
+        "primary_type": "INTEGRATION",
+        "priority": "MEDIUM",
+        "priority_reason": "Silent delivery failure blocks onboarding."
+       }
+      }
+     ]
+    },
+    {
+     "dimension": "RECOVERY",
+     "summary": "Recovery after an email failure depends on the undefined delivery policy (see the exploratory test).",
+     "candidates": []
+    },
+    {
+     "dimension": "CHAOS",
+     "summary": "Failure surfaces were reviewed against the documented architecture.",
+     "candidates": [],
+     "surfaces_reviewed": [
+      {
+       "items": [
+        "EXTERNAL_DEPENDENCY",
+        "CONCURRENCY"
+       ],
+       "status": "CANDIDATES"
+      },
+      {
+       "items": [
+        "NETWORK",
+        "MIDDLEWARE",
+        "DEVICE_HARDWARE",
+        "CACHE",
+        "DATABASE",
+        "ASYNC_WORKER",
+        "RETRY",
+        "DUPLICATE_EVENT",
+        "OUT_OF_ORDER_EVENT",
+        "PARTIAL_COMMIT",
+        "PROCESS_RESTART",
+        "SESSION_INTERRUPTION",
+        "RACE_CONDITION"
+       ],
+       "status": "NOT_APPLICABLE",
+       "reason": "the selected sources describe a synchronous web workflow with no cache, queue, devices or retries"
+      }
+     ]
+    },
+    {
+     "dimension": "SECURITY",
+     "summary": "Invitation link confidentiality is not described by the selected sources.",
+     "candidates": []
+    },
+    {
+     "dimension": "AUTHORIZATION",
+     "summary": "Owner-only invite and removal are covered by the permission tests.",
+     "candidates": []
+    },
+    {
+     "dimension": "DATA_INTEGRITY",
+     "summary": "Membership integrity is covered by the seat limit tests.",
+     "candidates": []
+    },
+    {
+     "dimension": "CROSS_REQUIREMENT",
+     "summary": "Interaction between expiry and seat limit was reviewed; no documented rule links them.",
+     "candidates": []
+    },
+    {
+     "dimension": "E2E",
+     "summary": "The onboarding use case was composed from atomic tests.",
+     "candidates": [
+      {
+       "key": "E1",
+       "description": "Owner invites, teammate accepts, teammate is listed.",
+       "use_case": "UC-01",
+       "disposition": "MATERIALIZED",
+       "test": {
+        "key": "E2E1",
+        "title": "Onboard a teammate end to end",
+        "objective": "Verify the complete onboarding journey from invitation to member list.",
+        "family": "Invitations",
+        "actor": "Owner and invited user",
+        "state": "account with free seats",
+        "trigger": "owner invites a teammate who accepts",
+        "expected": "The teammate appears in the member list with the Member role.",
+        "failure_domain": "onboarding journey",
+        "primary_type": "E2E",
+        "priority": "HIGH",
+        "priority_reason": "Main business journey.",
+        "stages": [
+         {
+          "name": "invite",
+          "test": "T1",
+          "trigger": "owner submits an invitation for an email",
+          "observation": "a pending invitation is created"
+         },
+         {
+          "name": "accept",
+          "test": "T3",
+          "trigger": "invited user accepts the invitation",
+          "observation": "the user joins with the Member role"
+         },
+         {
+          "name": "list",
+          "test": "T8",
+          "trigger": "owner opens the member list",
+          "observation": "the teammate appears in the member list"
+         }
+        ]
+       }
+      }
+     ]
+    }
+   ],
+   "test_assets": [
+    {
+     "asset": "tests/test_invitations.py::test_owner_can_invite",
+     "disposition": "ALREADY_COVERED_BY",
+     "covered_by": [
+      "T1"
+     ],
+     "intent": {
+      "actor": "Owner",
+      "state": "account with free seats",
+      "trigger": "owner submits an invitation for an email",
+      "failure_domain": "invitation creation",
+      "expected": "a pending invitation is created"
+     }
+    },
+    {
+     "asset": "tests/test_invitations.py::test_invite_rejected_when_seats_full",
+     "disposition": "ALREADY_COVERED_BY",
+     "covered_by": [
+      "T5"
+     ],
+     "intent": {
+      "actor": "Owner",
+      "state": "account with all seats used",
+      "trigger": "owner submits an invitation",
+      "failure_domain": "seat limit enforcement",
+      "expected": "the invitation is rejected"
+     }
+    },
+    {
+     "asset": "tests/test_invitations.py::test_token_hash_is_sha256",
+     "disposition": "TECHNICAL_ONLY",
+     "reason": "hash length is an implementation detail with no business behavior"
+    }
+   ]
+  },
+  "procedures": {
+   "procedures": [
+    {
+     "test": "T1",
+     "preconditions": [
+      "USER_OWNER_A is signed in to ACCOUNT_A, which has free seats."
+     ],
+     "test_data": [
+      {
+       "name": "USER_OWNER_A",
+       "description": "user with the Owner role in ACCOUNT_A"
+      },
+      {
+       "name": "EMAIL_NEW",
+       "description": "an email address not yet invited to ACCOUNT_A"
+      }
+     ],
+     "steps": [
+      {
+       "action": "Open the member management page of ACCOUNT_A.",
+       "expected_result": "The page shows the invite form."
+      },
+      {
+       "action": "Submit an invitation for EMAIL_NEW.",
+       "expected_result": "A pending invitation for EMAIL_NEW is created and listed."
+      }
+     ],
+     "automation": {
+      "suitability": "HIGH",
+      "layer": "UI"
+     }
+    },
+    {
+     "test": "T2",
+     "preconditions": [
+      "An invitation for EMAIL_OLD was sent to ACCOUNT_A eight days ago."
+     ],
+     "test_data": [
+      {
+       "name": "EMAIL_OLD",
+       "description": "invited address whose invitation is older than seven days"
+      }
+     ],
+     "steps": [
+      {
+       "action": "Open the invitation link received by EMAIL_OLD.",
+       "expected_result": "The invitation page loads."
+      },
+      {
+       "action": "Check the invitation status shown.",
+       "expected_result": "The invitation status is expired because more than 7 days passed."
+      }
+     ],
+     "automation": {
+      "suitability": "MEDIUM",
+      "layer": "UI"
+     },
+     "unknowns": [
+      {
+       "kind": "MISSING_FIXTURE",
+       "detail": "a clock or seeded invitation date is needed to automate the age"
+      }
+     ]
+    },
+    {
+     "test": "T3",
+     "preconditions": [
+      "A pending, unexpired invitation exists for EMAIL_NEW in ACCOUNT_A."
+     ],
+     "test_data": [
+      {
+       "name": "EMAIL_NEW",
+       "description": "invited address with a valid pending invitation"
+      }
+     ],
+     "steps": [
+      {
+       "action": "Open the invitation link as EMAIL_NEW.",
+       "expected_result": "The invitation page offers the accept action."
+      },
+      {
+       "action": "Accept the invitation.",
+       "expected_result": "EMAIL_NEW joins ACCOUNT_A with the Member role."
+      }
+     ],
+     "automation": {
+      "suitability": "HIGH",
+      "layer": "UI"
+     }
+    },
+    {
+     "test": "T4",
+     "preconditions": [
+      "An expired invitation exists for EMAIL_OLD in ACCOUNT_A."
+     ],
+     "test_data": [
+      {
+       "name": "EMAIL_OLD",
+       "description": "invited address whose invitation expired"
+      }
+     ],
+     "steps": [
+      {
+       "action": "Open the invitation link as EMAIL_OLD.",
+       "expected_result": "The invitation page loads."
+      },
+      {
+       "action": "Accept the invitation.",
+       "expected_result": "The page shows \"Invitation expired\" and no membership is created for EMAIL_OLD."
+      }
+     ],
+     "automation": {
+      "suitability": "HIGH",
+      "layer": "UI"
+     }
+    },
+    {
+     "test": "T5",
+     "preconditions": [
+      "USER_OWNER_A is signed in to ACCOUNT_FULL, whose active members equal the seat limit."
+     ],
+     "test_data": [
+      {
+       "name": "ACCOUNT_FULL",
+       "description": "account whose active members equal the plan seat limit"
+      }
+     ],
+     "steps": [
+      {
+       "action": "Open the member management page of ACCOUNT_FULL.",
+       "expected_result": "The invite form is shown."
+      },
+      {
+       "action": "Submit an invitation for EMAIL_NEW.",
+       "expected_result": "The invitation is rejected with \"No seats available\"."
+      }
+     ],
+     "automation": {
+      "suitability": "HIGH",
+      "layer": "UI"
+     }
+    },
+    {
+     "test": "T6",
+     "preconditions": [
+      "USER_MEMBER_A is signed in to ACCOUNT_A with the Member role."
+     ],
+     "test_data": [
+      {
+       "name": "USER_MEMBER_A",
+       "description": "user with the Member role in ACCOUNT_A"
+      }
+     ],
+     "steps": [
+      {
+       "action": "Submit an invitation for EMAIL_NEW as USER_MEMBER_A.",
+       "expected_result": "The invitation is refused as not permitted."
+      }
+     ],
+     "automation": {
+      "suitability": "HIGH",
+      "layer": "API"
+     },
+     "single_step_reason": "one request is the whole authorization check"
+    },
+    {
+     "test": "T7",
+     "preconditions": [
+      "USER_MEMBER_A and USER_MEMBER_B belong to ACCOUNT_A with the Member role."
+     ],
+     "test_data": [
+      {
+       "name": "USER_MEMBER_B",
+       "description": "second member of ACCOUNT_A"
+      }
+     ],
+     "steps": [
+      {
+       "action": "Request removal of USER_MEMBER_B as USER_MEMBER_A.",
+       "expected_result": "The removal is refused as not permitted."
+      }
+     ],
+     "automation": {
+      "suitability": "HIGH",
+      "layer": "API"
+     },
+     "single_step_reason": "one request is the whole authorization check"
+    },
+    {
+     "test": "T8",
+     "preconditions": [
+      "EMAIL_NEW accepted its invitation to ACCOUNT_A."
+     ],
+     "test_data": [
+      {
+       "name": "USER_OWNER_A",
+       "description": "user with the Owner role in ACCOUNT_A"
+      }
+     ],
+     "steps": [
+      {
+       "action": "Open the member list of ACCOUNT_A as USER_OWNER_A.",
+       "expected_result": "The member list is displayed."
+      },
+      {
+       "action": "Locate EMAIL_NEW in the member list.",
+       "expected_result": "The teammate appears in the member list with the Member role."
+      }
+     ],
+     "automation": {
+      "suitability": "HIGH",
+      "layer": "UI"
+     }
+    },
+    {
+     "test": "D1",
+     "preconditions": [
+      "ACCOUNT_ONE_LEFT has exactly one free seat."
+     ],
+     "test_data": [
+      {
+       "name": "ACCOUNT_ONE_LEFT",
+       "description": "account with active members equal to the seat limit minus one"
+      }
+     ],
+     "steps": [
+      {
+       "action": "Open the member management page of ACCOUNT_ONE_LEFT as its owner.",
+       "expected_result": "The invite form is shown."
+      },
+      {
+       "action": "Submit an invitation for EMAIL_NEW.",
+       "expected_result": "The invitation is created because the seat limit is not exceeded."
+      }
+     ],
+     "automation": {
+      "suitability": "HIGH",
+      "layer": "UI"
+     }
+    },
+    {
+     "test": "D2",
+     "preconditions": [
+      "ACCOUNT_ONE_LEFT has one free seat and two pending invitations for EMAIL_X and EMAIL_Y."
+     ],
+     "test_data": [
+      {
+       "name": "EMAIL_X",
+       "description": "first pending invitee"
+      },
+      {
+       "name": "EMAIL_Y",
+       "description": "second pending invitee"
+      }
+     ],
+     "steps": [
+      {
+       "action": "Prepare two sessions, one for EMAIL_X and one for EMAIL_Y, each on its invitation page.",
+       "expected_result": "Both invitation pages offer the accept action."
+      },
+      {
+       "action": "Accept both invitations at the same moment.",
+       "expected_result": "At most one acceptance succeeds."
+      },
+      {
+       "action": "Count the active members of ACCOUNT_ONE_LEFT.",
+       "expected_result": "Active members stay within the seat limit after both acceptances."
+      }
+     ],
+     "automation": {
+      "suitability": "MEDIUM",
+      "layer": "API"
+     },
+     "oracle_step": 3
+    },
+    {
+     "test": "X1",
+     "preconditions": [
+      "The email provider used by the product is made unavailable in the test environment."
+     ],
+     "test_data": [
+      {
+       "name": "USER_OWNER_A",
+       "description": "user with the Owner role in ACCOUNT_A"
+      }
+     ],
+     "steps": [
+      {
+       "action": "Submit an invitation for EMAIL_NEW as USER_OWNER_A.",
+       "expected_result": "The product responds to the submission."
+      },
+      {
+       "action": "Check the invitation list and any message shown.",
+       "expected_result": "No invitation is reported as delivered while the provider is failing."
+      }
+     ],
+     "automation": {
+      "suitability": "LOW",
+      "layer": "INTEGRATION"
+     },
+     "unknowns": [
+      {
+       "kind": "AMBIGUOUS_POLICY",
+       "detail": "delivery failure policy is undefined",
+       "question": "Q-EMAIL"
+      }
+     ]
+    },
+    {
+     "test": "E2E1",
+     "preconditions": [
+      "ACCOUNT_A has free seats and USER_OWNER_A is signed in."
+     ],
+     "test_data": [
+      {
+       "name": "USER_OWNER_A",
+       "description": "user with the Owner role in ACCOUNT_A"
+      },
+      {
+       "name": "EMAIL_NEW",
+       "description": "address of the teammate"
+      }
+     ],
+     "steps": [
+      {
+       "action": "Submit an invitation for EMAIL_NEW as USER_OWNER_A.",
+       "expected_result": "A pending invitation is created."
+      },
+      {
+       "action": "Open the invitation link as EMAIL_NEW and accept it.",
+       "expected_result": "EMAIL_NEW joins with the Member role."
+      },
+      {
+       "action": "Open the member list as USER_OWNER_A.",
+       "expected_result": "The teammate appears in the member list with the Member role."
+      }
+     ],
+     "automation": {
+      "suitability": "HIGH",
+      "layer": "UI"
+     }
+    }
+   ]
+  }
+ }
+}
