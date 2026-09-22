@@ -1,5 +1,7 @@
 # High-rigor, high-recall design (v2.2)
 
+For the corrective additive layer introduced in v2.2.1, also read [additive-expansion.md](additive-expansion.md).
+
 Establish the complete selected-source universe before claiming coverage. Classify every selected source by authority and family, disposition every referenced authoritative source, then perform the independent structural review and atomic Claim → Clause → Coverage Point gates.
 
 Scenario is an organizational family, not a compression target. Every independently diagnosable candidate remains a canonical atomic Test Case. Shared setup or a shared event may create a merge suggestion for manual review, but `actual_merges` stays zero in the atomic view. E2E cases are explicit compositions and never replace their atomic members.

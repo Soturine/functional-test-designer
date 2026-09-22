@@ -1,4 +1,4 @@
-# Functional Test Designer v2.2.0
+# Functional Test Designer v2.2.1
 
 Agent Skill para projetar Test Cases funcionais manuais, rastreáveis e executáveis a partir somente das fontes explicitamente selecionadas pelo usuário.
 
@@ -42,6 +42,10 @@ Coleta/análise de evidência
  Atomic Claims → Clauses → CPs
             ↓
  Oportunidades em evidências selecionadas
+            ↓
+ Normative Atomic TCs → Freeze
+            ↓
+ Additive expansion with dispositions
             ↓
       Scenario Families
             ↓
@@ -231,6 +235,8 @@ Claims preservam efeitos e alternativas observáveis de forma atômica, inclusiv
 
 Cada TC 2.2 declara sua base (`ACCEPTANCE`, `CHARACTERIZATION`, `DERIVED`, `EXPLORATORY`, `REGRESSION` ou `E2E`), tipo primário, readiness e metadados de automação. Missing implementation, Finding ou Question não apagam um design testável: alteram a classificação/status e mantêm as referências recíprocas. Casos E2E compõem TCs atômicos explicitamente, em vez de esconder a cobertura somente nos steps.
 
+Na 2.2.1, a suíte normativa Acceptance é congelada antes de Operator Error/Misuse, Risk/Chaos/Recovery, Characterization, Cross-Requirement e E2E. Essas fases são estritamente aditivas: cada oportunidade recebe uma disposição e o gate `BASELINE_PRESERVATION_VALID` compara IDs, lineage e oracles antes/depois. O inventário também desce do arquivo para unidades normativas e fluxos individuais de cada caso de uso.
+
 Steps seguem a complexidade natural do caminho documentado: navegação, busca, seleção, trigger e observação permanecem ações operacionais separadas quando a sequência suportada exige isso, enquanto um comportamento de uma única ação pode continuar com um Step. O relatório offline permanece uma projeção determinística e leve do JSON validado.
 
 Uma ação vaga não pode comprimir um caminho detalhado disponível nas fontes. Casos com lacuna material de superfície, aquisição de dados, trigger ou observação ficam `NEEDS_REVIEW`; `READY` indica que uma pessoa nova no produto consegue executar o procedimento no nível sustentado pelas evidências. Readiness de automação é mais estrita e não autoriza inventar seletores ou código de runner.
@@ -288,6 +294,8 @@ scripts/source_inventory.py       Universo de fontes e autoridade v2.2
 scripts/quality_gates.py          Gates independentes de qualidade
 scripts/benchmark_reconciliation.py  Reconciliação explicável sem meta de contagem
 scripts/risk_expansion.py         Expansão de risco sustentada por evidência
+scripts/additive_expansion.py     Freeze normativo e gates aditivos v2.2.1
+scripts/reference_integrity.py    Evidência física e selecionada
 scripts/source_accounting.py        Ledger das fontes selecionadas e revisão independente
 scripts/test_asset_inventory.py     Inventário estático de ativos de teste selecionados
 scripts/risk_coverage.py            Matriz de risco e revisão de fluxos para E2E

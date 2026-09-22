@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.2.1
+
+- Added a mandatory frozen normative baseline and a preservation gate before additive expansion.
+- Added below-file normative-unit and use-case-flow accounting.
+- Required explicit dispositions and materialization for supported risk, misuse, Test Asset, and characterization opportunities.
+- Added physical evidence-reference, semantic E2E-composition, and Test Data reachability gates.
+- Added procedure-template, priority-distribution, full-run provenance, and additive-layer diagnostics.
+- Added advisory merge-candidate IDs/details, renderer counters, UTF-8 title fallback, and terminal run-state hygiene.
+- Preserved public schema 2.2, schema 1.2 compatibility, atomic Acceptance identities, normative oracles, and zero destructive merges.
+
 ## 2.2.0
 
 - Added an authority-aware source-universe gate before atomic extraction.

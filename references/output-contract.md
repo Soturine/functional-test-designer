@@ -119,7 +119,7 @@ Use `READY`, `NEEDS_REVIEW`, or `BLOCKED` for status and `CRITICAL`, `HIGH`, `ME
 
 `## Fluxo do Teste` is the final section. Its final fenced `mermaid` block is a linear action-to-expected-result flow in step order. It does not invent branches or results. A missing result is labeled as requiring clarification.
 
-Markdown derives a `Requirement group` label from an original `RF...` or `RN...` identifier and official title in requirement source refs. It renders `RF001 — Official title`, uses `RF001 — Sem título extraído` when only the identifier is available, and otherwise falls back to `REQ-XXX`. It does not add that label to JSON.
+Markdown derives a `Requirement group` label from an original `RF...` or `RN...` identifier and official title in requirement source refs. It renders `RF001 — Official title`; when the reference contains only the identifier, it uses the normalized requirement statement as the title, and otherwise falls back to `REQ-XXX`. It does not add that label to JSON.
 
 ## HTML
 

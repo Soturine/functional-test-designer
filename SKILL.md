@@ -23,9 +23,11 @@ Read [output-contract-v2.2.md](references/output-contract-v2.2.md) for current g
 
 ```text
 Selected sources -> Scope lock -> Source accounting ledger -> Evidence collection/barrier
--> Independent source-first review -> Atomic source claims -> Clauses -> Coverage Points
--> Selected-evidence opportunity audit (Test Assets, risk matrix, use-case flows)
--> Independent candidates -> Scenario families -> Atomic frozen Test identities
+-> Source-family/unit inventory -> Independent source-first review
+-> Atomic source claims -> Clauses -> Coverage Points
+-> Normative Acceptance candidates -> Freeze baseline
+-> Additive opportunity audit (Test Assets, misuse, risk, characterization, E2E)
+-> Scenario families -> Atomic frozen Test identities
 -> Procedural enrichment -> Readiness -> Validation
 -> Canonical run state -> Selected public projections
 ```
@@ -41,6 +43,7 @@ Read these detailed contracts only when their stage is relevant:
 - [evidence-enrichment.md](references/evidence-enrichment.md): selected-source Evidence Packs and provenance.
 - [scenario-opportunities.md](references/scenario-opportunities.md): dispositions for normative, divergence, implementation, QA-asset, and bounded E2E opportunities.
 - [high-recall-design.md](references/high-recall-design.md): v2.2 Scenario Families, test bases, non-destructive merge candidates, risk expansion, and quality gates.
+- [additive-expansion.md](references/additive-expansion.md): v2.2.1 baseline preservation, source units, challenge sets, reachability, evidence references, and additive dispositions.
 - [procedural-execution.md](references/procedural-execution.md) and [procedural-readiness.md](references/procedural-readiness.md): post-freeze steps and human/automation readiness.
 - [cross-rf-audit.md](references/cross-rf-audit.md): advisory overlap analysis without automatic deletion or merge.
 
@@ -54,6 +57,7 @@ Read these detailed contracts only when their stage is relevant:
 - Review suspicious compound Claims and Clauses again after materialization; an upstream summary cannot bypass atomicity merely by arriving pre-compressed.
 - Create one independently reviewable candidate per testable CP before grouping.
 - Preserve every independently diagnosable candidate as an atomic canonical TC. Shared RF, actor, screen, setup, Evidence Pack, title, event, or navigation may create a merge suggestion but never destroys the atomic view.
+- Freeze all normative Acceptance identities and oracles before any derived expansion. Every later phase is additive and must pass baseline preservation.
 - Scenario Families organize related atomic, negative, boundary, derived, characterization, and E2E cases. E2E cases explicitly compose atomic TCs.
 - Different triggers, actors, permissions, inputs, partitions, states, branches, platforms, or rerunnable Pass/Fail boundaries remain separate.
 - Independent legacy subtests become TCs; sequential dependent subtests become steps. Never emit `subtests`.
