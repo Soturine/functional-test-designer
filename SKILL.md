@@ -44,6 +44,7 @@ Read these detailed contracts only when their stage is relevant:
 - [scenario-opportunities.md](references/scenario-opportunities.md): dispositions for normative, divergence, implementation, QA-asset, and bounded E2E opportunities.
 - [high-recall-design.md](references/high-recall-design.md): v2.2 Scenario Families, test bases, non-destructive merge candidates, risk expansion, and quality gates.
 - [additive-expansion.md](references/additive-expansion.md): v2.2.1 baseline preservation, source units, challenge sets, reachability, evidence references, and additive dispositions.
+- [pipeline-integrity.md](references/pipeline-integrity.md): v2.2.2 runtime-owned gates, stage manifest, identifier/physical ledgers, Claim exercise, and publication integrity.
 - [procedural-execution.md](references/procedural-execution.md) and [procedural-readiness.md](references/procedural-readiness.md): post-freeze steps and human/automation readiness.
 - [cross-rf-audit.md](references/cross-rf-audit.md): advisory overlap analysis without automatic deletion or merge.
 
@@ -96,6 +97,7 @@ Before completion:
 - account for every discovered Test Asset behavior, every evidence-supported risk condition, and every documented use-case flow, using characterization plus a focused Question wherever the expected behavior is undefined;
 - confirm human/automation readiness classifications and reason codes;
 - validate canonical state and selected projections;
+- validate the ordered run manifest, canonical digest, publication digests, and runtime-owned gate evidence; never accept a final gate verdict from a generation request;
 - confirm render did not reread project sources;
 - preserve schema `2.2` plus `1.2` compatibility, exact artifact destination, offline HTML, Mermaid parity, and zero `subtests`;
 - report real diagnostics only, without source content, answers, credentials, or secrets, marking unobservable read, concurrency, and reasoning telemetry as unavailable instead of zero.

@@ -30,6 +30,13 @@ The enforced shared path also reports selected-source accounting (`resolved_sele
 
 The v2.2.1 additive path also records normative baseline before/after counts, source-unit families, CU flow accounting, risk/Test Asset dispositions, Characterization/E2E materialization, evidence-path and semantic-composition errors, Test Data reachability, procedure-template ratios, priority distribution, and full-run timing. `user_perceived_wall_time`, `source_analysis_time`, and `request_assembly_time` remain `null` when the host did not expose them; `official_pipeline_time` must not be presented as the user's complete wait.
 
+The v2.2.2 integrity path adds an ordered hash-chained run manifest; physical
+source and identifier ledgers; Claim exercise mapping; official Test Asset
+challenge data; and separate source-selection, source-reading, semantic,
+expansion, procedure, validation, and rendering timing. `0 gaps` applies only to
+the dimension whose independent gate passed and is never a synonym for universal
+coverage.
+
 Never copy selected source content into diagnostics.
 
 ## Stages

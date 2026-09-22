@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.2.2
+
+- Added an ordered, hash-chained runtime manifest for every official generation stage, canonical state, and published artifact.
+- Made gate results runtime-owned and rejected request-supplied quality verdicts.
+- Added atomic CP-to-Acceptance, Claim-to-Step/assertion, source-identifier, use-case-flow, Scenario Family, E2E-stage, automation, priority, and historical-baseline gates.
+- Added official physical-source, identifier, claim-exercise, and Test Asset challenge diagnostics.
+- Added publication tamper detection and an official validator mode using `--manifest`.
+- Preserved public schema 2.2, schema 1.2 compatibility, additive expansion, canonical atomic TCs, and advisory-only merge candidates.
+
 ## 2.2.1
 
 - Added a mandatory frozen normative baseline and a preservation gate before additive expansion.

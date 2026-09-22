@@ -10,6 +10,12 @@ The index retains sources, requirements, normative clauses, Findings, Coverage P
 
 A Scenario is a `SCENARIO_FAMILY`. Its `test_case_refs` may contain several canonical Test Cases; each TC still references exactly one family. A Coverage Point may target more than one TC when Acceptance, Characterization, Derived, or other independently diagnosable designs coexist.
 
+The v2.2.2 runtime may add optional `priority_reason`, `automation_blocker`,
+`claim_exercise_map`, `e2e_stage_map`, and `atomicity_exception` properties. Stored
+2.2 documents remain compatible, but official new runs derive and validate these
+where applicable. `atomicity_exception` is restricted to an auditable
+`INDIVISIBLE_CONTRACT`; it is not a general merge escape hatch.
+
 Every TC carries `test_basis`, `primary_type`, `secondary_tags`, `execution_status`, reciprocal `question_refs` and `finding_refs`, optional `composes`, and automation-readiness hints. An E2E TC must compose existing atomic TCs and cannot replace them. Non-E2E TCs cannot use `composes` to hide a journey.
 
 Questions classify their impact. Findings may list affected TCs and coverage disposition. Validators enforce reciprocal TC links, Scenario Family membership, CP targeting, E2E composition, merge-candidate references, source provenance, and all-PASS final quality gates.

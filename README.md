@@ -1,4 +1,4 @@
-# Functional Test Designer v2.2.1
+# Functional Test Designer v2.2.2
 
 Agent Skill para projetar Test Cases funcionais manuais, rastreáveis e executáveis a partir somente das fontes explicitamente selecionadas pelo usuário.
 
@@ -223,6 +223,14 @@ de preview e não afirma que houve publicação.
 
 Quando `Diagnostic: true` é usado, métricas separadas são escritas em `diagnostics/`, com tempos, contagens, escopo analisado, releituras e overhead, sem copiar o conteúdo das fontes.
 
+Na 2.2.2, o runtime oficial registra cada estágio em
+`.ftd/runs/<run-id>/run-manifest.json`. A cadeia de hashes liga entradas, saídas,
+estado canônico e arquivos publicados; um gate enviado no request não é aceito
+como prova. O validator oficial pode conferir a cadeia e detectar troca manual de
+artefatos com `python scripts/validate_output.py output --manifest <manifest>`.
+Os diagnósticos também materializam os ledgers físico/de identificadores, o mapa
+Claim→CP→TC→Step/assertion e o challenge set dos Test Assets.
+
 Antes da finalização, uma auditoria source-first por RF/RN procura claims normativos omitidos independentemente do mapeamento clause→CP; uma única recuperação passa novamente pelo pipeline completo. A análise Cross-RF apenas sinaliza sobreposição e possíveis duplicatas para revisão, sem mesclar ou remover TCs automaticamente.
 
 Antes de raciocinar sobre conteúdo, cada fonte selecionada resolvida recebe exatamente uma disposição de inspeção explícita. Contabilizar uma fonte não é o mesmo que abri-la: um binário, um arquivo gerado ou uma repetição equivalente pode permanecer sem leitura, mas com motivo registrado. Uma fonte sem disposição interrompe a execução. Métricas de leitura, concorrência e tempo de raciocínio relatam o que foi realmente observado ou ficam explicitamente indisponíveis, nunca zero fabricado.
@@ -295,6 +303,7 @@ scripts/quality_gates.py          Gates independentes de qualidade
 scripts/benchmark_reconciliation.py  Reconciliação explicável sem meta de contagem
 scripts/risk_expansion.py         Expansão de risco sustentada por evidência
 scripts/additive_expansion.py     Freeze normativo e gates aditivos v2.2.1
+scripts/pipeline_integrity.py     Manifest, hash chain e gates de integridade v2.2.2
 scripts/reference_integrity.py    Evidência física e selecionada
 scripts/source_accounting.py        Ledger das fontes selecionadas e revisão independente
 scripts/test_asset_inventory.py     Inventário estático de ativos de teste selecionados
