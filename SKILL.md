@@ -1,103 +1,80 @@
 ---
 name: functional-test-designer
-description: Designs traceable, executable functional Test Cases from only user-selected sources. Use for bounded evidence collection, atomic coverage, clarification, readiness audits, selected JSON/Markdown/HTML rendering, and preview-first Test Management export.
+description: Designs traceable, executable functional Test Cases from only user-selected sources for any domain. Use for atomic normative coverage, a mandatory second QA pass (negative, operator error, concurrency, recovery, security, E2E), existing-test challenge, executable procedures, readiness and automation classification, offline HTML/Markdown/JSON, and preview-first Test Management export.
 ---
 
 # Functional Test Designer
 
-Design evidence-grounded functional tests from only the sources explicitly selected by the user. Natural language is the primary interface. `ftd-gen`, `ftd-clarify`, `ftd-check`, `ftd-render`, and `ftd-mcp` are optional aliases for the same shared intents and core.
+A QA method encoded as a skill. **You do the QA reasoning; the runtime enforces the few invariants that protect quality.** The semantic core is yours: understanding requirements, inferring the domain, decomposing behavior, finding contradictions, imagining operator mistakes and failures, and writing procedures. The runtime owns scope, source accounting, identifiers, ids, validation, canonical state and publication. It never invents scenarios and never decides business meaning.
 
-## Non-negotiable boundaries
+This works for any project: logistics, ERP, SaaS, APIs, IoT, industrial, aerospace, finance, healthcare, mobile. Use the vocabulary of the selected sources, never of another project.
 
-- A selected file authorizes only that file; a selected directory is recursive only below itself.
-- Never follow imports, links, siblings, parents, or repository structure outside scope.
-- Resolve ambiguous selections before reading content. Order instructions never expand scope.
-- Keep `skill_root`, `source_root`, `workspace_root`, and exact `artifact_root` distinct. Never use the skill or source root as an implicit destination.
-- Functional authority defines what should happen. Technical context explains how to reach it; implementation evidence shows what exists; QA assets reveal prior coverage. Inspection order never changes authority.
-- Never invent an oracle, UI/API path, field, message, credential, identifier format, state, or side effect.
-- JSON schema `2.2` is the current public truth; schema `1.2` remains a compatibility input/output contract. Other formats are projections.
+## Boundaries
 
-Read [output-contract-v2.2.md](references/output-contract-v2.2.md) for current generation, [output-contract.md](references/output-contract.md) for legacy 1.2 compatibility, and [performance-orchestration.md](references/performance-orchestration.md) when resolving scope, destination, run state, checkpoints, or diagnostics.
+- A selected file authorizes only that file; a selected directory is recursive only below itself. Never follow imports, links or neighbours outside the selection.
+- Every selected source has an explicit role: `FUNCTIONAL_AUTHORITY` (what must happen), `IMPLEMENTATION_EVIDENCE` (what exists), `TECHNICAL_CONTEXT` (how to reach it), `TEST_ASSET` (existing tests: a challenge set, never authority).
+- Never invent an oracle, route, label, field, message, credential, id format or state. Unknowns become Questions or procedure unknowns.
+- Write every human-readable text in the run's `output_locale` (explicit request > authority language > request language). Keep code symbols, endpoints, constants, enums, fields, ids and filenames verbatim.
+- The artifact root must be an explicit user destination, never the skill root or the source root.
 
-## Pipeline
+## The pipeline
 
 ```text
-Selected sources -> Scope lock -> Source accounting ledger -> Evidence collection/barrier
--> Source-family/unit inventory -> Independent source-first review
--> Atomic source claims -> Clauses -> Coverage Points
--> Normative Acceptance candidates -> Freeze baseline
--> Additive opportunity audit (Test Assets, misuse, risk, characterization, E2E)
--> Scenario families -> Atomic frozen Test identities
--> Procedural enrichment -> Readiness -> Validation
--> Canonical run state -> Selected public projections
+start (runtime)     scope lock → source records → authority identifiers/titles → locale → test assets
+design (you)        domain model → requirements → atomic claims → atomic Acceptance tests → dispositions
+                    ── normative baseline frozen ──
+expansion (you)     17 dimensions evaluated · operator-error patterns · failure surfaces · test-asset
+                    challenge · characterization · E2E journeys          (additive only)
+procedures (you)    executable steps · semantic fixtures · unknowns · automation suitability/layer
+finalize (runtime)  validation (8 gates) → canonical state → HTML / JSON / Markdown → publication proof
 ```
 
-With no explicit source order, analyze independent selected sources concurrently when safe. When the user says first/then/last, respect ordered barriers while retaining safe concurrency within each group. The principal agent owns semantic reconciliation.
+```bash
+python scripts/pipeline.py start --workspace <root> --source "<selector>=FUNCTIONAL_AUTHORITY" \
+    [--source "<selector>=IMPLEMENTATION_EVIDENCE" ...] --artifact-root <dest> --run-id <id> [--locale pt-BR]
+# read <run>/work-order.json, write the stage payload, then:
+python scripts/pipeline.py submit --run <run> --stage design --file design.json
+python scripts/pipeline.py submit --run <run> --stage expansion --file expansion.json
+python scripts/pipeline.py submit --run <run> --stage procedures --file procedures.json
+python scripts/pipeline.py finalize --run <run> --formats HTML,JSON,MARKDOWN
+```
 
-Read these detailed contracts only when their stage is relevant:
+After each command read the new `work-order.json`: it lists what the next stage must account for (authority identifiers with official titles, frozen tests, dimensions, checklists, discovered test assets, Test Cases needing procedures). A rejected stage returns every problem at once and records nothing; fix and resubmit. Exact payload fields: [stage-contracts.md](references/stage-contracts.md). Method detail: [method.md](references/method.md). Techniques: [test-design.md](references/test-design.md).
 
-- [source-accounting.md](references/source-accounting.md): selected-source ledger, honest read telemetry, independent source-first review, structural inventory.
-- [source-coverage-audit.md](references/source-coverage-audit.md): source-first atomic extraction, clause/CP lineage, one bounded recovery.
-- [adversarial-coverage.md](references/adversarial-coverage.md): Test Asset inventory, evidence-grounded risk matrix, resilience and recovery, bounded E2E, operational catalog.
-- [test-design.md](references/test-design.md): contextual BVA, EP, state, decision-table, pairwise, and risk techniques.
-- [evidence-enrichment.md](references/evidence-enrichment.md): selected-source Evidence Packs and provenance.
-- [scenario-opportunities.md](references/scenario-opportunities.md): dispositions for normative, divergence, implementation, QA-asset, and bounded E2E opportunities.
-- [high-recall-design.md](references/high-recall-design.md): v2.2 Scenario Families, test bases, non-destructive merge candidates, risk expansion, and quality gates.
-- [additive-expansion.md](references/additive-expansion.md): v2.2.1 baseline preservation, source units, challenge sets, reachability, evidence references, and additive dispositions.
-- [pipeline-integrity.md](references/pipeline-integrity.md): v2.2.2 runtime-owned gates, stage manifest, identifier/physical ledgers, Claim exercise, and publication integrity.
-- [procedural-execution.md](references/procedural-execution.md) and [procedural-readiness.md](references/procedural-readiness.md): post-freeze steps and human/automation readiness.
-- [cross-rf-audit.md](references/cross-rf-audit.md): advisory overlap analysis without automatic deletion or merge.
+The user's request stays natural ("Use this PDF, `docs/user`, `apps` and `config`, generate the Test Cases, save HTML/JSON/Markdown and enable diagnostics"): you assign each selection a role and pass the requested formats (`--formats`), `--diagnostics`, explicit source order (`--order`, one group per flag) and prior clarifications; finalize applies the requested formats by default.
 
-## Atomicity and identity
+Unreadable authority (a scanned PDF) needs `--transcription <source>=<text file>`; unusual identifier conventions can use `--id-pattern`.
 
-- Account for every resolved selected source before reasoning about its content; a source that stays unread needs a recorded reason, and a source with no disposition fails the run.
-- Produce the source-first inventory as a genuinely separate reading that withholds the final scenario, Test Case, and suite-size counts. A reformatted copy of the primary claims is not a second opinion.
-- Inventory structural units before summarizing them. One requirement heading plus N acceptance bullets is not one Claim by default, and a unit that yields no behavior records why.
-- Extract atomic normative clauses before summarizing them into logical Requirements.
-- Extract atomic source claims before Requirement normalization. Every claim must reach exactly one explicit destination.
-- Review suspicious compound Claims and Clauses again after materialization; an upstream summary cannot bypass atomicity merely by arriving pre-compressed.
-- Create one independently reviewable candidate per testable CP before grouping.
-- Preserve every independently diagnosable candidate as an atomic canonical TC. Shared RF, actor, screen, setup, Evidence Pack, title, event, or navigation may create a merge suggestion but never destroys the atomic view.
-- Freeze all normative Acceptance identities and oracles before any derived expansion. Every later phase is additive and must pass baseline preservation.
-- Scenario Families organize related atomic, negative, boundary, derived, characterization, and E2E cases. E2E cases explicitly compose atomic TCs.
-- Different triggers, actors, permissions, inputs, partitions, states, branches, platforms, or rerunnable Pass/Fail boundaries remain separate.
-- Independent legacy subtests become TCs; sequential dependent subtests become steps. Never emit `subtests`.
-- Freeze Test identity before procedural enrichment. Enrichment may change preconditions, test data, steps, provenance, observability, and presentation, but not silently redefine valid normative coverage, scenario identity, oracle, status, or disposition.
+## Design stage — normative baseline
 
-### 3. Extract and Audit Coverage Points
+- Read every selected source yourself. Build a lightweight `domain_model` from them: actors, entities, states, operations, invariants, permissions, integrations, events, dependencies, observables, failure surfaces.
+- One requirement per authority identifier. Keep `source_identifier` and `source_title` exactly as the authority states them; the runtime rejects altered titles and invented identifiers.
+- Decompose **requirements and business rules alike** into atomic claims. Transversal rules (uniqueness, audit, role matrices, state machines, deduplication, idempotency, history/KPIs, isolation, lifecycle) get their own claims; do not let requirement bullets overshadow them.
+- One independently diagnosable failure domain → one atomic Acceptance test. Status change, balance update, audit record and alert triggered by one action are four tests. One audit record's fields may stay one test when they form an indivisible contract — say so in `indivisible_contract`.
+- Every authority identifier ends exercised by tests or explicitly `QUESTION_REQUIRED`, `NOT_TESTABLE_WITH_REASON` or `SUPERSEDED_BY_AUTHORITY`. Normative behavior without implementation evidence is still designed; missing implementation becomes a procedure blocker, never a reason to drop it.
+- Priority (`CRITICAL/HIGH/MEDIUM/LOW`) follows impact: core flow blockage, integrity corruption, security, cross-account leakage, irreversible transitions, auditability, major SLA, recovery, supporting/cosmetic. Always give a short reason.
 
-Map each atomic clause to one atomic Coverage Point or another explicit destination.
-`unmapped_normative_clauses` is zero only after every clause-level destination is verified;
-the existence of one CP for a Requirement proves nothing about its remaining clauses.
+## Expansion stage — mandatory second pass
 
-## Executability
+The baseline is frozen; expansion only adds. Evaluate every dimension: `NEGATIVE, BOUNDARY, OPERATOR_ERROR, MISUSE, STATE_TRANSITION, DECISION_TABLE, CONCURRENCY, RACE_CONDITION, IDEMPOTENCY, INTEGRATION, RECOVERY, CHAOS, SECURITY, AUTHORIZATION, DATA_INTEGRITY, CROSS_REQUIREMENT, E2E`. Discover candidates from requirements, rules, state models, implementation, existing tests, integrations and the physical/operational workflow. A zero-result dimension is valid only with a summary of how it was evaluated.
 
-Atomic does not mean single-step. Use the documented natural sequence from legitimate preconditions to trigger and observable outcome. Do not inflate steps or hide setup in preconditions. Preserve a one-step case when one supported action is sufficient.
+- Operator error: walk every universal mistake (wrong resource, wrong association, wrong actor, wrong state, wrong sequence, repeated/omitted action, stale/partial operation, cross-context mistake, physical/digital mismatch, wrong acknowledgement, manual after automatic, abandoned operation). Interpret each in this project's terms, or mark it `NOT_APPLICABLE` with the project-specific reason.
+- Chaos/recovery: walk every failure surface (external dependency, network, middleware, device/hardware, cache, database, async worker, retry, duplicate/out-of-order event, partial commit, process restart, session interruption, concurrency, race). Only materialize surfaces that exist in this project. Defined policy → deterministic `DERIVED` test; undefined policy → `EXPLORATORY` test with safe invariants plus a Question.
+- Existing tests: normalize each discovered test's intent and disposition it (`ALREADY_COVERED_BY`, `PROMOTE_DERIVED`, `PROMOTE_CHARACTERIZATION`, `QUESTION_REQUIRED`, `TECHNICAL_ONLY`, `DUPLICATE`, `OUT_OF_SCOPE_WITH_REASON`). Coverage is checked on actor, state, trigger, failure domain and expected outcome; a generic test does not cover an unrelated behavior.
+- `CHARACTERIZATION` documents current implementation behavior with an implementation oracle; divergences from authority become Findings, never new requirements.
+- E2E: after atomics, compose journeys stage by stage from at least two atomic tests; every documented use case gets a journey disposition.
 
-Where setup is material, state how the record or starting state is obtained rather than only asserting that it exists; an unobtainable precondition is not executable. Keep the provenance of procedural detail that came from selected implementation, manual, or technical evidence.
+## Procedures stage — executable Test Cases
 
-Each step has one executable action and supported observable expected result. Unsupported detail stays visible as a Question, `NEEDS_REVIEW`, or `needs_clarification`; it is never guessed. Classify human and automation readiness without changing the suite to improve the counts.
+- Preconditions state the real starting context (never `Preconditions for: <title>`). Test data uses deterministic semantic fixtures (`ROLE_A`, `ENTITY_ACTIVE_A`, `ACCOUNT_B`) with clear properties; real values only when evidence gives them.
+- Every step is one action with an observable expected result. One step only when one action completes the failure domain (`single_step_reason`); never compress a multi-action flow.
+- READY never needs fabricated literal data. Record only real unknowns: material ones (`MISSING_ORACLE`, `AMBIGUOUS_POLICY`, `UNRESOLVED_PERMISSION`, `MISSING_EXECUTION_SURFACE`, `UNKNOWN_SETUP_PATH`, `EXTERNAL_DEPENDENCY_UNAVAILABLE`) make it NEEDS_REVIEW or BLOCKED; automation-only ones (`MISSING_FIXTURE`, `MISSING_SELECTOR`, `MISSING_ENVIRONMENT`) only affect automation readiness.
+- Classify `automation.suitability` (`HIGH/MEDIUM/LOW/MANUAL_ONLY`) and `automation.layer` (`UI/API/SERVICE/INTEGRATION/HARDWARE/MIXED`) independently of readiness.
 
-Reject path compression when one vague action hides a selected-evidence sequence. A testable case is `READY` only when its procedure, data acquisition, trigger, and observations are supported well enough for execution; preserve its frozen identity while using `NEEDS_REVIEW` for material procedural blockers.
+## Other intents
 
-## Intents and completion
+Natural language is primary; `ftd-gen`, `ftd-clarify`, `ftd-check`, `ftd-render`, `ftd-mcp` are optional aliases through `scripts/workflow.py`. Clarify at most five high-impact Questions per round. `ftd-check` audits a published suite read-only. `ftd-render` re-renders a validated run from canonical state (`python scripts/pipeline.py render --run <run>`). `ftd-mcp` previews an Azure DevOps export and writes nothing without explicit approval. See [workflow.md](references/workflow.md).
 
-Read [commands.md](references/commands.md). Ordinary requests and command aliases must normalize to the same shared dispatcher: generation, clarification, read-only audit, rendering from canonical state, and preview-first external mapping.
+## Completion
 
-For clarification, read [clarification.md](references/clarification.md). Record answers as `USER_CLARIFICATION`; conflicts with approved authority remain visible unless explicitly supplied as an authoritative correction.
-
-For output selection, read [output-selection.md](references/output-selection.md). Persist one private canonical state when enabled and render only requested HTML, JSON, Markdown, diagnostics, and the optional operational scenario catalog. Do not publish dead cross-format links.
-
-For integrations, read [mcp-integration.md](references/mcp-integration.md). MCP is transport, never canonical truth. Preview and validate first; require explicit approval for writes; never delete by default; detect external conflicts; use deterministic fallback exports when transport is unavailable.
-
-Before completion:
-
-- validate scope proof, atomic lineage, scenario/TC independence, Questions, Findings, and source provenance;
-- account for every meaningful selected-evidence opportunity and link each divergence to coverage or an explicit non-executable disposition;
-- account for every discovered Test Asset behavior, every evidence-supported risk condition, and every documented use-case flow, using characterization plus a focused Question wherever the expected behavior is undefined;
-- confirm human/automation readiness classifications and reason codes;
-- validate canonical state and selected projections;
-- validate the ordered run manifest, canonical digest, publication digests, and runtime-owned gate evidence; never accept a final gate verdict from a generation request;
-- confirm render did not reread project sources;
-- preserve schema `2.2` plus `1.2` compatibility, exact artifact destination, offline HTML, Mermaid parity, and zero `subtests`;
-- report real diagnostics only, without source content, answers, credentials, or secrets, marking unobservable read, concurrency, and reasoning telemetry as unavailable instead of zero.
+Finalize produces `output/` (HTML report, JSON, Markdown per Test Case) and a verified manifest. Report honestly: identifier dispositions, gap metrics (`0 gaps` only when every gap dimension is zero), open Questions, Findings, readiness, and `baseline: NOT_APPLIED` unless a benchmark baseline was loaded. Output contract: [output-contract.md](references/output-contract.md). Gates and metrics: [validation.md](references/validation.md).

@@ -1,153 +1,51 @@
-# Output Contract 1.2 (legacy compatibility)
+# Output contract (public schema 2.2)
 
-New generation uses [Output Contract 2.2](output-contract-v2.2.md). This document remains authoritative only for reading, validating, and rendering existing schema 1.2 artifacts.
-
-Write UTF-8 JSON with two-space indentation. Paths are relative to the output directory and use `/` separators. Use the exact `schema_version` value `1.2`.
-
-## Files and Order
+v2.3 publishes schema `2.2` with additive optional fields. Schema `1.2` suites remain readable, validatable and renderable; new generation always emits `2.2`. JSON is the truth; Markdown and HTML are projections rendered from canonical state.
 
 ```text
-output/
-|-- test-cases.json
-|-- questions.json
-|-- report.html
-|-- test-cases/
-|   `-- TC-XXX.json
-`-- test-cases-md/
-    `-- TC-XXX.md
+<artifact-root>/
+|-- output/
+|   |-- test-cases.json        index
+|   |-- questions.json
+|   |-- report.html            offline, no external runtime
+|   |-- test-cases/TC-XXX.json
+|   |-- test-cases-md/TC-XXX.md (Mermaid flow last, identical to the HTML flow)
+|   `-- operational-scenarios.md (only with OPERATIONAL)
+|-- diagnostics/               (only with DIAGNOSTICS)
+`-- .ftd/runs/<run-id>/        private: run.json, sources.json, authority-text/, stages/,
+                               run-manifest.json, run-state.json, work-order.json,
+                               canonical-suite.json, run-metrics.json
 ```
 
-Write JSON directly, validate it, render Markdown, then render HTML. Markdown and HTML are derived presentation and never repair or modify JSON. Do not put source copies, diagnostics, temporary files, or confidential data in `output/`.
+## Index (`test-cases.json`)
 
-## Index
+Required: `schema_version`, `generated_at`, `sources`, `requirements`, `normative_clauses`, `findings`, `coverage_points`, `scenarios`, `test_cases`, `merge_candidates`, `quality_gates`, and either `identifier_dispositions` (v2.3) or the legacy `source_inventory`.
 
-`test-cases.json` contains selected sources and their roles, normalized requirements, atomic normative clauses, findings, Coverage Points, deduplicated scenarios, and the TC manifest. Clause materialization is required.
+v2.3 additions:
 
-```json
-{
-  "schema_version": "1.2",
-  "generated_at": "2026-09-16T12:00:00Z",
-  "sources": [
-    {"path": "docs/requirements.md", "role": "FUNCTIONAL_AUTHORITY"},
-    {"path": "src/order_service.py", "role": "IMPLEMENTATION_EVIDENCE"}
-  ],
-  "requirements": [
-    {
-      "id": "REQ-001",
-      "statement": "Submitting a draft order changes it to SUBMITTED.",
-      "status": "TESTABLE",
-      "source_refs": [{"source": "docs/requirements.md", "reference": "Submit order"}]
-    }
-  ],
-  "normative_clauses": [
-    {
-      "id": "CLAUSE-001",
-      "requirement_ref": "REQ-001",
-      "normalized_claim": "Submitting a draft order changes it to SUBMITTED.",
-      "authority": "FUNCTIONAL_AUTHORITY",
-      "source_refs": [{"source": "docs/requirements.md", "reference": "Submit order"}],
-      "destination_type": "COVERAGE_POINT",
-      "destination_id": "CP-001"
-    }
-  ],
-  "findings": [
-    {
-      "id": "FND-001",
-      "type": "IMPLEMENTATION_DIVERGENCE",
-      "statement": "Selected code sets PROCESSING instead of the required SUBMITTED state.",
-      "requirement_refs": ["REQ-001"],
-      "source_refs": [
-        {"source": "docs/requirements.md", "reference": "Submit order"},
-        {"source": "src/order_service.py", "reference": "submit_order"}
-      ]
-    }
-  ],
-  "coverage_points": [],
-  "scenarios": [],
-  "test_cases": []
-}
-```
+- `output_locale`, `locale_source` (`EXPLICIT`, `FUNCTIONAL_AUTHORITY`, `USER_REQUEST`, `FALLBACK_AMBIGUOUS`).
+- `sources[]`: one record per physical source — `path`, `role`, `authority`, `status` (`READ`, `TRANSCRIBED`, `METADATA_ONLY`, `UNSUPPORTED`, `FAILED`), `reason`, `content_digest`.
+- `requirements[]`: `source_identifier`, `source_title` (exactly as the authority states it), `source_statement`, `kind`.
+- `identifier_dispositions[]`: every authority identifier with `disposition` in `COVERED_BY_ATOMIC_TC`, `COVERED_BY_MULTIPLE_ATOMIC_TCS`, `QUESTION_REQUIRED`, `BLOCKED_EXTERNAL_DEPENDENCY`, `NOT_TESTABLE_WITH_REASON`, `SUPERSEDED_BY_AUTHORITY`, plus `claim_refs`, `test_refs`, `requirement_refs`, `question_refs`, `reason`.
+- `expansion_summary[]`: per dimension `candidates_considered`, `materialized`, `already_covered`, `question_required`, `not_applicable`.
+- `gap_metrics`: the six honest gap dimensions.
+- `baseline_comparison`: `{"status": "NOT_APPLIED"}` unless a benchmark baseline was applied.
+- `quality_gates`: the 8 gates of [validation.md](validation.md). Suites published by v2.2.x keep their 28-gate list and still validate.
 
-Source roles are `FUNCTIONAL_AUTHORITY`, `IMPLEMENTATION_EVIDENCE`, `TEST_ASSET`, `TECHNICAL_CONTEXT`, and `OTHER_SELECTED`. Finding types are `IMPLEMENTATION_DIVERGENCE`, `SOURCE_CONFLICT`, `COVERAGE_GAP`, and `INFORMATION`.
+`scenarios[]` are Scenario Families (`type: SCENARIO_FAMILY`) with `test_case_refs` equal to their members. `merge_candidates[]` are advisory and never remove a Test Case.
 
-Functional authority owns normative expected results. Other selected sources can add evidence and execution context. They cannot silently change the oracle.
+## Test Case (`test-cases/TC-XXX.json`)
 
-TC `source_refs` list every selected source that materially contributed to its oracle, preconditions, test data, steps, observability, or relevant branch analysis, and omit sources that did not contribute. Execution enrichment may add operational intermediate expected results supported by those refs; it does not create new normative behavior.
+Core fields as in 2.2: `id`, `title`, `status`, `priority`, `type`, `objective`, `requirement_refs`, `scenario_refs` (one family), `coverage_point_refs`, `source_refs`, `preconditions`, `test_data`, `steps[{step, action, expected_result, needs_clarification}]`, `postconditions`, `cleanup`, `tags`, `notes`, `test_basis` (`ACCEPTANCE`, `DERIVED`, `CHARACTERIZATION`, `EXPLORATORY`, `E2E`), `primary_type`, `execution_status`, `question_refs`, `finding_refs`, `composes`, `automation_candidate`, `automation_layer`, `automation_tool_hint`, `deterministic`, `priority_reason`, `claim_exercise_map` (Acceptance), `atomicity_exception` (indivisible contracts), `e2e_stage_map` (E2E).
 
-## Coverage Points
+v2.3 additions: `automation_suitability` (`HIGH`, `MEDIUM`, `LOW`, `MANUAL_ONLY`), `automation_readiness` (`READY`, `NEEDS_FIXTURE`, `NEEDS_SELECTOR`, `NEEDS_ENVIRONMENT`, `NEEDS_POLICY`, `BLOCKED_EXTERNAL_DEPENDENCY`, `NOT_APPLICABLE`), `readiness_blockers`, `failure_domain`, `source_identifiers`, `expansion_dimension`, `expansion_checklist_item`, `single_step_reason`. `automation_blocker` is no longer emitted.
 
-Each Coverage Point represents one independently meaningful behavior and has one disposition:
+There are never `subtests`: independent variants are separate Test Cases; dependent actions are steps.
 
-- `TEST_CASE`: `target_refs` contains one or more `TC-XXX` IDs.
-- `QUESTION`: `target_refs` contains one or more `Q-XXX` IDs.
-- `OUT_OF_SCOPE`: `target_refs` is empty and `reason` records the user's explicit exclusion.
+## Questions (`questions.json`)
 
-Several Coverage Points may target one TC when they are observations in the same coherent flow. The internal Coverage Extraction Audit adds missing points to this same catalog; it creates no second artifact or layer.
+`id`, `question`, `reason`, `blocking`, `impact`, `requirement_refs`, `source_refs`, `related_test_cases`. A blocking Question keeps its Test Cases out of `READY`. A step with `needs_clarification` requires a related Question.
 
-Each clause records `source_refs`, `normalized_claim`, `authority`, `destination_type`, and `destination_id`. A CP may also record `clause_refs` for bidirectional traceability. Each clause mapped to a CP names exactly that CP as its destination. Clauses sent directly to a Question or Finding reference that destination; `OUT_OF_SCOPE` and `NOT_TESTABLE` use a null destination plus a reason.
+## Validation
 
-## Test Case Entry
-
-Every entry identifies its exact JSON and Markdown artifacts:
-
-```json
-{
-  "id": "TC-001",
-  "title": "Submit a draft order",
-  "status": "READY",
-  "requirement_refs": ["REQ-001"],
-  "scenario_refs": ["SCN-001"],
-  "coverage_point_refs": ["CP-001"],
-  "file": "test-cases/TC-001.json",
-  "markdown_file": "test-cases-md/TC-001.md"
-}
-```
-
-## Individual Test Case
-
-Each `test-cases/TC-XXX.json` contains `schema_version`, ID, title, status, priority, type, objective, requirement/scenario/Coverage Point/source references, preconditions, local test data, ordered steps, postconditions, cleanup, tags, and notes.
-
-Use `READY`, `NEEDS_REVIEW`, or `BLOCKED` for status and `CRITICAL`, `HIGH`, `MEDIUM`, or `LOW` for priority. Every step owns its Action and Expected Result. A `null` expected result requires `needs_clarification: true` and a related Question. There are no `subtests` or `automation_candidate` fields.
-
-## Questions
-
-`questions.json` uses schema version `1.2`. Each Question has a stable `Q-XXX` ID, affected TCs and requirements, selected source references, one actionable question, its reason, and a blocking flag. Use an empty `related_test_cases` array when a missing oracle prevents a meaningful TC.
-
-## Markdown and Mermaid
-
-`scripts/render_markdown.py` writes one Markdown file for each indexed TC. It includes title, status, priority, type, objective, preconditions, test data, all steps and expected results, postconditions, cleanup, traceability, and the JSON artifact path.
-
-`## Fluxo do Teste` is the final section. Its final fenced `mermaid` block is a linear action-to-expected-result flow in step order. It does not invent branches or results. A missing result is labeled as requiring clarification.
-
-Markdown derives a `Requirement group` label from an original `RF...` or `RN...` identifier and official title in requirement source refs. It renders `RF001 — Official title`; when the reference contains only the identifier, it uses the normalized requirement statement as the title, and otherwise falls back to `REQ-XXX`. It does not add that label to JSON.
-
-## HTML
-
-`report.html` is offline and has Summary, Test Cases, Questions, and Coverage navigation. Each TC card shows objective, preconditions, test data, steps, the visual flow extracted from that TC's Markdown, links to the exact JSON and Markdown artifacts, and technical traceability. The renderer converts the verified Mermaid source into deterministic inline SVG; it does not bundle or claim to use Mermaid.js. It loads no CDN and shows no raw JSON by default.
-
-The flow section follows the steps, remains locally scrollable on narrow screens, and offers an accessible `Ampliar fluxo` modal that closes by button, overlay, or `Esc`. A local rendering failure leaves the steps and Markdown link available.
-
-The Test Cases section groups cards by the same derived functional requirement label. A multi-requirement TC appears once under the first normative requirement in source order and lists the other labels as related. A case explicitly tagged `e2e`, `end-to-end`, or `cross-rf` may appear once under `Cross-RF / End-to-End`. Grouping never changes JSON IDs, paths, counts, or links.
-
-The offline report may derive per-group source-coverage summaries, CSS coverage bars, quick navigation, filters, traceability, source-role labels, findings, and Cross-RF labels from existing JSON. These are deterministic presentation projections, not new contract fields or authority. Rendering does not execute semantic audits or reopen selected sources.
-
-For N indexed cases there must be exactly N JSON files, N Markdown files, and N HTML cards, all aligned by TC ID and step content.
-
-## Consistency Invariants
-
-- IDs and selected source paths are unique.
-- Every source reference points to a declared selected source.
-- Finding references point to existing requirements and selected sources.
-- Every testable requirement has at least one Coverage Point.
-- Every materialized normative clause has exactly one valid destination; Requirement-level coverage is not a proxy.
-- Every Coverage Point has a valid destination and bidirectional TC links agree.
-- Every TC maps to existing scenarios, requirements, and Coverage Points.
-- Every scenario maps to exactly one TC and every TC has exactly one primary scenario.
-- Index metadata and individual case metadata agree.
-- Every indexed JSON exists; unindexed TC JSON is invalid.
-- JSON and Markdown paths match the TC ID.
-- Steps start at 1 and increase consecutively.
-- Blocking Questions linked to a TC require that TC to be `BLOCKED`.
-- A `READY` case has no clarification-pending step.
-
-Schemas validate document shape. `scripts/validate_output.py` enforces JSON cross-file invariants. Renderers enforce JSON/Markdown/HTML correspondence.
+`python scripts/validation.py <output-dir> [--manifest <run>/run-manifest.json]` checks the schemas and every cross-file invariant (ids, references both ways, CP destinations, family membership, E2E composition, gate completeness, generic titles such as `header`).

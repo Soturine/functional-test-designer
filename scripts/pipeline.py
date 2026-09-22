@@ -174,10 +174,18 @@ def _result(run_dir: Path, stage: str) -> dict[str, Any]:
 def start_run(
     *, workspace: Path, sources_selected: list[dict[str, Any]], artifact_root: Path, run_id: str,
     locale: str | None = None, request_text: str = "", transcriptions: dict[str, Any] | None = None,
-    id_pattern: str | None = None, allow_source_root: bool = False,
+    id_pattern: str | None = None, allow_source_root: bool = False, formats: Any = None,
+    diagnostics: bool = False, source_order: list[list[str]] | None = None,
+    clarifications: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
-    """Lock scope, read sources, index authority and issue the design work order."""
+    """Lock scope, read sources, index authority and issue the design work order.
+
+    Requested formats, the diagnostics option, an explicit source order and prior
+    clarifications are run properties: the work orders carry them to the model and
+    finalize applies the formats unless it is given others.
+    """
     began = now()
+    requested = _normalize_formats(formats, diagnostics)
     workspace = Path(workspace).resolve()
     root = sources.resolve_artifact_root(
         skill_root=SKILL_ROOT, source_root=workspace, artifact_root=Path(artifact_root),
@@ -185,6 +193,12 @@ def start_run(
     )
     run_dir = run_directory(root, run_id)
     selection = sources.assign_roles(workspace, sources_selected)
+    selectors = {str(item.get("path", "")).strip() for item in sources_selected}
+    for group in source_order or []:
+        outside = [str(value) for value in group
+                   if str(value) not in selectors and str(value) not in selection["roles"]]
+        if outside:
+            raise sources.ScopeError("source order names sources outside the selection: " + ", ".join(outside))
     transcripts = {str(key): Path(value) for key, value in (transcriptions or {}).items()}
     records, texts = sources.build_source_records(workspace, selection["roles"], transcripts)
     events = []
@@ -213,7 +227,9 @@ def start_run(
     run = {
         "run_id": run_id, "generator": GENERATOR, "workspace": str(workspace),
         "artifact_root": str(root), "created_at": began, "request_text": request_text,
-        "id_pattern": id_pattern, **locale_info,
+        "id_pattern": id_pattern, "formats": requested,
+        "source_order": [list(map(str, group)) for group in source_order or []],
+        "clarifications": [dict(item) for item in clarifications or []], **locale_info,
     }
     write_json(run_dir / "run.json", run)
     write_json(run_dir / "sources.json", {
@@ -600,6 +616,8 @@ def read_canonical(path: Path) -> dict[str, Any]:
 def render_outputs(canonical_path: Path, artifact_root: Path, formats: Any = None) -> dict[str, Any]:
     """Render selected public projections from canonical state only (no source reads)."""
     import render
+    if isinstance(formats, str):
+        formats = formats.split(",")
     selected = {str(value).strip().upper() for value in (formats or DEFAULT_FORMATS)}
     unsupported = sorted(selected - PUBLIC_FORMATS)
     if unsupported or not selected:
@@ -663,6 +681,18 @@ def render_outputs(canonical_path: Path, artifact_root: Path, formats: Any = Non
             "semantic_fingerprint": canonical["semantic_fingerprint"]}
 
 
+def _normalize_formats(formats: Any, diagnostics: bool = False) -> list[str]:
+    if isinstance(formats, str):
+        formats = formats.split(",")
+    selected = [str(value).strip().upper() for value in (formats or DEFAULT_FORMATS) if str(value).strip()]
+    if diagnostics and "DIAGNOSTICS" not in selected:
+        selected.append("DIAGNOSTICS")
+    unsupported = sorted(set(selected) - PUBLIC_FORMATS)
+    if unsupported:
+        raise ValueError("Unsupported public output formats: " + ", ".join(unsupported))
+    return selected
+
+
 def _bind(run_dir: Path, key: str, value: Any) -> None:
     path = run_dir / "run-manifest.json"
     manifest = read_json(path)
@@ -674,6 +704,7 @@ def finalize_run(run_dir: Path, formats: Any = None, baseline: dict[str, Any] | 
     """Validate, persist canonical state, render the requested outputs and publish."""
     run_dir = Path(run_dir).resolve()
     run, source_state = _load(run_dir)
+    formats = formats or run.get("formats")
     state = _state(run_dir)
     if state.get("next_stage") != "finalize":
         raise IntegrityError(f"finalize requires every model stage (next: {state.get('next_stage')})")
@@ -802,7 +833,12 @@ def _work_order(run_dir: Path) -> Path:
         "submit": f"python scripts/pipeline.py submit --run \"{run_dir}\" --stage {stage} --file <payload.json>"
         if stage in MODEL_STAGES else f"python scripts/pipeline.py finalize --run \"{run_dir}\"",
         "contract": "references/stage-contracts.md",
+        "requested_formats": run.get("formats"),
     }
+    if run.get("source_order"):
+        order["source_order"] = run["source_order"]
+    if run.get("clarifications"):
+        order["user_clarifications"] = run["clarifications"]
     if stage == "design":
         order["sources"] = [{k: r[k] for k in ("path", "role", "status", "reason")} for r in source_state["records"]]
         order["authority_identifiers"] = source_state["authority_index"]
@@ -852,13 +888,16 @@ def main(argv: list[str] | None = None) -> int:
     start.add_argument("--request", default="")
     start.add_argument("--transcription", action="append", default=[], help="SOURCE=TEXT_FILE for unreadable sources")
     start.add_argument("--id-pattern")
+    start.add_argument("--formats", help="HTML,JSON,MARKDOWN,DIAGNOSTICS,OPERATIONAL (default HTML,JSON,MARKDOWN)")
+    start.add_argument("--diagnostics", action="store_true")
+    start.add_argument("--order", action="append", default=[], help="comma-separated selectors read as one ordered group (repeatable)")
     submit = commands.add_parser("submit", help="submit one model stage payload")
     submit.add_argument("--run", required=True, type=Path)
     submit.add_argument("--stage", required=True, choices=sorted(MODEL_STAGES))
     submit.add_argument("--file", required=True, type=Path)
     final = commands.add_parser("finalize", help="validate, persist canonical state and publish")
     final.add_argument("--run", required=True, type=Path)
-    final.add_argument("--formats", default=",".join(DEFAULT_FORMATS))
+    final.add_argument("--formats", help="defaults to the formats requested at start")
     final.add_argument("--baseline", type=Path, help="benchmark-only historical baseline")
     again = commands.add_parser("render", help="re-render a validated run from canonical state")
     again.add_argument("--run", required=True, type=Path)
@@ -874,12 +913,13 @@ def main(argv: list[str] | None = None) -> int:
                 sources_selected=[{"path": path, "role": role} for path, role in _parse_mapping(args.source, "--source")],
                 artifact_root=args.artifact_root, run_id=args.run_id, locale=args.locale,
                 request_text=args.request, transcriptions=dict(_parse_mapping(args.transcription, "--transcription")),
-                id_pattern=args.id_pattern,
+                id_pattern=args.id_pattern, formats=args.formats, diagnostics=args.diagnostics,
+                source_order=[group.split(",") for group in args.order],
             )
         elif args.command == "submit":
             result = submit_stage(args.run, args.stage, read_json(args.file))
         elif args.command == "finalize":
-            result = finalize_run(args.run, args.formats.split(","), read_json(args.baseline) if args.baseline else None)
+            result = finalize_run(args.run, args.formats, read_json(args.baseline) if args.baseline else None)
             result.pop("metrics", None)
         elif args.command == "render":
             result = render_run(args.run, args.formats.split(","))

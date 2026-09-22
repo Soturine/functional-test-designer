@@ -10,6 +10,7 @@ without explicit approval.
 from __future__ import annotations
 
 import json
+import re
 import sys
 from copy import deepcopy
 from pathlib import Path
@@ -48,13 +49,66 @@ def normalize_intent(request: str) -> str:
     for intent, phrases in signals:
         if any(phrase in text for phrase in phrases):
             return intent
+    if re.search(r"(?:generate|create|design|gere|gerar|crie|criar|genera|generar).*(?:test ?cases?|tcs|casos de (?:teste|prueba))", text):
+        return "ftd-gen"
     raise ValueError("Could not determine a functional-test-designer intent from the request")
+
+
+FORMAT_WORDS = {"HTML": r"\bhtml\b", "JSON": r"\bjson\b", "MARKDOWN": r"\b(?:markdown|md)\b",
+                "OPERATIONAL": r"\boperational\b|\bcat[aá]logo operacional\b"}
+DIAGNOSTIC_WORDS = r"\bdiagnostics?\b|\bdiagn[oó]sticos?\b"
+
+
+def requested_formats(text: str) -> tuple[list[str] | None, bool]:
+    """Formats and the diagnostics option stated in a natural request, if any."""
+    lowered = text.casefold()
+    formats = [name for name, pattern in FORMAT_WORDS.items() if re.search(pattern, lowered)]
+    return (formats or None), bool(re.search(DIAGNOSTIC_WORDS, lowered))
 
 
 def dispatch_request(request_text: str, **request: Any) -> Any:
     """Natural language and command aliases enter the exact same dispatcher."""
     request.setdefault("request_text", request_text)
+    formats, diagnostics = requested_formats(request_text)
+    if formats and "formats" not in request:
+        request["formats"] = formats
+    if diagnostics and "diagnostics" not in request and "diagnostic" not in request:
+        request["diagnostics"] = True
     return dispatch(normalize_intent(request_text), **request)
+
+
+def selected_sources(request: dict[str, Any]) -> list[dict[str, Any]]:
+    """Accept every public way of naming the selection: role-tagged entries, or
+    selectors plus a role per selector (the pre-v2.3 request shape)."""
+    roles = {str(key): str(value) for key, value in (request.get("roles") or {}).items()}
+    entries = []
+    for item in request.get("sources") or []:
+        if isinstance(item, dict):
+            entries.append({"path": str(item.get("path", "")), "role": item.get("role") or roles.get(str(item.get("path")))})
+        else:
+            entries.append({"path": str(item), "role": roles.get(str(item))})
+    known = {entry["path"] for entry in entries}
+    for selector in request.get("selectors") or []:
+        if str(selector) not in known:
+            entries.append({"path": str(selector), "role": roles.get(str(selector))})
+    missing = [entry["path"] for entry in entries if not entry["role"]]
+    if missing:
+        raise ValueError(
+            "each selected source needs a role (FUNCTIONAL_AUTHORITY, IMPLEMENTATION_EVIDENCE, "
+            "TECHNICAL_CONTEXT, TEST_ASSET): " + ", ".join(missing)
+        )
+    return entries
+
+
+def _canonical(request: dict[str, Any]) -> dict[str, Any]:
+    path = Path(request.get("canonical_path") or Path(request["run_dir"]) / "canonical-suite.json")
+    return pipeline.read_canonical(path)
+
+
+def _run_dir(request: dict[str, Any]) -> Path:
+    if request.get("run_dir"):
+        return Path(request["run_dir"])
+    return Path(request["canonical_path"]).parent
 
 
 def dispatch(intent: str, **request: Any) -> Any:
@@ -67,28 +121,40 @@ def dispatch(intent: str, **request: Any) -> Any:
                 "v2.3 no longer accepts a pre-authored semantic request (" + ", ".join(legacy)
                 + "); start the pipeline from selected sources and submit stage outputs"
             )
-        missing = [key for key in ("workspace", "sources", "artifact_root", "run_id") if key not in request]
-        if missing:
-            raise ValueError("ftd-gen requires selected sources: " + ", ".join(missing))
+        missing = [key for key in ("workspace", "artifact_root", "run_id") if key not in request]
+        if missing or not (request.get("sources") or request.get("selectors")):
+            raise ValueError("ftd-gen requires selected sources: " + ", ".join(missing or ["sources"]))
         return pipeline.start_run(
-            workspace=request["workspace"], sources_selected=request["sources"],
+            workspace=request["workspace"], sources_selected=selected_sources(request),
             artifact_root=request["artifact_root"], run_id=request["run_id"],
             locale=request.get("locale"), request_text=request.get("request_text", ""),
             transcriptions=request.get("transcriptions"), id_pattern=request.get("id_pattern"),
+            formats=request.get("formats"),
+            diagnostics=bool(request.get("diagnostics", request.get("diagnostic", False))),
+            source_order=request.get("source_order"), clarifications=request.get("clarifications"),
         )
     if intent == "ftd-clarify":
-        return rank_questions(request.get("questions", []), request.get("limit", 5))
+        questions = request.get("questions")
+        if questions is None:
+            questions = _canonical(request)["questions"]["questions"]
+        return rank_questions(questions, request.get("limit", 5))
     if intent == "ftd-check":
-        return check_suite(request["cases"], focus=request.get("focus", "everything"))
+        cases = request.get("cases")
+        if cases is None:
+            cases = _canonical(request)["cases"]
+        return check_suite(cases, focus=request.get("focus", "everything"))
     if intent == "ftd-render":
-        return pipeline.render_run(request["run_dir"], request.get("formats"))
+        return pipeline.render_run(_run_dir(request), request.get("formats"))
+    cases = request.get("cases")
+    if cases is None:
+        cases = _canonical(request)["cases"]
     suite_mapping = None
     if request.get("risk_suites") is not None or request.get("map_risk_suites"):
         suite_mapping = build_suite_mapping(
-            request["cases"], requirement_suite=request["suite"], risk_suites=request.get("risk_suites"),
+            cases, requirement_suite=request["suite"], risk_suites=request.get("risk_suites"),
         )
     preview = build_preview(
-        request["cases"], request.get("mapping", {}), project=request["project"], plan=request["plan"],
+        cases, request.get("mapping", {}), project=request["project"], plan=request["plan"],
         suite=request["suite"], include_needs_review=request.get("include_needs_review", False),
         external_versions=request.get("external_versions"), suite_mapping=suite_mapping,
     )

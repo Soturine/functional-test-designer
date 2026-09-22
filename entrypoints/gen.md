@@ -1,5 +1,5 @@
 # ftd-gen
 
-Intent: generate a canonical evidence-grounded suite from explicitly selected sources, then render only requested public outputs. Delegate all semantics to `scripts/workflow_entrypoints.py` and the shared generation core.
+Intent: design a suite from explicitly selected sources. Start the staged pipeline (`scripts/pipeline.py start`, or `scripts/workflow.py` dispatch), then follow each `work-order.json`: submit `design`, `expansion` and `procedures`, and `finalize` with the requested formats. The shared core validates every stage; the model does the QA reasoning described in SKILL.md.
 
-This command is an optional alias. An equivalent natural-language request uses the same dispatcher and semantic gates.
+This command is an optional alias. An equivalent natural-language request uses the same dispatcher and pipeline.
