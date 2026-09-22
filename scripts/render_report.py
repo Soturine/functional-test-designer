@@ -65,6 +65,23 @@ def esc(value: Any) -> str:
     return html.escape(str(value), quote=True)
 
 
+def cross_requirement_count(index: dict[str, Any], cases: list[dict[str, Any]]) -> int:
+    """Count unique multi-requirement cases plus uncovered cross-cutting families."""
+    case_count = sum(len(case.get("requirement_refs", [])) > 1 for case in cases)
+    covered_scenarios = {
+        scenario_ref
+        for case in cases
+        if len(case.get("requirement_refs", [])) > 1
+        for scenario_ref in case.get("scenario_refs", [])
+    }
+    family_count = sum(
+        len(scenario.get("requirement_refs", [])) > 1
+        and scenario.get("id") not in covered_scenarios
+        for scenario in index.get("scenarios", [])
+    )
+    return case_count + family_count
+
+
 def render_list(values: list[str], empty: str = "Nenhum") -> str:
     if not values:
         return f'<p class="empty">{empty}</p>'
@@ -290,7 +307,8 @@ def render_case(
         f'<span class="badge feature-{esc(flag)}">{esc(flag.replace("-", " ").title())}</span>'
         for flag in (
             "cross-rf", "multi-source", "findings", "questions", "merge-candidate",
-            "e2e-composition", "automation-candidate", "derived-risk",
+            "e2e-composition", "automation-candidate", "derived-risk", "operator-error",
+            "chaos-recovery", "normative-baseline", "additive-layer",
         )
         if flag in feature_flags
     )
@@ -506,6 +524,17 @@ def render_report(
                 flags.add("e2e-composition")
             if case.get("test_basis") == "DERIVED":
                 flags.add("derived-risk")
+            if case.get("test_basis", "ACCEPTANCE") == "ACCEPTANCE":
+                flags.add("normative-baseline")
+            else:
+                flags.add("additive-layer")
+            tags = {str(tag).casefold() for tag in case.get("tags", [])}
+            if case.get("primary_type") == "NEGATIVE" and any(
+                value in " ".join(tags) for value in ("operator-error", "misuse")
+            ):
+                flags.add("operator-error")
+            if case.get("primary_type") in {"CHAOS", "RECOVERY", "RESILIENCE"}:
+                flags.add("chaos-recovery")
             if case.get("automation_candidate"):
                 flags.add("automation-candidate")
             if case["id"] in question_case_ids:
@@ -563,6 +592,16 @@ def render_report(
     case_html = "".join(case_groups)
     question_html = "".join(render_question(question) for question in questions)
     finding_html = "".join(render_finding(finding) for finding in index.get("findings", []))
+    merge_html = "".join(
+        '<article class="finding-item"><div class="finding-title">'
+        f'<span>{esc(item.get("merge_candidate_id", "Merge candidate"))}</span>'
+        f'<span class="badge">{esc(item.get("confidence", ""))}</span></div>'
+        f'<p><strong>TCs:</strong> {esc(", ".join(item.get("test_case_ids", [])))}</p>'
+        f'<p><strong>Reason:</strong> {esc(item.get("reason", ""))}</p>'
+        f'<p><strong>Automation tradeoff:</strong> {esc(item.get("automation_tradeoff", ""))}</p>'
+        '</article>'
+        for item in index.get("merge_candidates", [])
+    )
     coverage_html = render_coverage(
         index["requirements"], coverage_points, entries_by_id, questions_by_id, groups, summaries
     )
@@ -576,8 +615,11 @@ def render_report(
     )
     source_claim_count = sum(item["source_claims_identified"] for item in summaries.values())
     source_gap_count = sum(item["source_coverage_gaps"] for item in summaries.values())
-    cross_rf_count = sum(len(case.get("requirement_refs", [])) > 1 for case in cases)
+    cross_rf_count = cross_requirement_count(index, cases)
     basis_counts = Counter(case.get("test_basis", "ACCEPTANCE") for case in cases)
+    scenario_family_count = sum(item.get("type") == "SCENARIO_FAMILY" for item in index.get("scenarios", []))
+    operator_error_count = sum("operator-error" in {str(tag).casefold() for tag in case.get("tags", [])} for case in cases)
+    chaos_recovery_count = sum(case.get("primary_type") in {"CHAOS", "RECOVERY", "RESILIENCE"} for case in cases)
     blocked_count = sum(
         status == "BLOCKED" or str(status).startswith("BLOCKED_")
         for status in (case.get("status") for case in cases)
@@ -696,7 +738,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,su
 </style>
 </head>
 <body>
-<header><div class="shell"><h1>Functional Test Report</h1><p class="subtitle">Casos manuais derivados das fontes explicitamente selecionadas.</p><nav aria-label="Relat&oacute;rio"><a href="#resumo">Resumo</a><a href="#test-cases">Test Cases</a><a href="#findings">Findings</a><a href="#perguntas">Perguntas</a><a href="#cobertura">Cobertura</a></nav></div></header>
+<header><div class="shell"><h1>Functional Test Report</h1><p class="subtitle">Casos manuais derivados das fontes explicitamente selecionadas.</p><nav aria-label="Relat&oacute;rio"><a href="#resumo">Resumo</a><a href="#test-cases">Test Cases</a><a href="#merge-candidates">Merge Candidates</a><a href="#findings">Findings</a><a href="#perguntas">Perguntas</a><a href="#cobertura">Cobertura</a></nav></div></header>
 <main class="shell">
 <section id="resumo"><h2>Resumo</h2><div class="metrics">
 <div class="metric"><strong>{len(cases)}</strong><span>Total de TCs</span></div>
@@ -708,6 +750,10 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,su
 <div class="metric"><strong>{basis_counts['CHARACTERIZATION']}</strong><span>Characterization TCs</span></div>
 <div class="metric"><strong>{basis_counts['E2E']}</strong><span>E2E TCs</span></div>
 <div class="metric"><strong>{basis_counts['EXPLORATORY']}</strong><span>Exploratory TCs</span></div>
+<div class="metric"><strong>{scenario_family_count}</strong><span>Scenario Families</span></div>
+<div class="metric"><strong>{operator_error_count}</strong><span>Operator Error</span></div>
+<div class="metric"><strong>{chaos_recovery_count}</strong><span>Chaos / Recovery</span></div>
+<div class="metric"><strong>{len(index.get('merge_candidates', []))}</strong><span>Merge Candidates</span></div>
 <div class="metric"><strong>{len(set(groups.values()))}</strong><span>RFs/RNs</span></div>
 <div class="metric"><strong>{source_claim_count}</strong><span>Claims</span></div>
 <div class="metric"><strong>{len(coverage_points)}</strong><span>Coverage Points</span></div>
@@ -715,7 +761,8 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,su
 <div class="metric"><strong>{len(index.get('findings', []))}</strong><span>Findings</span></div>
 <div class="metric"><strong>{cross_rf_count}</strong><span>Cross-RF</span></div>
 </div>{warning}</section>
-<section id="test-cases"><h2>Test Cases</h2><nav class="rf-navigation" aria-label="Navega&ccedil;&atilde;o por requisito">{rf_navigation}</nav><div class="filter-panel"><div class="bulk-controls"><button type="button" id="expand-all">Expandir todos</button><button type="button" id="collapse-all">Recolher todos</button></div><div class="filters"><label>Buscar<input id="search" type="search" placeholder="T&iacute;tulo, objetivo ou tag"></label><label>Status<select id="status-filter"><option value="">Todos</option><option>READY</option><option>NEEDS_REVIEW</option><option>BLOCKED</option><option>BLOCKED_REQUIREMENT</option><option>BLOCKED_IMPLEMENTATION_GAP</option><option>BLOCKED_ENVIRONMENT</option><option>BLOCKED_TEST_DATA</option><option>BLOCKED_EXTERNAL_DEPENDENCY</option><option>EXPLORATORY</option></select></label><label>Prioridade<select id="priority-filter"><option value="">Todas</option><option>CRITICAL</option><option>HIGH</option><option>MEDIUM</option><option>LOW</option></select></label><label>Requisito<select id="rf-filter"><option value="">Todos</option>{rf_options}</select></label><label>Caracter&iacute;stica<select id="feature-filter"><option value="">Todas</option><option value="cross-rf">Cross-RF</option><option value="findings">Com findings</option><option value="questions">Com questions</option><option value="single-step">1 step</option><option value="multi-step">M&uacute;ltiplos steps</option><option value="multi-source">Multi-source</option><option value="merge-candidate">Merge candidate</option><option value="e2e-composition">E2E composition</option><option value="automation-candidate">Automation candidate</option><option value="derived-risk">Derived risk</option></select></label></div></div><div id="case-list">{case_html}</div><p id="no-results" hidden>Nenhum Test Case corresponde aos filtros.</p></section>
+<section id="test-cases"><h2>Test Cases</h2><nav class="rf-navigation" aria-label="Navega&ccedil;&atilde;o por requisito">{rf_navigation}</nav><div class="filter-panel"><div class="bulk-controls"><button type="button" id="expand-all">Expandir todos</button><button type="button" id="collapse-all">Recolher todos</button></div><div class="filters"><label>Buscar<input id="search" type="search" placeholder="T&iacute;tulo, objetivo ou tag"></label><label>Status<select id="status-filter"><option value="">Todos</option><option>READY</option><option>NEEDS_REVIEW</option><option>BLOCKED</option><option>BLOCKED_REQUIREMENT</option><option>BLOCKED_IMPLEMENTATION_GAP</option><option>BLOCKED_ENVIRONMENT</option><option>BLOCKED_TEST_DATA</option><option>BLOCKED_EXTERNAL_DEPENDENCY</option><option>EXPLORATORY</option></select></label><label>Prioridade<select id="priority-filter"><option value="">Todas</option><option>CRITICAL</option><option>HIGH</option><option>MEDIUM</option><option>LOW</option></select></label><label>Requisito<select id="rf-filter"><option value="">Todos</option>{rf_options}</select></label><label>Caracter&iacute;stica<select id="feature-filter"><option value="">Todas</option><option value="cross-rf">Cross-RF</option><option value="findings">Com findings</option><option value="questions">Com questions</option><option value="single-step">1 step</option><option value="multi-step">M&uacute;ltiplos steps</option><option value="multi-source">Multi-source</option><option value="merge-candidate">Merge candidate</option><option value="e2e-composition">E2E composition</option><option value="automation-candidate">Automation candidate</option><option value="derived-risk">Derived risk</option><option value="operator-error">Operator Error</option><option value="chaos-recovery">Chaos / Recovery</option><option value="normative-baseline">Normative baseline</option><option value="additive-layer">Additive layer</option></select></label></div></div><div id="case-list">{case_html}</div><p id="no-results" hidden>Nenhum Test Case corresponde aos filtros.</p></section>
+<section id="merge-candidates"><h2>Merge Candidates</h2>{merge_html or '<p class="empty">Nenhuma sugest&atilde;o de compacta&ccedil;&atilde;o manual.</p>'}</section>
 <section id="findings"><h2>Findings</h2>{finding_html or '<p class="empty">Nenhum finding.</p>'}</section>
 <section id="perguntas"><h2>Perguntas</h2>{question_html or '<p class="empty">Nenhuma pergunta pendente.</p>'}</section>
 <section id="cobertura"><h2>Cobertura</h2>{coverage_html}</section>

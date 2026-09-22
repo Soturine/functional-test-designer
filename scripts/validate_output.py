@@ -10,6 +10,8 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 
+from quality_gates import GATE_NAMES
+
 try:
     from jsonschema import Draft202012Validator, FormatChecker
 except ImportError:
@@ -409,11 +411,7 @@ def validate(output_dir: Path) -> list[str]:
         for candidate in index.get("merge_candidates", []):
             check_refs(candidate.get("test_case_ids", []), set(entries_by_id), "test case", "merge candidate", errors)
         gates = index.get("quality_gates", [])
-        required_gates = {
-            "SCHEMA_VALID", "CROSS_FILE_VALID", "SOURCE_INVENTORY_COMPLETE",
-            "NORMATIVE_COVERAGE_COMPLETE", "ORACLE_SAFETY_VALID", "REFERENCE_INTEGRITY_VALID",
-            "PROCEDURE_QUALITY_ACCEPTABLE", "PIPELINE_PROVENANCE_VALID",
-        }
+        required_gates = set(GATE_NAMES)
         observed_gates = {item.get("gate") for item in gates if isinstance(item, dict)}
         if observed_gates != required_gates:
             errors.append("quality gates are incomplete")

@@ -54,6 +54,32 @@ class RendererTests(unittest.TestCase):
         self.assertNotIn("https://", report)
         self.assertNotIn("<script src=", report)
 
+    def test_renderer_preserves_utf8_requirement_title(self) -> None:
+        index_path = self.output / "test-cases.json"
+        index = json.loads(index_path.read_text(encoding="utf-8"))
+        index["requirements"][0]["statement"] = "Confirmação da operação"
+        index["requirements"][0]["source_refs"][0]["reference"] = "RF001"
+        index_path.write_text(
+            json.dumps(index, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+        )
+
+        report = RENDERER.render_report(self.output).read_text(encoding="utf-8")
+
+        self.assertIn("RF001 — Confirmação da operação", report)
+        self.assertNotIn("Sem título extraído", report)
+
+    def test_cross_requirement_counter_does_not_duplicate_a_family(self) -> None:
+        cases = [{
+            "id": "TC-001", "requirement_refs": ["REQ-001", "REQ-002"],
+            "scenario_refs": ["SCN-001"],
+        }]
+        index = {"scenarios": [
+            {"id": "SCN-001", "requirement_refs": ["REQ-001", "REQ-002"]},
+            {"id": "SCN-002", "requirement_refs": ["REQ-002", "REQ-003"]},
+        ]}
+
+        self.assertEqual(2, RENDERER.cross_requirement_count(index, cases))
+
     def test_html_uses_the_exact_mermaid_from_each_markdown(self) -> None:
         report = RENDERER.render_report(self.output).read_text(encoding="utf-8")
         index = json.loads((self.output / "test-cases.json").read_text(encoding="utf-8"))

@@ -136,7 +136,9 @@ class V22AtomicDesignTests(unittest.TestCase):
         self.assertEqual(3, len(expanded["CP-001"]))
         self.assertEqual("DERIVED", expanded["CP-001"][1]["test_basis"])
         self.assertEqual("EXPLORATORY", expanded["CP-001"][2]["test_basis"])
-        self.assertEqual({"risk_candidates_added": 2, "exploratory_policy_gaps": 1}, metrics)
+        self.assertEqual(2, metrics["risk_candidates_added"])
+        self.assertEqual(1, metrics["exploratory_policy_gaps"])
+        self.assertEqual(2, metrics["risk_candidates_materialized"])
 
     def test_source_inventory_cannot_pass_when_authoritative_reference_is_omitted(self) -> None:
         sources = [{"path": "requirements.md", "role": "FUNCTIONAL_AUTHORITY"}]

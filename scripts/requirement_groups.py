@@ -48,7 +48,10 @@ def requirement_group_label(requirement: dict[str, Any]) -> str:
     identifier = original_rf_identifier(requirement)
     if not identifier:
         return requirement["id"]
-    return f"{identifier} \u2014 {official_requirement_title(requirement, identifier) or 'Sem t\u00edtulo extra\u00eddo'}"
+    title = official_requirement_title(requirement, identifier)
+    if not title:
+        title = str(requirement.get("title") or requirement.get("statement") or "").strip()
+    return f"{identifier} \u2014 {title}" if title else identifier
 
 
 def group_identifier(label: str) -> str:

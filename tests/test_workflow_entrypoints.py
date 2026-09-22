@@ -37,6 +37,14 @@ def generation_request(root: Path, artifact: Path) -> dict:
                 "coverage_statement": "The counter is updated.",
             }]},
         }],
+        "source_units": [{
+            "id": "NU-001", "path": "requirements.md",
+            "family": "FUNCTIONAL_REQUIREMENT", "disposition": "EXTRACTED",
+            "source_refs": [source_ref],
+        }],
+        "source_unit_expectations": [{
+            "path": "requirements.md", "expected_unit_refs": ["NU-001"],
+        }],
         "source_ledger": [{
             "source": "requirements.md", "source_role": "FUNCTIONAL_AUTHORITY",
             "content_type": "text/markdown", "disposition": "INSPECTED_CONTENT",
@@ -70,6 +78,10 @@ def generation_request(root: Path, artifact: Path) -> dict:
         "risk_conditions": [{
             "id": "RISK-001", "risk_class": "OPERATOR_ERROR", "dimension": "duplicate_replay",
             "condition_support_refs": [source_ref], "oracle_support": "NORMATIVE",
+        }],
+        "expansion_opportunities": [{
+            "id": "EXP-001", "risk_condition_ref": "RISK-001",
+            "disposition": "ALREADY_COVERED_BY", "target_refs": ["TC-001"],
         }],
         "use_case_flows": [],
         "test_asset_inventory": {"discovered": [], "classifications": []},
@@ -189,6 +201,12 @@ class WorkflowEntrypointTests(unittest.TestCase):
             })
             with self.assertRaisesRegex(GenerationContractError, "Source-first coverage gaps"):
                 dispatch("ftd-gen", **request)
+            state = json.loads(
+                (root / "artifacts" / ".ftd" / "runs" / "run-001" / "run-state.json").read_text(
+                    encoding="utf-8"
+                )
+            )
+            self.assertEqual("FAILED", state["run_status"])
 
     def test_generation_fails_closed_without_selected_source_accounting(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

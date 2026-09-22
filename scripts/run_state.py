@@ -16,6 +16,7 @@ CHECKPOINTS = (
     "EVIDENCE_BARRIER_COMPLETE",
     "SOURCE_REVIEW_COMPLETE",
     "SOURCE_ATOMICITY_COMPLETE",
+    "NORMATIVE_BASELINE_FROZEN",
     "OPPORTUNITY_AUDIT_COMPLETE",
     "SCENARIOS_FROZEN",
     "PROCEDURAL_COMPLETE",
@@ -56,6 +57,7 @@ class CheckpointLoad:
     payload: dict[str, Any]
     reusable: bool
     invalidation_reason: str = ""
+    run_status: str = "IN_PROGRESS"
 
 
 class RunStateStore:
@@ -77,6 +79,7 @@ class RunStateStore:
         document = {
             "internal_schema_version": "1",
             "checkpoint": checkpoint,
+            "run_status": "VALIDATED" if checkpoint == "VALIDATED" else "IN_PROGRESS",
             "source_hashes": dict(sorted(source_hashes.items())),
             "payload": payload,
         }
@@ -97,12 +100,49 @@ class RunStateStore:
                 payload={},
                 reusable=False,
                 invalidation_reason="SOURCE_HASH_CHANGED",
+                run_status=str(document.get("run_status", "IN_PROGRESS")),
             )
+        run_status = str(document.get("run_status", "IN_PROGRESS"))
         return CheckpointLoad(
             checkpoint=str(document["checkpoint"]),
             payload=document.get("payload", {}),
-            reusable=True,
+            reusable=run_status not in {"FAILED", "SUPERSEDED", "ABORTED"},
+            invalidation_reason=("RUN_" + run_status) if run_status in {"FAILED", "SUPERSEDED", "ABORTED"} else "",
+            run_status=run_status,
         )
+
+    def mark_terminal(self, status: str, reason: str) -> Path:
+        if status not in {"FAILED", "SUPERSEDED", "ABORTED"}:
+            raise ValueError("Terminal run status must be FAILED, SUPERSEDED, or ABORTED")
+        if not self.path.is_file():
+            raise ValueError("Cannot mark a run that has no state")
+        document = json.loads(self.path.read_text(encoding="utf-8"))
+        document["run_status"] = status
+        document["terminal_reason"] = str(reason)
+        temporary = self.path.with_suffix(".tmp")
+        temporary.write_text(json.dumps(document, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        temporary.replace(self.path)
+        return self.path
+
+    def supersede_other_validated_runs(self, reason: str) -> list[str]:
+        """Keep exactly one published VALIDATED run under an artifact root."""
+        changed: list[str] = []
+        runs_root = self.run_dir.parent.resolve()
+        for state_path in runs_root.glob("*/run-state.json"):
+            if state_path.resolve() == self.path.resolve():
+                continue
+            document = json.loads(state_path.read_text(encoding="utf-8"))
+            if document.get("run_status") != "VALIDATED":
+                continue
+            document["run_status"] = "SUPERSEDED"
+            document["terminal_reason"] = str(reason)
+            temporary = state_path.with_suffix(".tmp")
+            temporary.write_text(
+                json.dumps(document, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+            )
+            temporary.replace(state_path)
+            changed.append(state_path.parent.name)
+        return sorted(changed)
 
 
 def diagnostics_compatibility_self_check(

@@ -301,6 +301,7 @@
       "type": "object", "additionalProperties": false,
       "required": ["test_case_ids", "reason", "shared_setup", "shared_business_event", "manual_execution_benefit", "automation_tradeoff", "confidence"],
       "properties": {
+        "merge_candidate_id": {"type": "string", "pattern": "^MC-[0-9]{3,}$"},
         "test_case_ids": {"type": "array", "minItems": 2, "uniqueItems": true, "items": {"type": "string", "pattern": "^TC-[0-9]{3,}$"}},
         "reason": {"type": "string", "minLength": 1},
         "shared_setup": {"type": "boolean"}, "shared_business_event": {"type": "boolean"},

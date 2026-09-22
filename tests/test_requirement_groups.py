@@ -69,7 +69,7 @@ class RequirementGroupingTests(unittest.TestCase):
         }
 
         self.assertEqual("RF006 — Inventory operations", GROUPS.requirement_group_label(titled))
-        self.assertEqual("RN012 — Sem título extraído", GROUPS.requirement_group_label(untitled))
+        self.assertEqual("RN012 — Audit.", GROUPS.requirement_group_label(untitled))
 
     def test_markdown_and_html_show_rf_group_without_changing_json_or_paths(self) -> None:
         index = self.read("test-cases.json")
@@ -106,8 +106,8 @@ class RequirementGroupingTests(unittest.TestCase):
 
         primary, related, _ = GROUPS.case_group(case, groups, {"REQ-001": 0, "REQ-002": 1})
 
-        self.assertEqual("RF002 — Sem título extraído", primary)
-        self.assertEqual(["RF004 — Sem título extraído"], related)
+        self.assertEqual("RF002 — First", primary)
+        self.assertEqual(["RF004 — Second"], related)
 
     def test_explicit_e2e_case_uses_cross_rf_group_once(self) -> None:
         groups = {"REQ-001": "RF002", "REQ-002": "RF004"}

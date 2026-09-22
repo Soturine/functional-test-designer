@@ -10,7 +10,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
+from additive_expansion import (
+    apply_test_data_reachability, audit_baseline_preservation,
+    audit_expansion_dispositions, audit_semantic_composition, normative_profiles,
+    calibrate_priority, priority_metrics, snapshot_normative_baseline,
+)
 from canonical_state import OutputSelection, persist_canonical_suite, render_selected_outputs
+from cross_source_contradictions import audit_contradictions
+from execution_quality import procedure_template_metrics
 from procedural_pipeline import reconcile_additive_feedback, run_procedural_tasks
 from procedural_readiness import align_public_status, audit_execution_readiness
 from render_operational_scenarios import build_operational_catalog
@@ -24,8 +31,12 @@ from scenario_opportunities import audit_scenario_opportunities
 from source_accounting import (
     audit_source_review_independence, build_source_ledger, read_telemetry,
 )
-from source_inventory import audit_source_inventory
+from source_inventory import (
+    audit_normative_source_units, audit_source_inventory,
+    audit_use_case_flow_accounting,
+)
 from quality_gates import assert_quality_gates, build_quality_gates
+from reference_integrity import audit_evidence_references
 from test_asset_inventory import audit_test_asset_inventory
 from source_coverage_audit import (
     audit_atomic_chain, audit_materialized_atomicity, audit_source_claims,
@@ -44,6 +55,22 @@ PHASES = (
     "source_atomicity", "coverage_design", "scenario_reasoning", "scenario_engine",
     "procedural_reasoning", "procedural_engine", "validation", "rendering",
 )
+FULL_RUN_STAGES = (
+    "SOURCE_SELECTION", "SOURCE_READING", "SOURCE_STRUCTURAL_INDEXING",
+    "NORMATIVE_UNIT_EXTRACTION", "IMPLEMENTATION_EVIDENCE_EXTRACTION",
+    "TEST_ASSET_EXTRACTION", "REQUEST_ASSEMBLY",
+)
+OFFICIAL_PROVENANCE_GROUPS = {
+    "ORCHESTRATOR_EXECUTION": {
+        "scope_resolution", "source_inventory", "source_collection",
+        "evidence_reconciliation", "source_atomicity", "coverage_design",
+        "scenario_reasoning", "normative_baseline_freeze", "scenario_engine",
+    },
+    "EXPANSION": {"risk_expansion"},
+    "PROCEDURE_REFINEMENT": {"procedural_reasoning", "procedural_engine"},
+    "VALIDATION": {"validation"},
+    "RENDERING": {"rendering"},
+}
 
 
 class GenerationContractError(ValueError):
@@ -59,7 +86,57 @@ def _write(path: Path, value: dict[str, Any]) -> None:
     path.write_text(json.dumps(value, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
 
-def run_generation(request: dict[str, Any]) -> dict[str, Any]:
+def _full_run_provenance(request: dict[str, Any]) -> list[dict[str, Any]]:
+    supplied = {
+        str(item.get("stage")): item
+        for item in request.get("preprocessing_provenance", [])
+        if isinstance(item, dict)
+    }
+    records = []
+    for stage in FULL_RUN_STAGES:
+        item = supplied.get(stage)
+        if item is None:
+            records.append({
+                "stage": stage, "status": "UNAVAILABLE", "started_at": None,
+                "finished_at": None, "duration_seconds": None, "inputs": [],
+                "outputs": [], "provenance": "host did not expose preprocessing timing",
+            })
+        else:
+            records.append({
+                "stage": stage, "status": str(item.get("status", "COMPLETE")),
+                "started_at": item.get("started_at"), "finished_at": item.get("finished_at"),
+                "duration_seconds": item.get("duration_seconds"),
+                "inputs": list(item.get("inputs", [])), "outputs": list(item.get("outputs", [])),
+                "provenance": str(item.get("provenance", "host supplied")),
+            })
+    return records
+
+
+def _official_run_provenance(phases: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Project measured engine phases onto the public full-run provenance stages."""
+    records: list[dict[str, Any]] = []
+    for stage, names in OFFICIAL_PROVENANCE_GROUPS.items():
+        members = [item for item in phases if item["name"] in names]
+        if not members:
+            records.append({
+                "stage": stage, "status": "NOT_RUN", "started_at": None,
+                "finished_at": None, "duration_seconds": 0.0, "inputs": [],
+                "outputs": [], "provenance": "official shared runtime",
+            })
+            continue
+        records.append({
+            "stage": stage, "status": "COMPLETE",
+            "started_at": members[0]["started_at"],
+            "finished_at": members[-1]["finished_at"],
+            "duration_seconds": round(sum(item["wall_clock_seconds"] for item in members), 6),
+            "inputs": [item["name"] for item in members],
+            "outputs": [item["name"] for item in members],
+            "provenance": "measured by official shared runtime",
+        })
+    return records
+
+
+def _run_generation(request: dict[str, Any]) -> dict[str, Any]:
     """Run every mandatory gate; precomputed free-form handoffs are not accepted."""
     run_began = time.perf_counter()
     schema_version = str(request.get("schema_version", "2.2"))
@@ -81,6 +158,10 @@ def run_generation(request: dict[str, Any]) -> dict[str, Any]:
         "schema_version": "1", "diagnostic": bool(request.get("diagnostic", False)),
         "started_at": _now(), "timing_available": True, "phases": [],
         "checkpoint_events": [], **read_telemetry(request),
+        "full_run_provenance": _full_run_provenance(request),
+        "user_perceived_wall_time": request.get("user_perceived_wall_time"),
+        "source_analysis_time": request.get("source_analysis_time"),
+        "request_assembly_time": request.get("request_assembly_time"),
     }
     _write(internal_metrics, metrics)  # initialized before scope/source work
 
@@ -117,12 +198,25 @@ def run_generation(request: dict[str, Any]) -> dict[str, Any]:
                 "rendered_public_formats": rendered["rendered_public_formats"],
             })
             metrics["run_wall_clock_seconds"] = round(time.perf_counter() - run_began, 6)
+            metrics["official_pipeline_time"] = metrics["run_wall_clock_seconds"]
+            metrics["render_validation_time"] = round(sum(
+                item["wall_clock_seconds"] for item in metrics["phases"]
+                if item["name"] in {"validation", "rendering"}
+            ), 6)
             metrics["attributed_stage_seconds"] = round(
                 sum(item["wall_clock_seconds"] for item in metrics["phases"]), 6
             )
             metrics["unattributed_seconds"] = round(max(
                 0.0, metrics["run_wall_clock_seconds"] - metrics["attributed_stage_seconds"]
             ), 6)
+            metrics["stage_provenance"] = [{
+                "stage": item["name"], "order": number,
+                "generator": "functional-test-designer/2.2.1",
+                "status": "COMPLETE", "validation_result": "PASS",
+            } for number, item in enumerate(metrics["phases"], 1)]
+            metrics["full_run_provenance"].extend(
+                _official_run_provenance(metrics["phases"])
+            )
             _write(internal_metrics, metrics)
             if "DIAGNOSTICS" in selection.formats:
                 destination = artifact_root / "diagnostics" / "run-metrics.json"
@@ -171,6 +265,9 @@ def run_generation(request: dict[str, Any]) -> dict[str, Any]:
         ),
     })
     source_universe = None
+    source_unit_audit = {"normative_source_families_complete": True}
+    use_case_accounting = {"use_case_flow_accounting_valid": True}
+    evidence_reference_audit = {"evidence_reference_integrity_valid": True}
     if schema_version == "2.2":
         if "source_inventory" not in request:
             raise GenerationContractError("Schema 2.2 requires an authority-aware source_inventory")
@@ -178,7 +275,30 @@ def run_generation(request: dict[str, Any]) -> dict[str, Any]:
             request["sources"], request["source_inventory"],
             referenced_authoritative_paths=request.get("referenced_authoritative_paths", []),
         )
+        if "source_units" not in request or "source_unit_expectations" not in request:
+            raise GenerationContractError(
+                "Schema 2.2 requires source_units and independent source_unit_expectations"
+            )
+        source_unit_audit = audit_normative_source_units(
+            request["source_inventory"], request["source_units"],
+            request["source_unit_expectations"],
+        )
+        use_case_accounting = audit_use_case_flow_accounting(
+            request["source_units"], request["use_case_flows"]
+        )
+        evidence_reference_audit = audit_evidence_references(
+            workspace, request["sources"], [
+                request["requirements"], request["source_items"], request.get("questions", []),
+                request.get("findings", []), request["evidence_packs"],
+                request.get("risk_candidate_profiles", []),
+                request.get("expansion_opportunities", []),
+                request.get("contradiction_candidates", []),
+            ],
+        )
         metrics.update({key: value for key, value in source_universe.items() if not isinstance(value, list)})
+        metrics.update(source_unit_audit)
+        metrics.update(use_case_accounting)
+        metrics.update(evidence_reference_audit)
     store.save("SOURCE_ACCOUNTING_COMPLETE", {
         "dispositions": collection["ledger"]["dispositions"],
     }, hashes)
@@ -226,7 +346,10 @@ def run_generation(request: dict[str, Any]) -> dict[str, Any]:
             )
         return {
             **precheck,
-            **audit_test_asset_inventory(discovered, list(assets.get("classifications", []))),
+            **audit_test_asset_inventory(
+                discovered, list(assets.get("classifications", [])),
+                strict_challenge=schema_version == "2.2",
+            ),
             **audit_risk_matrix(
                 request["risk_conditions"], request["opportunities"], question_ids=question_ids
             ),
@@ -242,7 +365,28 @@ def run_generation(request: dict[str, Any]) -> dict[str, Any]:
         {"checkpoint": "OPPORTUNITY_AUDIT_COMPLETE", "event": "created"}
     )
     scenario_profiles = request["scenario_profiles"]
-    risk_expansion_metrics = {"risk_candidates_added": 0, "exploratory_policy_gaps": 0}
+    baseline_snapshot: dict[str, dict[str, Any]] = {}
+    baseline_metrics = {"baseline_preserved": True}
+    expansion_metrics = {"risk_disposition_complete": True}
+    if schema_version == "2.2":
+        baseline_design = phase(
+            "normative_baseline_freeze",
+            lambda: build_scenario_family_pipeline(
+                chain["coverage_points"], normative_profiles(scenario_profiles)
+            ),
+        )
+        baseline_snapshot = snapshot_normative_baseline(baseline_design)
+        store.save("NORMATIVE_BASELINE_FROZEN", {
+            "test_ids": sorted(baseline_snapshot),
+            "oracles": {key: value["normative_oracle"] for key, value in baseline_snapshot.items()},
+        }, hashes)
+        metrics["checkpoint_events"].append(
+            {"checkpoint": "NORMATIVE_BASELINE_FROZEN", "event": "created"}
+        )
+    risk_expansion_metrics: dict[str, Any] = {
+        "risk_candidates_added": 0, "exploratory_policy_gaps": 0,
+        "materialized_risk_refs": [],
+    }
     if schema_version == "2.2":
         scenario_profiles, risk_expansion_metrics = phase(
             "risk_expansion",
@@ -259,8 +403,21 @@ def run_generation(request: dict[str, Any]) -> dict[str, Any]:
             else build_scenario_pipeline(chain["coverage_points"], scenario_profiles)
         ),
     )
+    if schema_version == "2.2":
+        baseline_metrics = audit_baseline_preservation(baseline_snapshot, design)
+        expansion_metrics = audit_expansion_dispositions(
+            request.get("expansion_opportunities", []),
+            set(risk_expansion_metrics["materialized_risk_refs"]),
+            required_risk_refs={str(item["id"]) for item in request["risk_conditions"]},
+        )
+        semantic_composition = audit_semantic_composition(design)
+    else:
+        semantic_composition = {"semantic_composition_valid": True}
     scenario_ids = {item["id"] for item in design["scenarios"]}
     finding_ids = {str(item["id"]) for item in request.get("findings", [])}
+    contradiction_audit = audit_contradictions(
+        request.get("contradiction_candidates", []), finding_ids, question_ids
+    )
     opportunity_audit = audit_scenario_opportunities(
         request["selected_evidence"], request["opportunities"], scenario_ids=scenario_ids,
         finding_ids=finding_ids, question_ids=question_ids,
@@ -270,12 +427,22 @@ def run_generation(request: dict[str, Any]) -> dict[str, Any]:
     }, hashes)
     metrics["checkpoint_events"].append({"checkpoint": "SCENARIOS_FROZEN", "event": "created"})
 
-    packs = request["evidence_packs"]
+    packs = dict(request["evidence_packs"])
+    if schema_version == "2.2":
+        for candidate, identity in zip(design["candidates"], design["test_identities"]):
+            if identity.id not in packs and candidate.get("evidence_pack"):
+                packs[identity.id] = dict(candidate["evidence_pack"])
     tasks = []
+    candidates_by_tc = dict(zip(
+        (item.id for item in design["test_identities"]), design["candidates"]
+    ))
     for identity in design["test_identities"]:
         if identity.id not in packs:
             raise GenerationContractError(f"Frozen identity {identity.id} has no Evidence Pack")
         pack = dict(packs[identity.id])
+        if pack.get("priority") in {None, "AUTO"}:
+            pack["priority"] = calibrate_priority(candidates_by_tc[identity.id])
+            packs[identity.id] = pack
         pack["schema_version"] = schema_version
         tasks.append((identity, pack))
     procedural = phase("procedural_reasoning", lambda: run_procedural_tasks(tasks))
@@ -302,6 +469,9 @@ def run_generation(request: dict[str, Any]) -> dict[str, Any]:
         if schema_version == "2.2":
             case["execution_status"] = case["status"]
         readiness.append(audit)
+    reachability = apply_test_data_reachability(
+        cases, packs, {str(item["id"]) for item in request.get("findings", [])}
+    )
     store.save("PROCEDURAL_COMPLETE", {
         "case_ids": [item["id"] for item in cases],
         "human_ready": sum(item["human_classification"] == "HUMAN_EXECUTION_READY" for item in readiness),
@@ -347,6 +517,14 @@ def run_generation(request: dict[str, Any]) -> dict[str, Any]:
             for case, audit in zip(cases, readiness)
         ),
         provenance_valid=True,
+        baseline_preserved=baseline_metrics["baseline_preserved"],
+        source_families_complete=source_unit_audit["normative_source_families_complete"],
+        use_case_flows_valid=use_case_accounting["use_case_flow_accounting_valid"],
+        risk_disposition_complete=expansion_metrics["risk_disposition_complete"],
+        test_asset_challenge_valid=opportunity_precheck["test_asset_challenge_valid"],
+        test_data_reachability_valid=reachability["test_data_reachability_valid"],
+        evidence_references_valid=evidence_reference_audit["evidence_reference_integrity_valid"],
+        semantic_composition_valid=semantic_composition["semantic_composition_valid"],
     )
     assert_quality_gates(gates)
     index = {
@@ -373,6 +551,14 @@ def run_generation(request: dict[str, Any]) -> dict[str, Any]:
     ))
     store.save("VALIDATED", {"canonical_suite": canonical_path.name}, hashes)
     metrics["checkpoint_events"].append({"checkpoint": "VALIDATED", "event": "created"})
+    superseded = store.supersede_other_validated_runs(
+        f"Run {run_id} became the canonical published run"
+    )
+    for superseded_run in superseded:
+        metrics["checkpoint_events"].append({
+            "checkpoint": "VALIDATED", "event": "superseded",
+            "run_id": superseded_run, "reason": f"canonical run is {run_id}",
+        })
     rendered = phase("rendering", lambda: render_selected_outputs(canonical_path, artifact_root, selection))
 
     after_python = {path.resolve() for path in workspace.rglob("*.py")}
@@ -389,7 +575,10 @@ def run_generation(request: dict[str, Any]) -> dict[str, Any]:
     }
     metrics.update({
         **inventory_metrics, **chain["metrics"], **atomic_audit, **residual_audit,
+        **source_unit_audit, **use_case_accounting, **evidence_reference_audit,
         **opportunity_precheck, **opportunity_audit, **risk_expansion_metrics,
+        **baseline_metrics, **expansion_metrics, **semantic_composition, **reachability,
+        **contradiction_audit,
         **design["metrics"], **procedural.metrics,
         "human_execution_ready": sum(item["human_classification"] == "HUMAN_EXECUTION_READY" for item in readiness),
         "human_execution_not_ready": sum(item["human_classification"] == "HUMAN_EXECUTION_NOT_READY" for item in readiness),
@@ -475,8 +664,21 @@ def run_generation(request: dict[str, Any]) -> dict[str, Any]:
         "automation_candidate_ratio": round(
             sum(bool(case.get("automation_candidate")) for case in cases) / len(cases), 3
         ) if cases else 0.0,
+        **procedure_template_metrics(cases),
+        **priority_metrics(cases),
+        "characterization_candidates": sum(
+            identity.test_basis == "CHARACTERIZATION" for identity in design["test_identities"]
+        ),
+        "characterization_tests": sum(
+            case.get("test_basis") == "CHARACTERIZATION" for case in cases
+        ),
     })
     metrics["run_wall_clock_seconds"] = round(time.perf_counter() - run_began, 6)
+    metrics["official_pipeline_time"] = metrics["run_wall_clock_seconds"]
+    metrics["render_validation_time"] = round(sum(
+        item["wall_clock_seconds"] for item in metrics["phases"]
+        if item["name"] in {"validation", "rendering"}
+    ), 6)
     metrics["attributed_stage_seconds"] = round(
         sum(item["wall_clock_seconds"] for item in metrics["phases"]), 6
     )
@@ -484,9 +686,12 @@ def run_generation(request: dict[str, Any]) -> dict[str, Any]:
         0.0, metrics["run_wall_clock_seconds"] - metrics["attributed_stage_seconds"]
     ), 6)
     metrics["stage_provenance"] = [{
-        "stage": item["name"], "order": number, "generator": "functional-test-designer/2.2.0",
+        "stage": item["name"], "order": number, "generator": "functional-test-designer/2.2.1",
         "status": "COMPLETE", "validation_result": "PASS",
     } for number, item in enumerate(metrics["phases"], 1)]
+    metrics["full_run_provenance"].extend(
+        _official_run_provenance(metrics["phases"])
+    )
     metrics["quality_gates"] = gates
     _write(internal_metrics, metrics)
     if "DIAGNOSTICS" in selection.formats:
@@ -501,3 +706,25 @@ def run_generation(request: dict[str, Any]) -> dict[str, Any]:
         "canonical_path": str(canonical_path), "render": rendered,
         "diagnostics": str(internal_metrics),
     }
+
+
+def run_generation(request: dict[str, Any]) -> dict[str, Any]:
+    """Run the shared path and mark any retained interrupted state as FAILED."""
+    try:
+        return _run_generation(request)
+    except Exception:
+        try:
+            workspace = Path(request["workspace"]).resolve()
+            artifact_paths = resolve_artifact_paths(
+                skill_root=Path(__file__).resolve().parents[1], source_root=workspace,
+                explicit_artifact_root=Path(request["artifact_root"]),
+            )
+            store = RunStateStore(
+                Path(artifact_paths["artifact_root"]), str(request["run_id"])
+            )
+            if store.path.is_file():
+                store.mark_terminal("FAILED", "shared generation pipeline raised an exception")
+        except Exception:
+            # Run-state hygiene must never replace the original generation failure.
+            pass
+        raise

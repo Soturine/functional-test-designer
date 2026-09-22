@@ -23,6 +23,11 @@ TEST_ASSET_CLASSIFICATIONS = {
     "OUT_OF_SCOPE_WITH_REASON",
 }
 REASON_REQUIRED_CLASSIFICATIONS = {"OUT_OF_SCOPE_WITH_REASON", "DUPLICATE_EXISTING_COVERAGE"}
+CHALLENGE_DISPOSITIONS = {
+    "ALREADY_COVERED_BY", "MATERIALIZED_AS_DERIVED_TC",
+    "MATERIALIZED_AS_CHARACTERIZATION_TC", "QUESTION_REQUIRED",
+    "INVALID_OR_OUT_OF_SCOPE", "TECHNICAL_ONLY",
+}
 TEST_NAME = re.compile(r"^test[_A-Z0-9]", re.IGNORECASE)
 HIGH_SIGNAL_CONSTANT = re.compile(r"^[A-Z][A-Z0-9_]{2,}$")
 
@@ -101,12 +106,14 @@ def discover_python_test_assets(source_text: str, source: str) -> list[dict[str,
 def audit_test_asset_inventory(
     discovered: list[dict[str, Any]],
     classifications: list[dict[str, Any]],
+    *, strict_challenge: bool = False,
 ) -> dict[str, Any]:
     """Require one explicit classification per discovered Test Asset behavior."""
     expected = {str(item["reference"]) for item in discovered}
     seen: set[str] = set()
     counts = {value: 0 for value in sorted(TEST_ASSET_CLASSIFICATIONS)}
     promoted: list[str] = []
+    disposition_counts: dict[str, int] = {value: 0 for value in sorted(CHALLENGE_DISPOSITIONS)}
     for item in classifications:
         reference = str(item.get("reference", "")).strip()
         if reference not in expected:
@@ -134,6 +141,21 @@ def audit_test_asset_inventory(
                     f"Test asset {reference} cannot become normative without Functional Authority support"
                 )
             promoted.append(reference)
+        if strict_challenge:
+            disposition = str(item.get("disposition", ""))
+            if disposition not in CHALLENGE_DISPOSITIONS:
+                raise TestAssetInventoryError(
+                    f"Test asset {reference} requires an explicit challenge-set disposition"
+                )
+            targets = list(item.get("target_refs", []))
+            if disposition in {
+                "ALREADY_COVERED_BY", "MATERIALIZED_AS_DERIVED_TC",
+                "MATERIALIZED_AS_CHARACTERIZATION_TC", "QUESTION_REQUIRED",
+            } and not targets:
+                raise TestAssetInventoryError(f"Test asset {reference} disposition requires target_refs")
+            if disposition in {"INVALID_OR_OUT_OF_SCOPE", "TECHNICAL_ONLY"} and not str(item.get("reason", "")).strip():
+                raise TestAssetInventoryError(f"Test asset {reference} disposition requires a reason")
+            disposition_counts[disposition] += 1
         counts[classification] += 1
 
     missing = sorted(expected - seen)
@@ -151,5 +173,15 @@ def audit_test_asset_inventory(
         "test_asset_out_of_scope_behaviors": counts["OUT_OF_SCOPE_WITH_REASON"],
         "test_asset_behaviors_promoted": len(promoted),
         "test_asset_missing_dispositions": 0,
+        "test_asset_behaviors_total": len(discovered),
+        "test_asset_business_relevant": counts["BUSINESS_RELEVANT"],
+        "test_asset_already_covered": disposition_counts["ALREADY_COVERED_BY"],
+        "test_asset_promoted_to_derived": disposition_counts["MATERIALIZED_AS_DERIVED_TC"],
+        "test_asset_promoted_to_characterization": disposition_counts["MATERIALIZED_AS_CHARACTERIZATION_TC"],
+        "test_asset_questions": disposition_counts["QUESTION_REQUIRED"],
+        "test_asset_rejected": disposition_counts["INVALID_OR_OUT_OF_SCOPE"] + disposition_counts["TECHNICAL_ONLY"],
+        "test_asset_unresolved": 0,
+        "test_asset_challenge_valid": True,
         "classification_counts": counts,
+        "challenge_disposition_counts": disposition_counts,
     }

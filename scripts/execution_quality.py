@@ -33,6 +33,44 @@ PATH_COMPRESSION = re.compile(
     r"\b(?:both platforms|other portal|ambas as plataformas|outro portal)\b",
     re.IGNORECASE,
 )
+GENERIC_SETUP = re.compile(
+    r"\b(?:open the record and confirm the initial state|surface and test record are displayed|"
+    r"observe the result|abrir o registro e confirmar o estado inicial|observar o resultado)\b",
+    re.IGNORECASE,
+)
+
+
+def _normalized_template(value: Any) -> str:
+    text = re.sub(r"\b[A-Z][A-Z0-9_-]{2,}\b", "<id>", str(value))
+    text = re.sub(r"\b\d+\b", "<n>", text)
+    return " ".join(text.casefold().split())
+
+
+def procedure_template_metrics(cases: list[dict[str, Any]]) -> dict[str, Any]:
+    """Measure repeated/generic procedural templates without forcing artificial steps."""
+    actions = [str(step.get("action", "")) for case in cases for step in case.get("steps", [])]
+    expected = [
+        str(step.get("expected_result", ""))
+        for case in cases for step in case.get("steps", [])
+        if step.get("expected_result") is not None
+    ]
+    action_templates = Counter(_normalized_template(value) for value in actions)
+    expected_templates = Counter(_normalized_template(value) for value in expected)
+    repeated_actions = sum(count for count in action_templates.values() if count > 1)
+    repeated_expected = sum(count for count in expected_templates.values() if count > 1)
+    generic_setup = sum(bool(GENERIC_SETUP.search(value)) for value in [*actions, *expected])
+    claim_oracles = {
+        _normalized_template(case.get("objective", "")) for case in cases
+    }
+    copied = sum(_normalized_template(value) in claim_oracles for value in expected)
+    return {
+        "unique_action_ratio": round(len(action_templates) / len(actions), 4) if actions else 0.0,
+        "unique_expected_result_ratio": round(len(expected_templates) / len(expected), 4) if expected else 0.0,
+        "repeated_action_template_ratio": round(repeated_actions / len(actions), 4) if actions else 0.0,
+        "repeated_expected_template_ratio": round(repeated_expected / len(expected), 4) if expected else 0.0,
+        "generic_setup_step_count": generic_setup,
+        "claim_copied_verbatim_as_oracle_count": copied,
+    }
 
 
 def hidden_subtest_signals(action: str) -> list[str]:

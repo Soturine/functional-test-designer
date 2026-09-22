@@ -535,6 +535,8 @@ def _v22_merge_suggestions(
                 "automation_tradeoff": "LOSES_INDEPENDENT_FAILURE_DIAGNOSIS",
                 "confidence": "HIGH" if explicit or (same_event and same_setup) else "MEDIUM",
             })
+    for number, item in enumerate(suggestions, 1):
+        item["merge_candidate_id"] = f"MC-{number:03d}"
     return suggestions
 
 
@@ -577,6 +579,13 @@ def build_scenario_family_pipeline(
             candidate["execution_status"] = execution_status
             candidate["scenario_family_key"] = _v22_family_key(candidate)
             candidates.append(candidate)
+
+    # Allocate every normative Acceptance identity before additive candidates.
+    # Post-baseline expansion can add tests, but cannot renumber the frozen suite.
+    candidates.sort(key=lambda item: (
+        item.get("test_basis") != "ACCEPTANCE"
+        or item.get("expansion_layer") == "ADDITIVE"
+    ))
 
     represented = {cp for item in candidates for cp in item.get("coverage_point_refs", [])}
     missing = {str(item["id"]) for item in testable} - represented
