@@ -363,7 +363,7 @@ class PresentationAndRunStateTests(unittest.TestCase):
             self.assertEqual(1, diagnostics["normative_atomic_after_expansion"])
             self.assertEqual(1, diagnostics["operator_error_tests"])
             self.assertTrue(diagnostics["baseline_preserved"])
-            self.assertEqual(16, len(diagnostics["quality_gates"]))
+            self.assertEqual(28, len(diagnostics["quality_gates"]))
             self.assertIsNone(diagnostics["source_analysis_time"])
             stages = {item["stage"]: item for item in diagnostics["full_run_provenance"]}
             self.assertEqual("COMPLETE", stages["ORCHESTRATOR_EXECUTION"]["status"])
