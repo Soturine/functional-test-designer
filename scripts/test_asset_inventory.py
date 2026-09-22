@@ -185,3 +185,28 @@ def audit_test_asset_inventory(
         "classification_counts": counts,
         "challenge_disposition_counts": disposition_counts,
     }
+
+
+def materialize_test_asset_challenge(
+    discovered: list[dict[str, Any]], classifications: list[dict[str, Any]]
+) -> dict[str, Any]:
+    """Create the official auditable challenge-set artifact from reviewed inputs."""
+    by_reference = {str(item.get("reference")): item for item in classifications}
+    behaviors = []
+    for number, source_item in enumerate(discovered, 1):
+        reference = str(source_item.get("reference", ""))
+        review = by_reference.get(reference, {})
+        behaviors.append({
+            "behavior_id": str(source_item.get("id") or f"TAB-{number:04d}"),
+            "source_file": str(source_item.get("source", "")),
+            "source_test": reference,
+            "normalized_behavioral_intent": str(
+                review.get("normalized_behavioral_intent", reference.replace("_", " "))
+            ),
+            "classification": str(review.get("classification", "")),
+            "related_claims": list(review.get("related_claims", [])),
+            "related_tcs": list(review.get("target_refs", [])),
+            "disposition": str(review.get("disposition", "")),
+            "reason": str(review.get("reason", "")),
+        })
+    return {"schema_version": "1", "behaviors": behaviors}

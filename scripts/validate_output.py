@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from quality_gates import GATE_NAMES
+from pipeline_integrity import PipelineIntegrityError, validate_run_manifest
 
 try:
     from jsonschema import Draft202012Validator, FormatChecker
@@ -554,8 +555,17 @@ def validate(output_dir: Path) -> list[str]:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("output", nargs="?", default="output", type=Path, help="output directory")
+    parser.add_argument(
+        "--manifest", type=Path,
+        help="validate the official run manifest, canonical digest and published file digests",
+    )
     args = parser.parse_args()
     errors = validate(args.output.resolve())
+    if args.manifest:
+        try:
+            validate_run_manifest(args.manifest.resolve())
+        except (PipelineIntegrityError, OSError, json.JSONDecodeError) as exc:
+            errors.append(f"official pipeline integrity failed: {exc}")
     if errors:
         print(f"FAIL: {len(errors)} validation error(s)")
         for error in errors:

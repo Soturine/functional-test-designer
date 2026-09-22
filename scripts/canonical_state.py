@@ -52,6 +52,7 @@ def persist_canonical_suite(
     questions: dict[str, Any],
     cases: list[dict[str, Any]],
     operational_catalog: dict[str, Any] | None = None,
+    diagnostic_artifacts: dict[str, Any] | None = None,
 ) -> Path:
     run_dir = artifact_root.resolve() / ".ftd" / "runs" / run_id
     catalog = operational_catalog or {"families": [], "family_count": 0}
@@ -63,6 +64,7 @@ def persist_canonical_suite(
         "questions": questions,
         "cases": cases,
         "operational_catalog": catalog,
+        "diagnostic_artifacts": diagnostic_artifacts or {},
     }
     path = run_dir / "canonical-suite.json"
     _write_json(path, document)
@@ -137,6 +139,11 @@ def render_selected_outputs(
         with destination.open("w", encoding="utf-8", newline="\n") as handle:
             handle.write(render_operational_scenarios(catalog))
         rendered.append("OPERATIONAL")
+    if "DIAGNOSTICS" in selection.formats:
+        diagnostics = artifact_root.resolve() / "diagnostics"
+        diagnostics.mkdir(parents=True, exist_ok=True)
+        for name, value in canonical.get("diagnostic_artifacts", {}).items():
+            _write_json(diagnostics / name, value)
     return {
         "requested_public_formats": sorted(selection.formats),
         "rendered_public_formats": sorted(rendered),

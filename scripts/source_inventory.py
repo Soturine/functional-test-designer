@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 from typing import Any
+import re
 
 
 AUTHORITIES = {
@@ -128,6 +129,13 @@ def audit_normative_source_units(
             )
         if disposition in {"OUT_OF_SCOPE", "NOT_TESTABLE"} and not str(unit.get("reason", "")).strip():
             raise SourceInventoryError(f"Normative source unit {unit_id} requires a reason")
+        if disposition in {"OUT_OF_SCOPE", "NOT_TESTABLE"} and re.search(
+            r"\b(?:implementation|code|endpoint|screen|ui)\b.*\b(?:missing|absent|not found|unavailable)\b",
+            str(unit.get("reason", "")), re.IGNORECASE,
+        ):
+            raise SourceInventoryError(
+                f"Normative source unit {unit_id} cannot disappear because implementation is unavailable"
+            )
         by_id[unit_id] = unit
         units_by_path[path].append(unit)
     missing_paths = sorted(path for path, units in units_by_path.items() if not units)

@@ -42,6 +42,47 @@
     "automation_layer": {"enum": ["UI", "API", "SERVICE", "INTEGRATION", "HARDWARE", "MIXED", "NONE"]},
     "automation_tool_hint": {"enum": ["PLAYWRIGHT", "API_TEST", "TESTSPRITE", "PYTEST", "OTHER", "NONE"]},
     "deterministic": {"type": "boolean"},
+    "automation_blocker": {
+      "type": ["string", "null"],
+      "enum": [null, "MISSING_EXECUTION_SURFACE", "MISSING_DETERMINISTIC_DATA", "AMBIGUOUS_ACTION", "MISSING_OBSERVATION", "HIDDEN_BRANCH", "PATH_COMPRESSION", "PROCEDURE_GAP", "EXTERNAL_DEPENDENCY", "ENVIRONMENT_GAP", "NOT_DETERMINISTIC"]
+    },
+    "priority_reason": {"type": "string", "minLength": 1},
+    "claim_exercise_map": {
+      "type": "array",
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["claim_id", "coverage_point_id", "test_case_id", "step_refs", "assertion_refs", "primary_type"],
+        "properties": {
+          "claim_id": {"type": "string", "pattern": "^CLAIM-[0-9]{3,}$"},
+          "coverage_point_id": {"type": "string", "pattern": "^CP-[0-9]{3,}$"},
+          "test_case_id": {"type": "string", "pattern": "^TC-[0-9]{3,}$"},
+          "step_refs": {"type": "array", "minItems": 1, "items": {"type": "integer", "minimum": 1}},
+          "assertion_refs": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}},
+          "primary_type": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "atomicity_exception": {
+      "type": "object", "additionalProperties": false,
+      "required": ["reason", "shared_failure_domain", "claim_ids"],
+      "properties": {
+        "reason": {"const": "INDIVISIBLE_CONTRACT"},
+        "shared_failure_domain": {"type": "string", "minLength": 1},
+        "claim_ids": {"type": "array", "minItems": 2, "uniqueItems": true, "items": {"type": "string", "pattern": "^CLAIM-[0-9]{3,}$"}}
+      }
+    },
+    "e2e_stage_map": {
+      "type": "array",
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["atomic_test_ref", "trigger", "assertion_refs"],
+        "properties": {
+          "atomic_test_ref": {"type": "string", "pattern": "^TC-[0-9]{3,}$"},
+          "trigger": {"type": "string", "minLength": 1},
+          "assertion_refs": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}}
+        }
+      }
+    },
     "objective": {"type": "string", "minLength": 1},
     "requirement_refs": {
       "type": "array",

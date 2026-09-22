@@ -20,6 +20,14 @@ from cross_source_contradictions import audit_contradictions
 from execution_quality import procedure_template_metrics
 from procedural_pipeline import reconcile_additive_feedback, run_procedural_tasks
 from procedural_readiness import align_public_status, audit_execution_readiness
+from pipeline_integrity import (
+    RunManifest, audit_atomic_coverage, audit_claim_exercise,
+    audit_e2e_stage_mapping, audit_historical_baseline, audit_one_step_completeness,
+    audit_priority_calibration, audit_scenario_family_linkage,
+    audit_use_case_flow_exercise, apply_runtime_readiness, build_identifier_ledger,
+    build_physical_source_ledger, link_identifier_ledger, reject_request_owned_results,
+    stable_digest, validate_run_manifest,
+)
 from render_operational_scenarios import build_operational_catalog
 from resolve_artifacts import resolve_artifact_paths
 from resolve_scope import resolve_selected_scope
@@ -37,7 +45,7 @@ from source_inventory import (
 )
 from quality_gates import assert_quality_gates, build_quality_gates
 from reference_integrity import audit_evidence_references
-from test_asset_inventory import audit_test_asset_inventory
+from test_asset_inventory import audit_test_asset_inventory, materialize_test_asset_challenge
 from source_coverage_audit import (
     audit_atomic_chain, audit_materialized_atomicity, audit_source_claims,
     materialize_atomic_coverage, review_source_items,
@@ -139,6 +147,7 @@ def _official_run_provenance(phases: list[dict[str, Any]]) -> list[dict[str, Any
 def _run_generation(request: dict[str, Any]) -> dict[str, Any]:
     """Run every mandatory gate; precomputed free-form handoffs are not accepted."""
     run_began = time.perf_counter()
+    reject_request_owned_results(request)
     schema_version = str(request.get("schema_version", "2.2"))
     if schema_version not in {"1.2", "2.2"}:
         raise GenerationContractError(f"Unsupported public schema version {schema_version}")
@@ -153,6 +162,7 @@ def _run_generation(request: dict[str, Any]) -> dict[str, Any]:
     artifact_root = Path(artifact_paths["artifact_root"])
     run_id = str(request["run_id"])
     store = RunStateStore(artifact_root, run_id)
+    manifest_path = store.run_dir / "run-manifest.json"
     internal_metrics = store.run_dir / "orchestration-metrics.json"
     metrics: dict[str, Any] = {
         "schema_version": "1", "diagnostic": bool(request.get("diagnostic", False)),
@@ -186,6 +196,7 @@ def _run_generation(request: dict[str, Any]) -> dict[str, Any]:
         canonical_name = str(previous.payload.get("canonical_suite", ""))
         canonical_path = store.run_dir / canonical_name
         if canonical_name and canonical_path.is_file():
+            validate_run_manifest(manifest_path)
             metrics["checkpoint_events"].append({
                 "checkpoint": "VALIDATED", "event": "resumed",
                 "reason": "SOURCE_HASHES_AND_CANONICAL_STATE_MATCH",
@@ -211,7 +222,7 @@ def _run_generation(request: dict[str, Any]) -> dict[str, Any]:
             ), 6)
             metrics["stage_provenance"] = [{
                 "stage": item["name"], "order": number,
-                "generator": "functional-test-designer/2.2.1",
+                "generator": "functional-test-designer/2.2.2",
                 "status": "COMPLETE", "validation_result": "PASS",
             } for number, item in enumerate(metrics["phases"], 1)]
             metrics["full_run_provenance"].extend(
@@ -239,6 +250,12 @@ def _run_generation(request: dict[str, Any]) -> dict[str, Any]:
         })
     store.save("SCOPE_RESOLVED", {"scope": scope}, hashes)
     metrics["checkpoint_events"].append({"checkpoint": "SCOPE_RESOLVED", "event": "created"})
+    manifest = RunManifest(manifest_path, run_id)
+    stamp = _now()
+    manifest.record(
+        "SOURCE_SELECTION", inputs=request["selectors"], outputs=scope,
+        started_at=metrics["phases"][0]["started_at"], finished_at=stamp,
+    )
 
     def collect() -> dict[str, Any]:
         manifest = set(map(str, request["evidence_manifest"]))
@@ -251,6 +268,9 @@ def _run_generation(request: dict[str, Any]) -> dict[str, Any]:
         }
 
     collection = phase("source_collection", collect)
+    physical_source_ledger = build_physical_source_ledger(
+        workspace, scope["resolved_scope_paths"], request["source_ledger"]
+    )
     ledger_entries = collection["ledger"]["entries"]
     metrics.update({
         "source_files_assigned": collection["files"],
@@ -268,6 +288,11 @@ def _run_generation(request: dict[str, Any]) -> dict[str, Any]:
     source_unit_audit = {"normative_source_families_complete": True}
     use_case_accounting = {"use_case_flow_accounting_valid": True}
     evidence_reference_audit = {"evidence_reference_integrity_valid": True}
+    identifier_ledger = {
+        "entries": [], "source_identifiers_expected": 0,
+        "source_identifiers_discovered": 0, "source_identifiers_missing": 0,
+        "source_identifiers_complete": True,
+    }
     if schema_version == "2.2":
         if "source_inventory" not in request:
             raise GenerationContractError("Schema 2.2 requires an authority-aware source_inventory")
@@ -299,6 +324,21 @@ def _run_generation(request: dict[str, Any]) -> dict[str, Any]:
         metrics.update(source_unit_audit)
         metrics.update(use_case_accounting)
         metrics.update(evidence_reference_audit)
+        identifier_ledger = build_identifier_ledger(
+            request["source_units"], request["source_unit_expectations"],
+            patterns=request.get("source_identifier_patterns"),
+        )
+        metrics.update({key: value for key, value in identifier_ledger.items() if key != "entries"})
+    stamp = _now()
+    manifest.record(
+        "SOURCE_ACCOUNTING", inputs=scope, outputs=collection["ledger"],
+        started_at=stamp, finished_at=stamp,
+    )
+    manifest.record(
+        "SOURCE_UNIT_EXTRACTION", inputs=request.get("source_inventory", request["sources"]),
+        outputs={"units": request.get("source_units", []), "identifier_ledger": identifier_ledger},
+        started_at=stamp, finished_at=stamp,
+    )
     store.save("SOURCE_ACCOUNTING_COMPLETE", {
         "dispositions": collection["ledger"]["dispositions"],
     }, hashes)
@@ -311,6 +351,10 @@ def _run_generation(request: dict[str, Any]) -> dict[str, Any]:
 
     inventory = phase("source_atomicity", lambda: review_source_items(request["source_items"]))
     chain = phase("coverage_design", lambda: materialize_atomic_coverage(inventory))
+    stamp = _now()
+    manifest.record("CLAIM_EXTRACTION", inputs=request["source_items"], outputs=inventory["claims"], started_at=stamp, finished_at=stamp)
+    manifest.record("CLAUSE_NORMALIZATION", inputs=inventory["claims"], outputs=chain["normative_clauses"], started_at=stamp, finished_at=stamp)
+    manifest.record("COVERAGE_DESIGN", inputs=chain["normative_clauses"], outputs=chain["coverage_points"], started_at=stamp, finished_at=stamp)
     atomic_audit = audit_atomic_chain(inventory, chain)
     residual_audit = audit_materialized_atomicity(inventory, chain)
     review = audit_source_review_independence(
@@ -357,6 +401,10 @@ def _run_generation(request: dict[str, Any]) -> dict[str, Any]:
         }
 
     opportunity_precheck = phase("scenario_reasoning", review_opportunities)
+    challenge_artifact = materialize_test_asset_challenge(
+        list(request["test_asset_inventory"].get("discovered", [])),
+        list(request["test_asset_inventory"].get("classifications", [])),
+    )
     store.save("OPPORTUNITY_AUDIT_COMPLETE", {
         "risk_conditions_reviewed": opportunity_precheck["risk_conditions_reviewed"],
         "use_case_flows_reviewed": opportunity_precheck["use_case_flows_reviewed"],
@@ -383,6 +431,15 @@ def _run_generation(request: dict[str, Any]) -> dict[str, Any]:
         metrics["checkpoint_events"].append(
             {"checkpoint": "NORMATIVE_BASELINE_FROZEN", "event": "created"}
         )
+    stamp = _now()
+    manifest.record(
+        "NORMATIVE_BASELINE", inputs=chain["coverage_points"],
+        outputs=baseline_snapshot, started_at=stamp, finished_at=stamp,
+    )
+    manifest.record(
+        "TEST_ASSET_CHALLENGE", inputs=request["test_asset_inventory"],
+        outputs=challenge_artifact, started_at=stamp, finished_at=stamp,
+    )
     risk_expansion_metrics: dict[str, Any] = {
         "risk_candidates_added": 0, "exploratory_policy_gaps": 0,
         "materialized_risk_refs": [],
@@ -395,6 +452,22 @@ def _run_generation(request: dict[str, Any]) -> dict[str, Any]:
                 coverage_point_ids={str(item["id"]) for item in chain["coverage_points"]},
             ),
         )
+    stamp = _now()
+    operator_profiles = [
+        item for item in request.get("risk_candidate_profiles", [])
+        if str(next((risk.get("risk_class") for risk in request["risk_conditions"]
+                     if str(risk.get("id")) == str(item.get("risk_condition_ref"))), ""))
+        in {"OPERATOR_ERROR", "MISUSE", "NEGATIVE", "ADVERSARIAL_OPERATIONAL"}
+    ]
+    manifest.record(
+        "OPERATOR_ERROR_EXPANSION", inputs=operator_profiles,
+        outputs={"materialized": risk_expansion_metrics.get("materialized_risk_refs", [])},
+        started_at=stamp, finished_at=stamp,
+    )
+    manifest.record(
+        "RISK_EXPANSION", inputs=request["risk_conditions"], outputs=risk_expansion_metrics,
+        started_at=stamp, finished_at=stamp,
+    )
     design = phase(
         "scenario_engine",
         lambda: (
@@ -413,6 +486,22 @@ def _run_generation(request: dict[str, Any]) -> dict[str, Any]:
         semantic_composition = audit_semantic_composition(design)
     else:
         semantic_composition = {"semantic_composition_valid": True}
+    stamp = _now()
+    manifest.record(
+        "CHARACTERIZATION", inputs=scenario_profiles,
+        outputs=[item.id for item in design["test_identities"] if item.test_basis == "CHARACTERIZATION"],
+        started_at=stamp, finished_at=stamp,
+    )
+    manifest.record(
+        "CROSS_REQUIREMENT", inputs=request.get("opportunities", []),
+        outputs=[item.id for item in design["test_identities"] if len(item.requirement_refs) > 1],
+        started_at=stamp, finished_at=stamp,
+    )
+    manifest.record(
+        "E2E_COMPOSITION", inputs=request.get("use_case_flows", []),
+        outputs=[item.id for item in design["test_identities"] if item.test_basis == "E2E"],
+        started_at=stamp, finished_at=stamp,
+    )
     scenario_ids = {item["id"] for item in design["scenarios"]}
     finding_ids = {str(item["id"]) for item in request.get("findings", [])}
     contradiction_audit = audit_contradictions(
@@ -468,7 +557,15 @@ def _run_generation(request: dict[str, Any]) -> dict[str, Any]:
         align_public_status(case, audit)
         if schema_version == "2.2":
             case["execution_status"] = case["status"]
+            if identity.test_basis == "E2E":
+                case["e2e_stage_map"] = list(pack.get("e2e_stage_map", []))
+            case["priority_reason"] = str(pack.get(
+                "priority_reason", "Priority preserved from evidence-supported impact assessment."
+            ))
         readiness.append(audit)
+    automation_audit = apply_runtime_readiness(cases, readiness) if schema_version == "2.2" else {
+        "automation_readiness_valid": True
+    }
     reachability = apply_test_data_reachability(
         cases, packs, {str(item["id"]) for item in request.get("findings", [])}
     )
@@ -477,6 +574,59 @@ def _run_generation(request: dict[str, Any]) -> dict[str, Any]:
         "human_ready": sum(item["human_classification"] == "HUMAN_EXECUTION_READY" for item in readiness),
     }, hashes)
     metrics["checkpoint_events"].append({"checkpoint": "PROCEDURAL_COMPLETE", "event": "created"})
+
+    atomic_coverage_audit = audit_atomic_coverage(chain["coverage_points"], cases) if schema_version == "2.2" else {
+        "atomic_coverage_valid": True
+    }
+    claim_exercise_audit = audit_claim_exercise(
+        inventory["claims"], chain["normative_clauses"], chain["coverage_points"],
+        cases, packs, chain["claim_destinations"],
+    ) if schema_version == "2.2" else {"claim_exercise_valid": True, "mappings": []}
+    identifier_ledger = link_identifier_ledger(
+        identifier_ledger, inventory["claims"], claim_exercise_audit.get("mappings", [])
+    )
+    one_step_audit = audit_one_step_completeness(cases, packs) if schema_version == "2.2" else {
+        "one_step_completeness_valid": True
+    }
+    priority_audit = audit_priority_calibration(cases) if schema_version == "2.2" else {
+        "priority_calibration_valid": True
+    }
+    scenario_linkage_audit = audit_scenario_family_linkage(
+        design["scenarios"], cases
+    ) if schema_version == "2.2" else {"scenario_family_linkage_valid": True}
+    e2e_stage_audit = audit_e2e_stage_mapping(cases) if schema_version == "2.2" else {
+        "e2e_stage_mapping_valid": True
+    }
+    flow_exercise_audit = audit_use_case_flow_exercise(
+        request["use_case_flows"], request["opportunities"],
+        {str(item["id"]) for item in design["scenarios"]} | {str(item["id"]) for item in cases}
+        | question_ids,
+    ) if schema_version == "2.2" else {"use_case_flow_exercise_valid": True}
+    findings_for_baseline = [*request.get("findings", []), *reconciliation["findings"]]
+    historical_audit = audit_historical_baseline(
+        request.get("historical_baseline_lock"),
+        corpus_identity=str(request.get("corpus_identity", "")),
+        source_scope_digest=stable_digest(scope["resolved_scope_paths"]),
+        claim_fingerprints={stable_digest({
+            "requirement_ref": item.get("requirement_ref"),
+            "normalized_claim": item.get("normalized_claim"),
+        }) for item in inventory["claims"]},
+        test_fingerprints={stable_digest({
+            "requirements": item.get("requirement_refs"),
+            "coverage": item.get("coverage_point_refs"),
+            "oracle": item.get("steps", [{}])[-1].get("expected_result"),
+        }) for item in cases if item.get("test_basis") == "ACCEPTANCE"},
+        finding_fingerprints={stable_digest({
+            "type": item.get("type"), "statement": item.get("statement"),
+            "requirements": item.get("requirement_refs"),
+        }) for item in findings_for_baseline},
+    ) if schema_version == "2.2" else {"historical_baseline_regression_valid": True}
+    stamp = _now()
+    manifest.record(
+        "PROCEDURE_REFINEMENT", inputs=[item.id for item in design["test_identities"]],
+        outputs=cases, started_at=stamp, finished_at=stamp,
+    )
+    validate_run_manifest(manifest_path, require_publication=False)
 
     cases_by_cp: dict[str, list[str]] = {}
     for case in cases:
@@ -500,7 +650,7 @@ def _run_generation(request: dict[str, Any]) -> dict[str, Any]:
             ):
                 entry[field] = case[field]
         entries.append(entry)
-    findings = [*request.get("findings", []), *reconciliation["findings"]]
+    findings = findings_for_baseline
     questions = [*request.get("questions", []), *reconciliation["questions"]]
     gates = build_quality_gates(
         source_complete=source_audit["source_coverage_gaps"] == 0 and (
@@ -525,6 +675,18 @@ def _run_generation(request: dict[str, Any]) -> dict[str, Any]:
         test_data_reachability_valid=reachability["test_data_reachability_valid"],
         evidence_references_valid=evidence_reference_audit["evidence_reference_integrity_valid"],
         semantic_composition_valid=semantic_composition["semantic_composition_valid"],
+        canonical_publication_valid=True,
+        historical_baseline_valid=historical_audit["historical_baseline_regression_valid"],
+        atomic_coverage_valid=atomic_coverage_audit["atomic_coverage_valid"],
+        claim_exercise_valid=claim_exercise_audit["claim_exercise_valid"],
+        source_identifiers_complete=identifier_ledger["source_identifiers_complete"],
+        use_case_flow_exercise_valid=flow_exercise_audit["use_case_flow_exercise_valid"],
+        additive_expansion_complete=expansion_metrics["risk_disposition_complete"],
+        one_step_completeness_valid=one_step_audit["one_step_completeness_valid"],
+        automation_readiness_valid=automation_audit["automation_readiness_valid"],
+        priority_calibration_valid=priority_audit["priority_calibration_valid"],
+        scenario_family_linkage_valid=scenario_linkage_audit["scenario_family_linkage_valid"],
+        e2e_stage_mapping_valid=e2e_stage_audit["e2e_stage_mapping_valid"],
     )
     assert_quality_gates(gates)
     index = {
@@ -548,8 +710,38 @@ def _run_generation(request: dict[str, Any]) -> dict[str, Any]:
     canonical_path = phase("validation", lambda: persist_canonical_suite(
         artifact_root, run_id, index=index, questions=questions_document, cases=cases,
         operational_catalog=catalog,
+        diagnostic_artifacts={
+            "test-asset-challenge.json": challenge_artifact,
+            "source-identifier-ledger.json": identifier_ledger,
+            "physical-source-ledger.json": physical_source_ledger,
+            "claim-exercise-map.json": {
+                "schema_version": "1", "mappings": claim_exercise_audit.get("mappings", []),
+            },
+        },
     ))
-    store.save("VALIDATED", {"canonical_suite": canonical_path.name}, hashes)
+    manifest.bind_canonical(canonical_path)
+    stamp = _now()
+    manifest.record(
+        "VALIDATION", inputs={"index": index, "questions": questions_document, "cases": cases},
+        outputs={"canonical_path": str(canonical_path)}, started_at=stamp, finished_at=stamp,
+    )
+    rendered = phase("rendering", lambda: render_selected_outputs(canonical_path, artifact_root, selection))
+    stamp = _now()
+    manifest.record(
+        "RENDERING", inputs={"canonical": str(canonical_path), "formats": sorted(selection.formats)},
+        outputs=rendered, started_at=stamp, finished_at=stamp,
+    )
+    public_files = [path for path in (artifact_root / "output").rglob("*") if path.is_file()]
+    manifest.record(
+        "PUBLICATION", inputs=rendered,
+        outputs=[str(path.relative_to(artifact_root)) for path in public_files],
+        started_at=stamp, finished_at=_now(),
+    )
+    manifest.bind_publication(artifact_root, public_files)
+    validate_run_manifest(manifest_path)
+    store.save("VALIDATED", {
+        "canonical_suite": canonical_path.name, "run_manifest": manifest_path.name,
+    }, hashes)
     metrics["checkpoint_events"].append({"checkpoint": "VALIDATED", "event": "created"})
     superseded = store.supersede_other_validated_runs(
         f"Run {run_id} became the canonical published run"
@@ -559,7 +751,6 @@ def _run_generation(request: dict[str, Any]) -> dict[str, Any]:
             "checkpoint": "VALIDATED", "event": "superseded",
             "run_id": superseded_run, "reason": f"canonical run is {run_id}",
         })
-    rendered = phase("rendering", lambda: render_selected_outputs(canonical_path, artifact_root, selection))
 
     after_python = {path.resolve() for path in workspace.rglob("*.py")}
     unexpected = sorted(str(path) for path in after_python - before_python)
@@ -578,7 +769,10 @@ def _run_generation(request: dict[str, Any]) -> dict[str, Any]:
         **source_unit_audit, **use_case_accounting, **evidence_reference_audit,
         **opportunity_precheck, **opportunity_audit, **risk_expansion_metrics,
         **baseline_metrics, **expansion_metrics, **semantic_composition, **reachability,
-        **contradiction_audit,
+        **contradiction_audit, **atomic_coverage_audit, **claim_exercise_audit,
+        **one_step_audit, **automation_audit, **priority_audit,
+        **scenario_linkage_audit, **e2e_stage_audit, **flow_exercise_audit,
+        **historical_audit,
         **design["metrics"], **procedural.metrics,
         "human_execution_ready": sum(item["human_classification"] == "HUMAN_EXECUTION_READY" for item in readiness),
         "human_execution_not_ready": sum(item["human_classification"] == "HUMAN_EXECUTION_NOT_READY" for item in readiness),
@@ -600,6 +794,7 @@ def _run_generation(request: dict[str, Any]) -> dict[str, Any]:
             "MISSING_PROCEDURAL_PROVENANCE" in item["reason_codes"] for item in readiness
         ),
         "finished_at": _now(), "rendered_public_formats": rendered["rendered_public_formats"],
+        "run_manifest": str(manifest_path), "canonical_publication_valid": True,
     })
     steps_total = sum(len(case.get("steps", [])) for case in cases)
     action_keys = {
@@ -675,6 +870,21 @@ def _run_generation(request: dict[str, Any]) -> dict[str, Any]:
     })
     metrics["run_wall_clock_seconds"] = round(time.perf_counter() - run_began, 6)
     metrics["official_pipeline_time"] = metrics["run_wall_clock_seconds"]
+    phase_times = {item["name"]: item["wall_clock_seconds"] for item in metrics["phases"]}
+    metrics.update({
+        "source_selection_time": phase_times.get("scope_resolution"),
+        "source_reading_time": request.get("source_analysis_time", phase_times.get("source_collection")),
+        "semantic_extraction_time": round(sum(phase_times.get(name, 0.0) for name in (
+            "source_atomicity", "coverage_design", "scenario_reasoning", "scenario_engine"
+        )), 6),
+        "orchestrator_time": metrics["official_pipeline_time"],
+        "expansion_time": phase_times.get("risk_expansion", 0.0),
+        "procedure_time": round(sum(phase_times.get(name, 0.0) for name in (
+            "procedural_reasoning", "procedural_engine"
+        )), 6),
+        "validation_time": phase_times.get("validation", 0.0),
+        "render_time": phase_times.get("rendering", 0.0),
+    })
     metrics["render_validation_time"] = round(sum(
         item["wall_clock_seconds"] for item in metrics["phases"]
         if item["name"] in {"validation", "rendering"}
@@ -686,13 +896,26 @@ def _run_generation(request: dict[str, Any]) -> dict[str, Any]:
         0.0, metrics["run_wall_clock_seconds"] - metrics["attributed_stage_seconds"]
     ), 6)
     metrics["stage_provenance"] = [{
-        "stage": item["name"], "order": number, "generator": "functional-test-designer/2.2.1",
+        "stage": item["name"], "order": number, "generator": "functional-test-designer/2.2.2",
         "status": "COMPLETE", "validation_result": "PASS",
     } for number, item in enumerate(metrics["phases"], 1)]
     metrics["full_run_provenance"].extend(
         _official_run_provenance(metrics["phases"])
     )
     metrics["quality_gates"] = gates
+    metrics["coverage_dimensions"] = {
+        "source_unit_coverage": "COMPLETE" if source_unit_audit.get("normative_source_families_complete") else "INCOMPLETE",
+        "claim_coverage": "COMPLETE" if source_audit["source_coverage_gaps"] == 0 else "INCOMPLETE",
+        "coverage_point_coverage": "COMPLETE" if atomic_audit["unmapped_normative_clauses"] == 0 else "INCOMPLETE",
+        "atomic_test_coverage": "COMPLETE" if atomic_coverage_audit["atomic_coverage_valid"] else "INCOMPLETE",
+        "operator_error_coverage": "DISPOSITIONED" if expansion_metrics["risk_disposition_complete"] else "INCOMPLETE",
+        "risk_coverage": "DISPOSITIONED" if expansion_metrics["risk_disposition_complete"] else "INCOMPLETE",
+        "test_asset_challenge_coverage": "COMPLETE" if opportunity_precheck["test_asset_challenge_valid"] else "INCOMPLETE",
+        "finding_coverage": "ACCOUNTED" if contradiction_audit.get("contradiction_candidates_unresolved", 0) == 0 else "INCOMPLETE",
+        "e2e_coverage": "VALID" if semantic_composition["semantic_composition_valid"] else "INCOMPLETE",
+        "procedure_coverage": "VALID" if one_step_audit["one_step_completeness_valid"] else "INCOMPLETE",
+        "automation_readiness_coverage": "CLASSIFIED" if automation_audit["automation_readiness_valid"] else "INCOMPLETE",
+    }
     _write(internal_metrics, metrics)
     if "DIAGNOSTICS" in selection.formats:
         destination = artifact_root / "diagnostics" / "run-metrics.json"
