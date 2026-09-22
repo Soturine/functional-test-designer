@@ -280,10 +280,10 @@ def _clean_title(raw: str) -> str:
 
 
 def extract_identifiers(text: str, path: str, pattern: str | None = None) -> list[dict[str, Any]]:
-    """Index identifier definitions (`RF001 - Title`) with official titles and excerpts.
+    """Index identifier definitions (`REQ-12 - Title`) with official titles and excerpts.
 
     Only a line that starts with the identifier followed by a title is a definition; an
-    identifier merely mentioned inside prose (`... (RN004)`) is a reference, not a unit.
+    identifier merely mentioned inside prose (`... (REQ-4)`) is a reference, not a unit.
     """
     identifier = pattern or DEFAULT_IDENTIFIER
     definition = re.compile(

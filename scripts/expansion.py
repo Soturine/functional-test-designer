@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from common import StageError, normalize, similarity
+from common import StageError, jaccard, normalize, normalize_identifier, similarity
 from design import (
     check_locale, unknown_keys, validate_questions_and_findings, validate_test_intent,
 )
@@ -65,8 +65,9 @@ ASSET_DISPOSITIONS = {
 }
 INTENT_FIELDS = ("actor", "state", "trigger", "failure_domain", "expected")
 ALIGNMENT_THRESHOLDS = {
-    "actor": 0.34, "state": 0.34, "trigger": 0.34, "failure_domain": 0.5, "expected": 0.34,
+    "actor": 0.34, "state": 0.34, "trigger": 0.34, "failure_domain": 0.4, "expected": 0.34,
 }
+STRICT_FIELDS = {"failure_domain", "expected"}
 EXPANSION_KEYS = {"dimensions", "test_assets", "questions", "findings"}
 
 
@@ -80,7 +81,12 @@ def intent_alignment(intent: dict[str, Any], target: dict[str, Any]) -> dict[str
     ALREADY_COVERED is a semantic claim: a generic Test Case that merely shares a target
     id with an unrelated behavior does not cover it.
     """
-    scores = {field: round(similarity(intent.get(field), target.get(field)), 3) for field in INTENT_FIELDS}
+    # Context fields may be phrased more or less specifically (containment); what fails and
+    # what is observed must genuinely match (Jaccard), or a generic test would absorb it.
+    scores = {
+        field: round((jaccard if field in STRICT_FIELDS else similarity)(intent.get(field), target.get(field)), 3)
+        for field in INTENT_FIELDS
+    }
     misaligned = [field for field, minimum in ALIGNMENT_THRESHOLDS.items() if scores[field] < minimum]
     return {"scores": scores, "aligned": not misaligned, "misaligned_fields": misaligned}
 
@@ -250,12 +256,11 @@ def validate_expansion(payload: dict[str, Any], context: dict[str, Any]) -> dict
     reviews = {
         "OPERATOR_ERROR": _checklist(
             records.get("OPERATOR_ERROR", {}).get("patterns_reviewed"), OPERATOR_PATTERNS,
-            "pattern", {"OPERATOR_ERROR", "MISUSE"}, candidates, "OPERATOR_ERROR patterns_reviewed", errors,
+            "pattern", candidates, "OPERATOR_ERROR patterns_reviewed", errors,
         ),
         "CHAOS": _checklist(
             records.get("CHAOS", {}).get("surfaces_reviewed"), FAILURE_SURFACES,
-            "surface", {"CHAOS", "RECOVERY", "INTEGRATION", "IDEMPOTENCY", "CONCURRENCY", "RACE_CONDITION"},
-            candidates, "CHAOS surfaces_reviewed", errors,
+            "surface", candidates, "CHAOS surfaces_reviewed", errors,
         ),
     }
 
@@ -356,8 +361,9 @@ def validate_expansion(payload: dict[str, Any], context: dict[str, Any]) -> dict
                 continue
             if not _text(stage.get("name")) or not _text(stage.get("trigger")) or not _text(stage.get("observation")):
                 errors.append(f"{label} stage {index} requires name, trigger and observation")
-            stage_text = f"{stage.get('trigger')} {stage.get('observation')}"
-            if similarity(stage_text, f"{target['trigger']} {target['expected']} {target['title']}") < 0.34:
+            triggered = similarity(stage.get("trigger"), f"{target['trigger']} {target['title']}") >= 0.34
+            observed = jaccard(stage.get("observation"), target["expected"]) >= 0.3
+            if not (triggered and observed):
                 errors.append(
                     f"{label} stage {index} does not map to the behavior of {stage.get('test')} "
                     "(trigger/observation unrelated to the composed atomic test)"
@@ -384,7 +390,7 @@ def validate_expansion(payload: dict[str, Any], context: dict[str, Any]) -> dict
 
 
 def _checklist(
-    entries: Any, catalog: dict[str, str], field: str, dimensions: set[str],
+    entries: Any, catalog: dict[str, str], field: str,
     candidates: list[dict[str, Any]], label: str, errors: list[str],
 ) -> list[dict[str, Any]]:
     """Walk a generic checklist; each item links candidates or is explicitly not applicable."""
@@ -402,10 +408,8 @@ def _checklist(
         for item in items:
             if item in reviewed:
                 errors.append(f"{label} reviews {item} twice")
-            linked = [
-                candidate["key"] for candidate in candidates
-                if candidate[field] == item and candidate["dimension"] in dimensions
-            ]
+            # A mistake or failure surface may be evaluated under any dimension.
+            linked = [candidate["key"] for candidate in candidates if candidate[field] == item]
             if status == "CANDIDATES" and not linked:
                 errors.append(f"{label} marks {item} as CANDIDATES but no candidate carries {field}={item}")
             reviewed[item] = {
@@ -425,12 +429,12 @@ def _journeys(
     by_use_case: dict[str, list[dict[str, Any]]] = {}
     for candidate in candidates:
         if candidate["dimension"] == "E2E" and candidate["use_case"]:
-            by_use_case.setdefault(normalize(candidate["use_case"]).upper().replace(" ", ""), []).append(candidate)
+            by_use_case.setdefault(normalize_identifier(candidate["use_case"]), []).append(candidate)
     journeys = []
     for entry in authority_index:
         if entry["kind"] != "USE_CASE":
             continue
-        key = normalize(entry["identifier"]).upper().replace(" ", "")
+        key = normalize_identifier(entry["identifier"])
         found = by_use_case.get(key, [])
         if not found:
             errors.append(f"use case {entry['identifier']} has no E2E journey disposition")

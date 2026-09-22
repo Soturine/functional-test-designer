@@ -1,0 +1,828 @@
+{
+ "name": "aerospace-inspection",
+ "domain": "Aerospace / maintenance inspection",
+ "sources": {
+  "normas/inspecao-componentes.md": {
+   "role": "FUNCTIONAL_AUTHORITY",
+   "text": "# Requisitos — Inspeção de Componentes\n\nRF-01 - Registrar Inspeção\nO inspetor registra o resultado da inspeção de um componente como Aprovado ou Reprovado.\n\nRF-02 - Liberar Componente para Instalação\nSomente componentes cuja última inspeção foi Aprovada podem ser liberados para instalação.\n\nRN-01 - Validade da Certificação\nInspeções só podem ser registradas por inspetores com certificação válida na data da inspeção.\n\nRN-02 - Rastreabilidade de Ferramenta\nToda inspeção registra o número de série da ferramenta calibrada utilizada.\n\nRN-03 - Componente Reprovado\nUm componente Reprovado fica Bloqueado até uma nova inspeção Aprovada.\n"
+  }
+ },
+ "stages": {
+  "design": {
+   "domain_model": {
+    "actors": [
+     "inspetor certificado",
+     "técnico de instalação"
+    ],
+    "entities": [
+     "componente",
+     "inspeção",
+     "certificação",
+     "ferramenta calibrada"
+    ],
+    "states": [
+     "Aprovado",
+     "Reprovado",
+     "Bloqueado",
+     "liberado para instalação"
+    ],
+    "operations": [
+     "registrar inspeção",
+     "liberar componente"
+    ],
+    "invariants": [
+     "componente só é liberado com a última inspeção Aprovada",
+     "inspeção exige certificação válida"
+    ],
+    "permissions": [
+     "apenas inspetores certificados registram inspeções"
+    ],
+    "integrations": [],
+    "events": [
+     "inspeção registrada"
+    ],
+    "dependencies": [
+     "cadastro de certificações",
+     "cadastro de ferramentas calibradas"
+    ],
+    "observables": [
+     "situação do componente",
+     "histórico de inspeções"
+    ],
+    "failure_surfaces": [
+     "certificação vencida",
+     "ferramenta errada"
+    ]
+   },
+   "requirements": [
+    {
+     "key": "RF-01",
+     "source_identifier": "RF-01",
+     "source_statement": "O inspetor registra o resultado da inspeção como Aprovado ou Reprovado."
+    },
+    {
+     "key": "RF-02",
+     "source_identifier": "RF-02",
+     "source_statement": "Somente componentes com a última inspeção Aprovada são liberados para instalação."
+    },
+    {
+     "key": "RN-01",
+     "source_identifier": "RN-01",
+     "source_statement": "Inspeções exigem certificação válida na data da inspeção."
+    },
+    {
+     "key": "RN-02",
+     "source_identifier": "RN-02",
+     "source_statement": "Toda inspeção registra o número de série da ferramenta calibrada."
+    },
+    {
+     "key": "RN-03",
+     "source_identifier": "RN-03",
+     "source_statement": "Componente Reprovado fica Bloqueado até nova inspeção Aprovada."
+    }
+   ],
+   "claims": [
+    {
+     "key": "C1",
+     "requirement": "RF-01",
+     "text": "O resultado Aprovado fica registrado na inspeção do componente."
+    },
+    {
+     "key": "C2",
+     "requirement": "RF-02",
+     "text": "Um componente cuja última inspeção foi Aprovada pode ser liberado para instalação."
+    },
+    {
+     "key": "C3",
+     "requirement": "RF-02",
+     "text": "Um componente cuja última inspeção foi Reprovada não pode ser liberado para instalação."
+    },
+    {
+     "key": "C4",
+     "requirement": "RN-01",
+     "text": "Um inspetor com certificação vencida não consegue registrar a inspeção."
+    },
+    {
+     "key": "C5",
+     "requirement": "RN-02",
+     "text": "A inspeção registrada contém o número de série da ferramenta calibrada utilizada."
+    },
+    {
+     "key": "C6",
+     "requirement": "RN-03",
+     "text": "Um componente Reprovado fica Bloqueado."
+    },
+    {
+     "key": "C7",
+     "requirement": "RN-03",
+     "text": "Uma nova inspeção Aprovada remove o Bloqueio do componente."
+    }
+   ],
+   "tests": [
+    {
+     "key": "T1",
+     "claims": [
+      "C1"
+     ],
+     "title": "Registrar inspeção aprovada",
+     "objective": "Verificar que o resultado Aprovado fica registrado.",
+     "family": "Inspeção",
+     "actor": "inspetor certificado",
+     "state": "componente aguardando inspeção",
+     "trigger": "registrar a inspeção como Aprovado",
+     "expected": "O resultado Aprovado fica registrado na inspeção do componente.",
+     "failure_domain": "registro de resultado",
+     "primary_type": "FUNCTIONAL",
+     "priority": "HIGH",
+     "priority_reason": "Base da aeronavegabilidade."
+    },
+    {
+     "key": "T2",
+     "claims": [
+      "C2"
+     ],
+     "title": "Liberar componente aprovado",
+     "objective": "Verificar que componente com última inspeção Aprovada é liberado.",
+     "family": "Liberação",
+     "actor": "técnico de instalação",
+     "state": "componente com última inspeção Aprovada",
+     "trigger": "solicitar a liberação para instalação",
+     "expected": "O componente é liberado para instalação.",
+     "failure_domain": "liberação permitida",
+     "primary_type": "FUNCTIONAL",
+     "priority": "HIGH",
+     "priority_reason": "Fluxo de manutenção."
+    },
+    {
+     "key": "T3",
+     "claims": [
+      "C3"
+     ],
+     "title": "Componente reprovado não é liberado",
+     "objective": "Verificar que componente com última inspeção Reprovada não é liberado.",
+     "family": "Liberação",
+     "actor": "técnico de instalação",
+     "state": "componente com última inspeção Reprovada",
+     "trigger": "solicitar a liberação para instalação",
+     "expected": "A liberação é recusada para o componente.",
+     "failure_domain": "liberação indevida",
+     "primary_type": "NEGATIVE",
+     "priority": "CRITICAL",
+     "priority_reason": "Instalar peça reprovada compromete a segurança de voo."
+    },
+    {
+     "key": "T4",
+     "claims": [
+      "C4"
+     ],
+     "title": "Inspetor com certificação vencida não registra inspeção",
+     "objective": "Verificar que certificação vencida impede o registro.",
+     "family": "Certificação",
+     "actor": "inspetor com certificação vencida",
+     "state": "componente aguardando inspeção",
+     "trigger": "registrar a inspeção",
+     "expected": "O registro da inspeção é recusado.",
+     "failure_domain": "validade da certificação",
+     "primary_type": "AUTHORIZATION",
+     "priority": "CRITICAL",
+     "priority_reason": "Exigência regulatória."
+    },
+    {
+     "key": "T5",
+     "claims": [
+      "C5"
+     ],
+     "title": "Inspeção registra a ferramenta calibrada",
+     "objective": "Verificar que a inspeção guarda o número de série da ferramenta.",
+     "family": "Inspeção",
+     "actor": "inspetor certificado",
+     "state": "componente aguardando inspeção",
+     "trigger": "registrar a inspeção informando a ferramenta",
+     "expected": "A inspeção registrada contém o número de série da ferramenta calibrada utilizada.",
+     "failure_domain": "rastreabilidade de ferramenta",
+     "primary_type": "AUDIT",
+     "priority": "HIGH",
+     "priority_reason": "Rastreabilidade regulatória."
+    },
+    {
+     "key": "T6",
+     "claims": [
+      "C6"
+     ],
+     "title": "Componente reprovado fica bloqueado",
+     "objective": "Verificar que a reprovação bloqueia o componente.",
+     "family": "Bloqueio",
+     "actor": "inspetor certificado",
+     "state": "componente aguardando inspeção",
+     "trigger": "registrar a inspeção como Reprovado",
+     "expected": "O componente fica Bloqueado.",
+     "failure_domain": "bloqueio por reprovação",
+     "primary_type": "STATE_TRANSITION",
+     "priority": "CRITICAL",
+     "priority_reason": "Evita uso de peça reprovada."
+    },
+    {
+     "key": "T7",
+     "claims": [
+      "C7"
+     ],
+     "title": "Nova inspeção aprovada remove o bloqueio",
+     "objective": "Verificar que uma nova inspeção Aprovada remove o bloqueio.",
+     "family": "Bloqueio",
+     "actor": "inspetor certificado",
+     "state": "componente Bloqueado",
+     "trigger": "registrar nova inspeção como Aprovado",
+     "expected": "O Bloqueio do componente é removido.",
+     "failure_domain": "desbloqueio",
+     "primary_type": "STATE_TRANSITION",
+     "priority": "HIGH",
+     "priority_reason": "Retorno da peça ao serviço."
+    }
+   ],
+   "questions": [
+    {
+     "key": "Q1",
+     "question": "A calibração da ferramenta precisa estar válida na data da inspeção?",
+     "reason": "A regra exige ferramenta calibrada mas não define a validade da calibração.",
+     "requirements": [
+      "RN-02"
+     ],
+     "impact": "REQUIREMENT_AMBIGUITY"
+    },
+    {
+     "key": "Q2",
+     "question": "Como corrigir uma inspeção registrada no componente errado?",
+     "reason": "Não há regra de correção ou estorno de inspeção.",
+     "requirements": [
+      "RF-01"
+     ],
+     "impact": "EXPECTED_RESULT"
+    }
+   ]
+  },
+  "expansion": {
+   "dimensions": [
+    {
+     "dimension": "NEGATIVE",
+     "summary": "Registros inválidos foram avaliados; a certificação vencida está coberta.",
+     "candidates": []
+    },
+    {
+     "dimension": "BOUNDARY",
+     "summary": "O limite da validade da certificação foi avaliado.",
+     "candidates": [
+      {
+       "key": "B1",
+       "description": "Certificação que vence exatamente na data da inspeção.",
+       "disposition": "MATERIALIZED",
+       "test": {
+        "basis": "DERIVED",
+        "anchors": [
+         "C4"
+        ],
+        "key": "D1",
+        "title": "Certificação válida no último dia",
+        "objective": "Verificar que a certificação que vence na data da inspeção ainda permite o registro.",
+        "family": "Certificação",
+        "actor": "inspetor certificado",
+        "state": "certificação com validade até a data da inspeção",
+        "trigger": "registrar a inspeção",
+        "expected": "O registro da inspeção é aceito porque a certificação é válida na data.",
+        "failure_domain": "limite de validade",
+        "primary_type": "BOUNDARY",
+        "priority": "HIGH",
+        "priority_reason": "Erro de limite bloqueia inspeções legítimas.",
+        "oracle_source": {
+         "source": "normas/inspecao-componentes.md",
+         "reference": "RN-01"
+        }
+       }
+      }
+     ]
+    },
+    {
+     "dimension": "OPERATOR_ERROR",
+     "summary": "Erros do inspetor e do técnico foram avaliados.",
+     "candidates": [
+      {
+       "key": "O1",
+       "pattern": "WRONG_RESOURCE",
+       "description": "O inspetor registra a inspeção no componente errado.",
+       "disposition": "QUESTION_REQUIRED",
+       "question": "Q2"
+      },
+      {
+       "key": "O2",
+       "pattern": "PHYSICAL_DIGITAL_MISMATCH",
+       "description": "A ferramenta usada fisicamente difere da informada.",
+       "disposition": "NOT_APPLICABLE",
+       "reason": "o sistema não tem meio de observar a ferramenta física; a regra só exige o registro do número de série"
+      },
+      {
+       "key": "O3",
+       "pattern": "WRONG_STATE",
+       "description": "O técnico tenta liberar componente Bloqueado.",
+       "disposition": "ALREADY_COVERED",
+       "covered_by": [
+        "T3"
+       ],
+       "intent": {
+        "actor": "técnico de instalação",
+        "state": "componente com última inspeção Reprovada",
+        "trigger": "solicitar a liberação para instalação",
+        "failure_domain": "liberação indevida",
+        "expected": "a liberação é recusada para o componente"
+       }
+      }
+     ],
+     "patterns_reviewed": [
+      {
+       "items": [
+        "WRONG_RESOURCE",
+        "PHYSICAL_DIGITAL_MISMATCH",
+        "WRONG_STATE"
+       ],
+       "status": "CANDIDATES"
+      },
+      {
+       "items": [
+        "WRONG_ASSOCIATION",
+        "WRONG_ACTOR",
+        "WRONG_SEQUENCE",
+        "REPEATED_ACTION",
+        "OMITTED_ACTION",
+        "STALE_OPERATION",
+        "PARTIAL_OPERATION",
+        "CROSS_CONTEXT_MISTAKE",
+        "WRONG_ACKNOWLEDGEMENT",
+        "MANUAL_AFTER_AUTOMATIC",
+        "ABANDONED_OPERATION"
+       ],
+       "status": "NOT_APPLICABLE",
+       "reason": "o fluxo tem registros individuais sem alertas, contas, lotes ou processamento automático"
+      }
+     ]
+    },
+    {
+     "dimension": "MISUSE",
+     "summary": "Registrar inspeções sem certificação foi avaliado como autorização.",
+     "candidates": []
+    },
+    {
+     "dimension": "STATE_TRANSITION",
+     "summary": "Transições Aprovado, Reprovado e Bloqueado foram avaliadas.",
+     "candidates": [
+      {
+       "key": "S1",
+       "description": "Reprovado após Aprovado volta a bloquear o componente.",
+       "disposition": "MATERIALIZED",
+       "test": {
+        "basis": "DERIVED",
+        "anchors": [
+         "C6"
+        ],
+        "key": "D2",
+        "title": "Nova reprovação volta a bloquear",
+        "objective": "Verificar que uma reprovação posterior a uma aprovação bloqueia o componente.",
+        "family": "Bloqueio",
+        "actor": "inspetor certificado",
+        "state": "componente com última inspeção Aprovada",
+        "trigger": "registrar nova inspeção como Reprovado",
+        "expected": "O componente fica Bloqueado novamente.",
+        "failure_domain": "bloqueio após aprovação",
+        "primary_type": "STATE_TRANSITION",
+        "priority": "CRITICAL",
+        "priority_reason": "A última inspeção governa a liberação.",
+        "oracle_source": {
+         "source": "normas/inspecao-componentes.md",
+         "reference": "RN-03; RF-02"
+        }
+       }
+      }
+     ]
+    },
+    {
+     "dimension": "DECISION_TABLE",
+     "summary": "Última inspeção versus liberação foi coberta pelos testes de liberação.",
+     "candidates": []
+    },
+    {
+     "dimension": "CONCURRENCY",
+     "summary": "Registros simultâneos no mesmo componente não são descritos pelas fontes.",
+     "candidates": []
+    },
+    {
+     "dimension": "RACE_CONDITION",
+     "summary": "Não há disputa temporal descrita entre liberação e inspeção.",
+     "candidates": []
+    },
+    {
+     "dimension": "IDEMPOTENCY",
+     "summary": "O registro repetido de inspeção não possui regra; a correção de inspeções está em pergunta.",
+     "candidates": []
+    },
+    {
+     "dimension": "INTEGRATION",
+     "summary": "As fontes não descrevem integrações; os cadastros são internos.",
+     "candidates": []
+    },
+    {
+     "dimension": "RECOVERY",
+     "summary": "Não há processamento assíncrono descrito.",
+     "candidates": []
+    },
+    {
+     "dimension": "CHAOS",
+     "summary": "As superfícies de falha foram avaliadas contra o sistema descrito.",
+     "candidates": [],
+     "surfaces_reviewed": [
+      {
+       "items": [
+        "EXTERNAL_DEPENDENCY",
+        "NETWORK",
+        "MIDDLEWARE",
+        "DEVICE_HARDWARE",
+        "CACHE",
+        "DATABASE",
+        "ASYNC_WORKER",
+        "RETRY",
+        "DUPLICATE_EVENT",
+        "OUT_OF_ORDER_EVENT",
+        "PARTIAL_COMMIT",
+        "PROCESS_RESTART",
+        "SESSION_INTERRUPTION",
+        "CONCURRENCY",
+        "RACE_CONDITION"
+       ],
+       "status": "NOT_APPLICABLE",
+       "reason": "o sistema descrito é um registro síncrono sem integrações, dispositivos, filas ou cache"
+      }
+     ]
+    },
+    {
+     "dimension": "SECURITY",
+     "summary": "Não há controles de segurança além da certificação.",
+     "candidates": []
+    },
+    {
+     "dimension": "AUTHORIZATION",
+     "summary": "A certificação válida está coberta pelos testes de certificação.",
+     "candidates": []
+    },
+    {
+     "dimension": "DATA_INTEGRITY",
+     "summary": "A rastreabilidade da ferramenta foi avaliada.",
+     "candidates": [
+      {
+       "key": "DI1",
+       "description": "Calibração vencida da ferramenta.",
+       "disposition": "QUESTION_REQUIRED",
+       "question": "Q1"
+      }
+     ]
+    },
+    {
+     "dimension": "CROSS_REQUIREMENT",
+     "summary": "Bloqueio e liberação foram combinados no teste de nova reprovação.",
+     "candidates": []
+    },
+    {
+     "dimension": "E2E",
+     "summary": "Não há caso de uso documentado; a jornada inspeção, bloqueio, nova inspeção e liberação foi composta.",
+     "candidates": [
+      {
+       "key": "E1",
+       "description": "Componente reprovado, reinspecionado e liberado.",
+       "disposition": "MATERIALIZED",
+       "test": {
+        "key": "E2E1",
+        "title": "Componente reprovado volta ao serviço",
+        "objective": "Verificar a jornada de reprovação até a liberação após nova inspeção.",
+        "family": "Liberação",
+        "actor": "inspetor certificado e técnico de instalação",
+        "state": "componente aguardando inspeção",
+        "trigger": "reprovar, reinspecionar como Aprovado e liberar",
+        "expected": "O componente é liberado para instalação.",
+        "failure_domain": "jornada de manutenção",
+        "primary_type": "E2E",
+        "priority": "HIGH",
+        "priority_reason": "Jornada de manutenção.",
+        "stages": [
+         {
+          "name": "reprovação",
+          "test": "T6",
+          "trigger": "registrar a inspeção como Reprovado",
+          "observation": "o componente fica Bloqueado"
+         },
+         {
+          "name": "nova inspeção",
+          "test": "T7",
+          "trigger": "registrar nova inspeção como Aprovado",
+          "observation": "o Bloqueio do componente é removido"
+         },
+         {
+          "name": "liberação",
+          "test": "T2",
+          "trigger": "solicitar a liberação para instalação",
+          "observation": "o componente é liberado para instalação"
+         }
+        ]
+       }
+      }
+     ]
+    }
+   ],
+   "test_assets": []
+  },
+  "procedures": {
+   "procedures": [
+    {
+     "test": "T1",
+     "preconditions": [
+      "INSPETOR_CERT_A está autenticado e COMPONENTE_A aguarda inspeção."
+     ],
+     "test_data": [
+      {
+       "name": "INSPETOR_CERT_A",
+       "description": "inspetor com certificação válida"
+      },
+      {
+       "name": "COMPONENTE_A",
+       "description": "componente aguardando inspeção"
+      },
+      {
+       "name": "FERRAMENTA_CAL_A",
+       "description": "ferramenta calibrada cadastrada"
+      }
+     ],
+     "steps": [
+      {
+       "action": "Abrir o registro de inspeção de COMPONENTE_A.",
+       "expected_result": "O formulário de inspeção é exibido."
+      },
+      {
+       "action": "Informar FERRAMENTA_CAL_A, selecionar Aprovado e salvar.",
+       "expected_result": "O resultado Aprovado fica registrado na inspeção do componente."
+      }
+     ],
+     "automation": {
+      "suitability": "HIGH",
+      "layer": "UI"
+     }
+    },
+    {
+     "test": "T2",
+     "preconditions": [
+      "COMPONENTE_APROVADO tem a última inspeção Aprovada."
+     ],
+     "test_data": [
+      {
+       "name": "COMPONENTE_APROVADO",
+       "description": "componente com última inspeção Aprovada"
+      }
+     ],
+     "steps": [
+      {
+       "action": "Abrir COMPONENTE_APROVADO na tela de liberação.",
+       "expected_result": "A situação da última inspeção é exibida como Aprovada."
+      },
+      {
+       "action": "Solicitar a liberação para instalação.",
+       "expected_result": "O componente é liberado para instalação."
+      }
+     ],
+     "automation": {
+      "suitability": "HIGH",
+      "layer": "UI"
+     }
+    },
+    {
+     "test": "T3",
+     "preconditions": [
+      "COMPONENTE_REPROVADO tem a última inspeção Reprovada."
+     ],
+     "test_data": [
+      {
+       "name": "COMPONENTE_REPROVADO",
+       "description": "componente com última inspeção Reprovada"
+      }
+     ],
+     "steps": [
+      {
+       "action": "Abrir COMPONENTE_REPROVADO na tela de liberação.",
+       "expected_result": "A situação da última inspeção é exibida como Reprovada."
+      },
+      {
+       "action": "Solicitar a liberação para instalação.",
+       "expected_result": "A liberação é recusada para o componente."
+      }
+     ],
+     "automation": {
+      "suitability": "HIGH",
+      "layer": "UI"
+     }
+    },
+    {
+     "test": "T4",
+     "preconditions": [
+      "INSPETOR_VENCIDO está autenticado e COMPONENTE_A aguarda inspeção."
+     ],
+     "test_data": [
+      {
+       "name": "INSPETOR_VENCIDO",
+       "description": "inspetor com certificação vencida antes da data atual"
+      }
+     ],
+     "steps": [
+      {
+       "action": "Abrir o registro de inspeção de COMPONENTE_A.",
+       "expected_result": "O formulário de inspeção é exibido."
+      },
+      {
+       "action": "Preencher a inspeção como Aprovado e salvar.",
+       "expected_result": "O registro da inspeção é recusado."
+      }
+     ],
+     "automation": {
+      "suitability": "HIGH",
+      "layer": "UI"
+     }
+    },
+    {
+     "test": "T5",
+     "preconditions": [
+      "INSPETOR_CERT_A está autenticado e COMPONENTE_A aguarda inspeção."
+     ],
+     "test_data": [
+      {
+       "name": "FERRAMENTA_CAL_A",
+       "description": "ferramenta calibrada com número de série conhecido"
+      }
+     ],
+     "steps": [
+      {
+       "action": "Registrar a inspeção de COMPONENTE_A informando FERRAMENTA_CAL_A.",
+       "expected_result": "A inspeção é salva."
+      },
+      {
+       "action": "Abrir o histórico de inspeções de COMPONENTE_A.",
+       "expected_result": "A inspeção registrada contém o número de série da ferramenta calibrada utilizada."
+      }
+     ],
+     "automation": {
+      "suitability": "HIGH",
+      "layer": "UI"
+     }
+    },
+    {
+     "test": "T6",
+     "preconditions": [
+      "INSPETOR_CERT_A está autenticado e COMPONENTE_A aguarda inspeção."
+     ],
+     "test_data": [
+      {
+       "name": "INSPETOR_CERT_A",
+       "description": "inspetor com certificação válida"
+      },
+      {
+       "name": "COMPONENTE_A",
+       "description": "componente aguardando inspeção"
+      }
+     ],
+     "steps": [
+      {
+       "action": "Registrar a inspeção de COMPONENTE_A como Reprovado.",
+       "expected_result": "A inspeção é salva."
+      },
+      {
+       "action": "Consultar a situação de COMPONENTE_A.",
+       "expected_result": "O componente fica Bloqueado."
+      }
+     ],
+     "automation": {
+      "suitability": "HIGH",
+      "layer": "UI"
+     }
+    },
+    {
+     "test": "T7",
+     "preconditions": [
+      "COMPONENTE_BLOQUEADO está Bloqueado por reprovação."
+     ],
+     "test_data": [
+      {
+       "name": "COMPONENTE_BLOQUEADO",
+       "description": "componente Bloqueado"
+      }
+     ],
+     "steps": [
+      {
+       "action": "Registrar nova inspeção de COMPONENTE_BLOQUEADO como Aprovado.",
+       "expected_result": "A inspeção é salva."
+      },
+      {
+       "action": "Consultar a situação de COMPONENTE_BLOQUEADO.",
+       "expected_result": "O Bloqueio do componente é removido."
+      }
+     ],
+     "automation": {
+      "suitability": "HIGH",
+      "layer": "UI"
+     }
+    },
+    {
+     "test": "D1",
+     "preconditions": [
+      "INSPETOR_ULTIMO_DIA tem certificação válida até a data de hoje."
+     ],
+     "test_data": [
+      {
+       "name": "INSPETOR_ULTIMO_DIA",
+       "description": "inspetor cuja certificação vence hoje"
+      }
+     ],
+     "steps": [
+      {
+       "action": "Abrir o registro de inspeção de COMPONENTE_A.",
+       "expected_result": "O formulário de inspeção é exibido."
+      },
+      {
+       "action": "Preencher a inspeção como Aprovado e salvar.",
+       "expected_result": "O registro da inspeção é aceito porque a certificação é válida na data."
+      }
+     ],
+     "automation": {
+      "suitability": "MEDIUM",
+      "layer": "UI"
+     },
+     "unknowns": [
+      {
+       "kind": "MISSING_FIXTURE",
+       "detail": "a automação precisa controlar a data corrente"
+      }
+     ]
+    },
+    {
+     "test": "D2",
+     "preconditions": [
+      "COMPONENTE_APROVADO tem a última inspeção Aprovada."
+     ],
+     "test_data": [
+      {
+       "name": "INSPETOR_CERT_A",
+       "description": "inspetor com certificação válida"
+      }
+     ],
+     "steps": [
+      {
+       "action": "Registrar nova inspeção de COMPONENTE_APROVADO como Reprovado.",
+       "expected_result": "A inspeção é salva."
+      },
+      {
+       "action": "Consultar a situação de COMPONENTE_APROVADO.",
+       "expected_result": "O componente fica Bloqueado novamente."
+      }
+     ],
+     "automation": {
+      "suitability": "HIGH",
+      "layer": "UI"
+     }
+    },
+    {
+     "test": "E2E1",
+     "preconditions": [
+      "COMPONENTE_A aguarda inspeção e INSPETOR_CERT_A está autenticado."
+     ],
+     "test_data": [
+      {
+       "name": "INSPETOR_CERT_A",
+       "description": "inspetor com certificação válida"
+      },
+      {
+       "name": "COMPONENTE_A",
+       "description": "componente aguardando inspeção"
+      }
+     ],
+     "steps": [
+      {
+       "action": "Registrar a inspeção de COMPONENTE_A como Reprovado.",
+       "expected_result": "O componente fica Bloqueado."
+      },
+      {
+       "action": "Registrar nova inspeção de COMPONENTE_A como Aprovado.",
+       "expected_result": "O Bloqueio do componente é removido."
+      },
+      {
+       "action": "Solicitar a liberação de COMPONENTE_A para instalação.",
+       "expected_result": "O componente é liberado para instalação."
+      }
+     ],
+     "automation": {
+      "suitability": "HIGH",
+      "layer": "UI"
+     }
+    }
+   ]
+  }
+ }
+}

@@ -22,7 +22,7 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
-from common import normalize_identifier, read_json, similarity  # noqa: E402
+from common import jaccard, normalize_identifier, read_json, similarity  # noqa: E402
 
 
 PACK_DIR = SCRIPT_DIR.parent / "benchmarks" / "domains"
@@ -71,14 +71,14 @@ def compare_with_baseline(canonical: dict[str, Any], baseline: dict[str, Any]) -
         matched = [
             case["id"] for case in acceptance
             if (not wanted or wanted & _identifiers(case.get("source_identifiers")))
-            and similarity(intent.get("text"), f"{case['title']} {case['objective']} {case.get('failure_domain', '')}") >= 0.4
+            and jaccard(intent.get("text"), f"{case['title']} {case.get('failure_domain', '')}") >= 0.3
         ]
         used.update(matched)
         settle("NORMATIVE_INTENT", str(intent.get("key")), matched)
     for finding in baseline.get("findings", []):
         matched = [
             item["id"] for item in index.get("findings", [])
-            if similarity(finding.get("statement"), item["statement"]) >= 0.4
+            if similarity(finding.get("statement"), item["statement"]) >= 0.6
         ]
         settle("FINDING", str(finding.get("key")), matched)
     challenge = {item["asset"]: item for item in diagnostics.get("test_asset_challenge", [])}
@@ -106,7 +106,7 @@ def reconcile_findings(
     results = []
     for finding in previous:
         key = str(finding.get("key"))
-        present = any(similarity(finding.get("statement"), item.get("statement")) >= 0.4 for item in current)
+        present = any(similarity(finding.get("statement"), item.get("statement")) >= 0.6 for item in current)
         if present:
             status = "STILL_PRESENT"
         else:

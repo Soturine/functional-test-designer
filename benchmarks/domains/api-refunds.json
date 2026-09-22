@@ -1,0 +1,888 @@
+{
+ "name": "api-refunds",
+ "domain": "API-centric service",
+ "locale": "en",
+ "sources": {
+  "api/payments-api.md": {
+   "role": "FUNCTIONAL_AUTHORITY",
+   "text": "# Payments API\n\nREQ-1 - Create Refund\nPOST /refunds creates a refund for a captured payment and returns 201 with the refund id.\nThe refund amount cannot exceed the captured amount; otherwise the API returns 422 with code AMOUNT_EXCEEDS_CAPTURE.\n\nREQ-2 - Idempotent Requests\nA request repeating an Idempotency-Key already used by the same client returns the original response without creating a second refund.\n\nREQ-3 - Refund Settlement\nA created refund is settled through the acquirer and its status becomes SETTLED when the acquirer confirms.\n\nREQ-4 - Client Isolation\nA client can only read refunds it created; reading another client's refund returns 404.\n"
+  },
+  "service/refunds.py": {
+   "role": "IMPLEMENTATION_EVIDENCE",
+   "text": "MAX_REFUNDS_PER_PAYMENT = 3\n\ndef create_refund(client, payment, amount, key):\n    if key in client.used_keys:\n        return client.used_keys[key]\n    if amount > payment.captured:\n        return Response(422, {\"code\": \"AMOUNT_EXCEEDS_CAPTURE\"})\n    if len(payment.refunds) >= MAX_REFUNDS_PER_PAYMENT:\n        return Response(409, {\"code\": \"TOO_MANY_REFUNDS\"})\n    return Response(201, {\"id\": payment.add_refund(amount).id})\n"
+  },
+  "service/tests/test_refunds.py": {
+   "role": "TEST_ASSET",
+   "text": "def test_refund_created(client, payment):\n    assert create_refund(client, payment, 10, \"k1\").status == 201\n\n\ndef test_refund_over_capture_rejected(client, payment):\n    assert create_refund(client, payment, 999, \"k2\").body[\"code\"] == \"AMOUNT_EXCEEDS_CAPTURE\"\n\n\ndef test_fourth_refund_is_rejected(client, payment_with_three_refunds):\n    assert create_refund(client, payment_with_three_refunds, 1, \"k3\").status == 409\n\n\ndef test_refund_created_again(client, payment):\n    assert create_refund(client, payment, 10, \"k4\").status == 201\n\n\ndef test_serializer_rounds_cents():\n    assert serialize(10.005) == \"10.01\"\n"
+  }
+ },
+ "stages": {
+  "design": {
+   "domain_model": {
+    "actors": [
+     "API client"
+    ],
+    "entities": [
+     "payment",
+     "refund",
+     "idempotency key"
+    ],
+    "states": [
+     "refund created",
+     "refund settled"
+    ],
+    "operations": [
+     "create refund",
+     "read refund",
+     "settle refund"
+    ],
+    "invariants": [
+     "refund amount never exceeds the captured amount",
+     "one refund per idempotency key",
+     "clients are isolated"
+    ],
+    "permissions": [
+     "clients read only their own refunds"
+    ],
+    "integrations": [
+     "acquirer"
+    ],
+    "events": [
+     "acquirer confirmation"
+    ],
+    "dependencies": [
+     "acquirer settlement service"
+    ],
+    "observables": [
+     "HTTP status",
+     "error code",
+     "refund status"
+    ],
+    "failure_surfaces": [
+     "acquirer unavailable",
+     "retried requests"
+    ]
+   },
+   "requirements": [
+    {
+     "key": "REQ-1",
+     "source_identifier": "REQ-1",
+     "source_statement": "POST /refunds creates a refund for a captured payment; amounts above the capture return 422."
+    },
+    {
+     "key": "REQ-2",
+     "source_identifier": "REQ-2",
+     "source_statement": "A repeated Idempotency-Key returns the original response without a second refund."
+    },
+    {
+     "key": "REQ-3",
+     "source_identifier": "REQ-3",
+     "source_statement": "Refunds are settled through the acquirer and become SETTLED on confirmation."
+    },
+    {
+     "key": "REQ-4",
+     "source_identifier": "REQ-4",
+     "source_statement": "Clients read only their own refunds; others return 404."
+    }
+   ],
+   "claims": [
+    {
+     "key": "C1",
+     "requirement": "REQ-1",
+     "text": "POST /refunds for a captured payment returns 201 with the refund id."
+    },
+    {
+     "key": "C2",
+     "requirement": "REQ-1",
+     "text": "A refund above the captured amount returns 422 with code AMOUNT_EXCEEDS_CAPTURE."
+    },
+    {
+     "key": "C3",
+     "requirement": "REQ-2",
+     "text": "Repeating an Idempotency-Key returns the original response and no second refund exists."
+    },
+    {
+     "key": "C4",
+     "requirement": "REQ-3",
+     "text": "A refund status becomes SETTLED when the acquirer confirms it."
+    },
+    {
+     "key": "C5",
+     "requirement": "REQ-4",
+     "text": "Reading a refund created by another client returns 404."
+    }
+   ],
+   "tests": [
+    {
+     "key": "T1",
+     "claims": [
+      "C1"
+     ],
+     "title": "Refund for a captured payment is created",
+     "objective": "Verify that a valid refund request returns 201 with a refund id.",
+     "family": "Refund creation",
+     "actor": "API client",
+     "state": "captured payment of 100.00",
+     "trigger": "client posts a refund of 10.00",
+     "expected": "The API returns 201 with the refund id.",
+     "failure_domain": "refund creation",
+     "primary_type": "FUNCTIONAL",
+     "priority": "HIGH",
+     "priority_reason": "Core money flow."
+    },
+    {
+     "key": "T2",
+     "claims": [
+      "C2"
+     ],
+     "title": "Refund above the capture is rejected",
+     "objective": "Verify that a refund above the captured amount is rejected with 422.",
+     "family": "Refund creation",
+     "actor": "API client",
+     "state": "captured payment of 100.00",
+     "trigger": "client posts a refund of 100.01",
+     "expected": "The API returns 422 with code AMOUNT_EXCEEDS_CAPTURE.",
+     "failure_domain": "capture limit",
+     "primary_type": "BOUNDARY",
+     "priority": "CRITICAL",
+     "priority_reason": "Over-refund loses money."
+    },
+    {
+     "key": "T3",
+     "claims": [
+      "C3"
+     ],
+     "title": "Repeated idempotency key returns the original refund",
+     "objective": "Verify that a repeated Idempotency-Key does not create a second refund.",
+     "family": "Idempotency",
+     "actor": "API client",
+     "state": "refund already created with key KEY_A",
+     "trigger": "client repeats the same request with KEY_A",
+     "expected": "The API returns the original response and no second refund exists.",
+     "failure_domain": "idempotent creation",
+     "primary_type": "IDEMPOTENCY",
+     "priority": "CRITICAL",
+     "priority_reason": "Duplicate refunds lose money.",
+     "indivisible_contract": "returning the original response is how the absence of a second refund is observed"
+    },
+    {
+     "key": "T4",
+     "claims": [
+      "C4"
+     ],
+     "title": "Refund becomes settled after acquirer confirmation",
+     "objective": "Verify that the refund status becomes SETTLED when the acquirer confirms.",
+     "family": "Settlement",
+     "actor": "API client",
+     "state": "created refund awaiting settlement",
+     "trigger": "acquirer confirms the refund",
+     "expected": "The refund status becomes SETTLED.",
+     "failure_domain": "settlement status",
+     "primary_type": "INTEGRATION",
+     "priority": "HIGH",
+     "priority_reason": "Customers rely on settlement status."
+    },
+    {
+     "key": "T5",
+     "claims": [
+      "C5"
+     ],
+     "title": "Other client's refund is not readable",
+     "objective": "Verify that a client cannot read a refund created by another client.",
+     "family": "Client isolation",
+     "actor": "API client",
+     "state": "refund created by CLIENT_B",
+     "trigger": "CLIENT_A reads the refund of CLIENT_B",
+     "expected": "The API returns 404.",
+     "failure_domain": "cross-client isolation",
+     "primary_type": "SECURITY",
+     "priority": "CRITICAL",
+     "priority_reason": "Cross-client leakage."
+    }
+   ],
+   "questions": [
+    {
+     "key": "Q1",
+     "question": "Is there a documented maximum number of refunds per payment?",
+     "reason": "The implementation rejects a fourth refund with 409 but the specification is silent.",
+     "requirements": [
+      "REQ-1"
+     ],
+     "impact": "SCOPE"
+    }
+   ],
+   "findings": [
+    {
+     "key": "F1",
+     "type": "IMPLEMENTATION_DIVERGENCE",
+     "statement": "The implementation rejects a fourth refund with 409 TOO_MANY_REFUNDS, a limit the specification does not define.",
+     "requirements": [
+      "REQ-1"
+     ],
+     "source_refs": [
+      {
+       "source": "service/refunds.py",
+       "reference": "MAX_REFUNDS_PER_PAYMENT"
+      }
+     ],
+     "coverage_disposition": "IMPLEMENTATION_CHARACTERIZATION"
+    }
+   ]
+  },
+  "expansion": {
+   "dimensions": [
+    {
+     "dimension": "NEGATIVE",
+     "summary": "Invalid refund requests were reviewed; only the capture limit has a documented oracle.",
+     "candidates": []
+    },
+    {
+     "dimension": "BOUNDARY",
+     "summary": "The capture limit boundary was reviewed.",
+     "candidates": [
+      {
+       "key": "B1",
+       "description": "A refund equal to the captured amount is accepted.",
+       "disposition": "MATERIALIZED",
+       "test": {
+        "basis": "DERIVED",
+        "anchors": [
+         "C2"
+        ],
+        "key": "D1",
+        "title": "Refund equal to the capture is accepted",
+        "objective": "Verify that a refund exactly equal to the captured amount is accepted.",
+        "family": "Refund creation",
+        "actor": "API client",
+        "state": "captured payment of 100.00",
+        "trigger": "client posts a refund of 100.00",
+        "expected": "The API returns 201 because the amount does not exceed the capture.",
+        "failure_domain": "capture limit boundary",
+        "primary_type": "BOUNDARY",
+        "priority": "HIGH",
+        "priority_reason": "Off-by-one on money limits.",
+        "oracle_source": {
+         "source": "api/payments-api.md",
+         "reference": "REQ-1"
+        }
+       }
+      }
+     ]
+    },
+    {
+     "dimension": "OPERATOR_ERROR",
+     "summary": "API callers were reviewed as the operators of this service.",
+     "candidates": [
+      {
+       "key": "O1",
+       "pattern": "REPEATED_ACTION",
+       "description": "A client resends the same refund after a timeout.",
+       "disposition": "ALREADY_COVERED",
+       "covered_by": [
+        "T3"
+       ],
+       "intent": {
+        "actor": "API client",
+        "state": "refund already created with key",
+        "trigger": "client repeats the same request with the same key",
+        "failure_domain": "idempotent creation",
+        "expected": "the API returns the original response and no second refund exists"
+       }
+      },
+      {
+       "key": "O2",
+       "pattern": "CROSS_CONTEXT_MISTAKE",
+       "description": "A client uses a refund id from another client.",
+       "disposition": "ALREADY_COVERED",
+       "covered_by": [
+        "T5"
+       ],
+       "intent": {
+        "actor": "API client",
+        "state": "refund created by another client",
+        "trigger": "client reads the refund of another client",
+        "failure_domain": "cross-client isolation",
+        "expected": "the API returns 404"
+       }
+      }
+     ],
+     "patterns_reviewed": [
+      {
+       "items": [
+        "REPEATED_ACTION",
+        "CROSS_CONTEXT_MISTAKE"
+       ],
+       "status": "CANDIDATES"
+      },
+      {
+       "items": [
+        "WRONG_RESOURCE",
+        "WRONG_ASSOCIATION",
+        "WRONG_ACTOR",
+        "WRONG_STATE",
+        "WRONG_SEQUENCE",
+        "OMITTED_ACTION",
+        "STALE_OPERATION",
+        "PARTIAL_OPERATION",
+        "PHYSICAL_DIGITAL_MISMATCH",
+        "WRONG_ACKNOWLEDGEMENT",
+        "MANUAL_AFTER_AUTOMATIC",
+        "ABANDONED_OPERATION"
+       ],
+       "status": "NOT_APPLICABLE",
+       "reason": "the service is called by programs, with no manual or physical steps"
+      }
+     ]
+    },
+    {
+     "dimension": "MISUSE",
+     "summary": "Using another client's idempotency key was reviewed; keys are scoped per client by the requirement.",
+     "candidates": [
+      {
+       "key": "M1",
+       "description": "CLIENT_B reuses the Idempotency-Key of CLIENT_A.",
+       "disposition": "NOT_APPLICABLE",
+       "reason": "the requirement scopes keys to the same client, so another client's key is a new key"
+      }
+     ]
+    },
+    {
+     "dimension": "STATE_TRANSITION",
+     "summary": "Refund states created and settled were reviewed; the transition is covered by the settlement test.",
+     "candidates": []
+    },
+    {
+     "dimension": "DECISION_TABLE",
+     "summary": "Amount versus capture has two partitions covered by acceptance and boundary tests.",
+     "candidates": []
+    },
+    {
+     "dimension": "CONCURRENCY",
+     "summary": "Concurrent refunds on one payment were reviewed.",
+     "candidates": [
+      {
+       "key": "CC1",
+       "surface": "CONCURRENCY",
+       "description": "Two refunds of 60.00 on a 100.00 capture sent at once.",
+       "disposition": "MATERIALIZED",
+       "test": {
+        "basis": "DERIVED",
+        "anchors": [
+         "C2"
+        ],
+        "key": "D2",
+        "title": "Concurrent refunds never exceed the capture",
+        "objective": "Verify that simultaneous refunds cannot exceed the captured amount in total.",
+        "family": "Refund creation",
+        "actor": "two API clients sessions",
+        "state": "captured payment of 100.00",
+        "trigger": "two refunds of 60.00 are posted at the same moment",
+        "expected": "The refunded total never exceeds the captured amount.",
+        "failure_domain": "capture limit under concurrency",
+        "primary_type": "CONCURRENCY",
+        "priority": "CRITICAL",
+        "priority_reason": "Race would over-refund.",
+        "oracle_source": {
+         "source": "api/payments-api.md",
+         "reference": "REQ-1"
+        }
+       }
+      }
+     ]
+    },
+    {
+     "dimension": "RACE_CONDITION",
+     "summary": "The relevant race is the concurrent refund candidate.",
+     "candidates": []
+    },
+    {
+     "dimension": "IDEMPOTENCY",
+     "summary": "Retries after timeout are covered by the idempotency acceptance test.",
+     "candidates": [
+      {
+       "key": "ID1",
+       "surface": "RETRY",
+       "description": "Client retries after a lost response.",
+       "disposition": "ALREADY_COVERED",
+       "covered_by": [
+        "T3"
+       ],
+       "intent": {
+        "actor": "API client",
+        "state": "refund already created with key",
+        "trigger": "client retries the request with the same key",
+        "failure_domain": "idempotent creation",
+        "expected": "the original response is returned and no second refund exists"
+       }
+      }
+     ]
+    },
+    {
+     "dimension": "INTEGRATION",
+     "summary": "The acquirer dependency was reviewed.",
+     "candidates": [
+      {
+       "key": "I1",
+       "surface": "EXTERNAL_DEPENDENCY",
+       "description": "The acquirer never confirms the refund.",
+       "disposition": "QUESTION_REQUIRED",
+       "question": "Q2"
+      }
+     ]
+    },
+    {
+     "dimension": "RECOVERY",
+     "summary": "Settlement recovery depends on the undefined acquirer timeout policy (see Question).",
+     "candidates": []
+    },
+    {
+     "dimension": "CHAOS",
+     "summary": "Failure surfaces were compared with the API and its acquirer dependency.",
+     "candidates": [],
+     "surfaces_reviewed": [
+      {
+       "items": [
+        "EXTERNAL_DEPENDENCY",
+        "RETRY",
+        "CONCURRENCY"
+       ],
+       "status": "CANDIDATES"
+      },
+      {
+       "items": [
+        "NETWORK",
+        "MIDDLEWARE",
+        "DEVICE_HARDWARE",
+        "CACHE",
+        "DATABASE",
+        "ASYNC_WORKER",
+        "DUPLICATE_EVENT",
+        "OUT_OF_ORDER_EVENT",
+        "PARTIAL_COMMIT",
+        "PROCESS_RESTART",
+        "SESSION_INTERRUPTION",
+        "RACE_CONDITION"
+       ],
+       "status": "NOT_APPLICABLE",
+       "reason": "the selected sources describe no cache, queue, devices or sessions"
+      }
+     ]
+    },
+    {
+     "dimension": "SECURITY",
+     "summary": "Client isolation is covered by an acceptance test.",
+     "candidates": []
+    },
+    {
+     "dimension": "AUTHORIZATION",
+     "summary": "Authorization is expressed as client isolation, covered by an acceptance test.",
+     "candidates": []
+    },
+    {
+     "dimension": "DATA_INTEGRITY",
+     "summary": "Refund totals were reviewed under concurrency.",
+     "candidates": []
+    },
+    {
+     "dimension": "CROSS_REQUIREMENT",
+     "summary": "Idempotency combined with the capture limit was reviewed.",
+     "candidates": [
+      {
+       "key": "XR1",
+       "description": "A repeated key whose original request was rejected with 422.",
+       "disposition": "NOT_APPLICABLE",
+       "reason": "the original response is returned by REQ-2 whatever it was, so no new rule interacts"
+      }
+     ]
+    },
+    {
+     "dimension": "E2E",
+     "summary": "No use case is documented; the refund journey is create then settle.",
+     "candidates": [
+      {
+       "key": "E1",
+       "description": "Create a refund and see it settled.",
+       "disposition": "MATERIALIZED",
+       "test": {
+        "key": "E2E1",
+        "title": "Refund from creation to settlement",
+        "objective": "Verify the refund journey from creation to SETTLED.",
+        "family": "Settlement",
+        "actor": "API client",
+        "state": "captured payment of 100.00",
+        "trigger": "client creates a refund that the acquirer confirms",
+        "expected": "The refund status becomes SETTLED.",
+        "failure_domain": "refund journey",
+        "primary_type": "E2E",
+        "priority": "HIGH",
+        "priority_reason": "Main money journey.",
+        "stages": [
+         {
+          "name": "create",
+          "test": "T1",
+          "trigger": "client posts a refund",
+          "observation": "the API returns 201 with the refund id"
+         },
+         {
+          "name": "settle",
+          "test": "T4",
+          "trigger": "acquirer confirms the refund",
+          "observation": "the refund status becomes SETTLED"
+         }
+        ]
+       }
+      }
+     ]
+    }
+   ],
+   "test_assets": [
+    {
+     "asset": "service/tests/test_refunds.py::test_refund_created",
+     "disposition": "ALREADY_COVERED_BY",
+     "covered_by": [
+      "T1"
+     ],
+     "intent": {
+      "actor": "API client",
+      "state": "captured payment",
+      "trigger": "client posts a refund",
+      "failure_domain": "refund creation",
+      "expected": "the API returns 201 with the refund id"
+     }
+    },
+    {
+     "asset": "service/tests/test_refunds.py::test_refund_over_capture_rejected",
+     "disposition": "ALREADY_COVERED_BY",
+     "covered_by": [
+      "T2"
+     ],
+     "intent": {
+      "actor": "API client",
+      "state": "captured payment",
+      "trigger": "client posts a refund above the capture",
+      "failure_domain": "capture limit",
+      "expected": "the API returns 422 with code AMOUNT_EXCEEDS_CAPTURE"
+     }
+    },
+    {
+     "asset": "service/tests/test_refunds.py::test_fourth_refund_is_rejected",
+     "disposition": "PROMOTE_CHARACTERIZATION",
+     "dimension": "BOUNDARY",
+     "intent": {
+      "actor": "API client",
+      "state": "payment with three refunds",
+      "trigger": "client posts a fourth refund",
+      "failure_domain": "refund count limit",
+      "expected": "the API returns 409 with code TOO_MANY_REFUNDS"
+     },
+     "test": {
+      "basis": "CHARACTERIZATION",
+      "anchors": [
+       "C1"
+      ],
+      "key": "CH1",
+      "title": "Fourth refund on a payment is rejected (current behavior)",
+      "objective": "Characterize the current rejection of a fourth refund, which the specification does not define.",
+      "family": "Refund creation",
+      "actor": "API client",
+      "state": "captured payment with three refunds",
+      "trigger": "client posts a fourth refund of 1.00",
+      "expected": "The API returns 409 with code TOO_MANY_REFUNDS.",
+      "failure_domain": "refund count limit",
+      "primary_type": "BOUNDARY",
+      "priority": "MEDIUM",
+      "priority_reason": "Undocumented limit affects clients.",
+      "questions": [
+       "Q1"
+      ],
+      "findings": [
+       "F1"
+      ],
+      "oracle_source": {
+       "source": "service/refunds.py",
+       "reference": "MAX_REFUNDS_PER_PAYMENT"
+      }
+     }
+    },
+    {
+     "asset": "service/tests/test_refunds.py::test_refund_created_again",
+     "disposition": "DUPLICATE",
+     "duplicate_of": "service/tests/test_refunds.py::test_refund_created",
+     "reason": "same request and assertion as test_refund_created"
+    },
+    {
+     "asset": "service/tests/test_refunds.py::test_serializer_rounds_cents",
+     "disposition": "TECHNICAL_ONLY",
+     "reason": "serializer rounding is internal formatting without a documented contract"
+    }
+   ],
+   "questions": [
+    {
+     "key": "Q2",
+     "question": "What should the refund status be when the acquirer never confirms?",
+     "reason": "No timeout or failure status is specified.",
+     "requirements": [
+      "REQ-3"
+     ],
+     "impact": "EXPECTED_RESULT"
+    }
+   ]
+  },
+  "procedures": {
+   "procedures": [
+    {
+     "test": "T1",
+     "preconditions": [
+      "CLIENT_A is authenticated and owns PAYMENT_CAPTURED_100."
+     ],
+     "test_data": [
+      {
+       "name": "CLIENT_A",
+       "description": "API client with valid credentials"
+      },
+      {
+       "name": "PAYMENT_CAPTURED_100",
+       "description": "payment captured for 100.00 owned by CLIENT_A"
+      }
+     ],
+     "steps": [
+      {
+       "action": "POST /refunds for PAYMENT_CAPTURED_100 with amount 10.00 and a new Idempotency-Key.",
+       "expected_result": "The API returns 201 with the refund id."
+      }
+     ],
+     "automation": {
+      "suitability": "HIGH",
+      "layer": "API"
+     },
+     "single_step_reason": "one request both triggers and returns the observable result"
+    },
+    {
+     "test": "T2",
+     "preconditions": [
+      "CLIENT_A is authenticated and owns PAYMENT_CAPTURED_100."
+     ],
+     "test_data": [
+      {
+       "name": "CLIENT_A",
+       "description": "API client with valid credentials"
+      },
+      {
+       "name": "PAYMENT_CAPTURED_100",
+       "description": "payment captured for 100.00 owned by CLIENT_A"
+      }
+     ],
+     "steps": [
+      {
+       "action": "POST /refunds for PAYMENT_CAPTURED_100 with amount 100.01.",
+       "expected_result": "The API returns 422 with code AMOUNT_EXCEEDS_CAPTURE."
+      }
+     ],
+     "automation": {
+      "suitability": "HIGH",
+      "layer": "API"
+     },
+     "single_step_reason": "one request both triggers and returns the observable result"
+    },
+    {
+     "test": "T3",
+     "preconditions": [
+      "CLIENT_A created a refund with Idempotency-Key KEY_A."
+     ],
+     "test_data": [
+      {
+       "name": "CLIENT_A",
+       "description": "API client with valid credentials"
+      },
+      {
+       "name": "KEY_A",
+       "description": "idempotency key already used by CLIENT_A"
+      }
+     ],
+     "steps": [
+      {
+       "action": "Repeat the POST /refunds request with KEY_A.",
+       "expected_result": "The API returns the same body as the original response."
+      },
+      {
+       "action": "GET the refunds of PAYMENT_CAPTURED_100.",
+       "expected_result": "The API returns the original response and no second refund exists."
+      }
+     ],
+     "automation": {
+      "suitability": "HIGH",
+      "layer": "API"
+     },
+     "oracle_step": 2
+    },
+    {
+     "test": "T4",
+     "preconditions": [
+      "A refund of PAYMENT_CAPTURED_100 was created and awaits settlement."
+     ],
+     "test_data": [
+      {
+       "name": "CLIENT_A",
+       "description": "API client with valid credentials"
+      }
+     ],
+     "steps": [
+      {
+       "action": "Trigger the acquirer confirmation for the refund in the acquirer sandbox.",
+       "expected_result": "The acquirer reports the refund as confirmed."
+      },
+      {
+       "action": "GET the refund.",
+       "expected_result": "The refund status becomes SETTLED."
+      }
+     ],
+     "automation": {
+      "suitability": "MEDIUM",
+      "layer": "INTEGRATION"
+     },
+     "unknowns": [
+      {
+       "kind": "EXTERNAL_DEPENDENCY_UNAVAILABLE",
+       "detail": "no acquirer sandbox is available in the selected environment"
+      }
+     ]
+    },
+    {
+     "test": "T5",
+     "preconditions": [
+      "CLIENT_B owns REFUND_B and CLIENT_A is authenticated."
+     ],
+     "test_data": [
+      {
+       "name": "REFUND_B",
+       "description": "refund created by CLIENT_B"
+      }
+     ],
+     "steps": [
+      {
+       "action": "GET REFUND_B as CLIENT_A.",
+       "expected_result": "The API returns 404."
+      }
+     ],
+     "automation": {
+      "suitability": "HIGH",
+      "layer": "API"
+     },
+     "single_step_reason": "one read request is the whole isolation check"
+    },
+    {
+     "test": "D1",
+     "preconditions": [
+      "CLIENT_A owns PAYMENT_CAPTURED_100 with no refunds."
+     ],
+     "test_data": [
+      {
+       "name": "PAYMENT_CAPTURED_100",
+       "description": "payment captured for 100.00 owned by CLIENT_A"
+      }
+     ],
+     "steps": [
+      {
+       "action": "POST /refunds for PAYMENT_CAPTURED_100 with amount 100.00.",
+       "expected_result": "The API returns 201 because the amount does not exceed the capture."
+      }
+     ],
+     "automation": {
+      "suitability": "HIGH",
+      "layer": "API"
+     },
+     "single_step_reason": "one request both triggers and returns the observable result"
+    },
+    {
+     "test": "D2",
+     "preconditions": [
+      "CLIENT_A owns PAYMENT_CAPTURED_100 with no refunds."
+     ],
+     "test_data": [
+      {
+       "name": "PAYMENT_CAPTURED_100",
+       "description": "payment captured for 100.00 owned by CLIENT_A"
+      }
+     ],
+     "steps": [
+      {
+       "action": "Send two POST /refunds of 60.00 with different keys at the same moment.",
+       "expected_result": "At most one request returns 201."
+      },
+      {
+       "action": "GET the refunds of PAYMENT_CAPTURED_100 and sum their amounts.",
+       "expected_result": "The refunded total never exceeds the captured amount."
+      }
+     ],
+     "automation": {
+      "suitability": "MEDIUM",
+      "layer": "API"
+     }
+    },
+    {
+     "test": "CH1",
+     "preconditions": [
+      "PAYMENT_WITH_THREE_REFUNDS has three refunds and is owned by CLIENT_A."
+     ],
+     "test_data": [
+      {
+       "name": "PAYMENT_WITH_THREE_REFUNDS",
+       "description": "captured payment already refunded three times"
+      }
+     ],
+     "steps": [
+      {
+       "action": "POST /refunds for PAYMENT_WITH_THREE_REFUNDS with amount 1.00.",
+       "expected_result": "The API returns 409 with code TOO_MANY_REFUNDS."
+      }
+     ],
+     "automation": {
+      "suitability": "HIGH",
+      "layer": "API"
+     },
+     "single_step_reason": "one request both triggers and returns the observable result"
+    },
+    {
+     "test": "E2E1",
+     "preconditions": [
+      "CLIENT_A owns PAYMENT_CAPTURED_100."
+     ],
+     "test_data": [
+      {
+       "name": "CLIENT_A",
+       "description": "API client with valid credentials"
+      },
+      {
+       "name": "PAYMENT_CAPTURED_100",
+       "description": "payment captured for 100.00 owned by CLIENT_A"
+      }
+     ],
+     "steps": [
+      {
+       "action": "POST /refunds for PAYMENT_CAPTURED_100 with amount 10.00.",
+       "expected_result": "The API returns 201 with the refund id."
+      },
+      {
+       "action": "Trigger the acquirer confirmation in the acquirer sandbox.",
+       "expected_result": "The acquirer reports the refund as confirmed."
+      },
+      {
+       "action": "GET the refund.",
+       "expected_result": "The refund status becomes SETTLED."
+      }
+     ],
+     "automation": {
+      "suitability": "MEDIUM",
+      "layer": "INTEGRATION"
+     },
+     "unknowns": [
+      {
+       "kind": "EXTERNAL_DEPENDENCY_UNAVAILABLE",
+       "detail": "no acquirer sandbox is available in the selected environment"
+      }
+     ]
+    }
+   ]
+  }
+ }
+}

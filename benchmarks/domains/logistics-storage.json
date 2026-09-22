@@ -1,0 +1,915 @@
+{
+ "name": "logistics-storage",
+ "domain": "Logistics / inventory",
+ "sources": {
+  "docs/requisitos.md": {
+   "role": "FUNCTIONAL_AUTHORITY",
+   "text": "# Requisitos — Controle de Armazenagem\n\nRF-01 - Registrar Entrada de Palete\nO operador registra a entrada de um palete informando o código do palete e a posição de armazenagem. O palete passa para o estado Armazenado.\n\nRF-02 - Transferir Palete entre Posições\nO operador transfere um palete Armazenado para outra posição livre. A posição de origem fica livre.\n\nRN-01 - Posição Única\nUma posição de armazenagem comporta no máximo um palete. Operações em posição ocupada são recusadas com a mensagem \"Posição ocupada\".\n\nRN-02 - Registro de Movimentação\nToda entrada e toda transferência geram um registro de movimentação com data, hora e operador responsável.\n\nCU-01 - Armazenar Palete Recebido\nFluxo principal: o operador registra a entrada do palete na posição de recebimento e depois o transfere para a posição definitiva.\n\nFA-01.1 - Posição ocupada\nSe a posição escolhida estiver ocupada, o sistema recusa a operação e exibe \"Posição ocupada\".\n"
+  }
+ },
+ "request": "Gere os casos de teste",
+ "stages": {
+  "design": {
+   "domain_model": {
+    "actors": [
+     "operador de armazém"
+    ],
+    "entities": [
+     "palete",
+     "posição de armazenagem",
+     "registro de movimentação"
+    ],
+    "states": [
+     "palete Armazenado",
+     "posição livre",
+     "posição ocupada"
+    ],
+    "operations": [
+     "registrar entrada",
+     "transferir palete"
+    ],
+    "invariants": [
+     "uma posição comporta no máximo um palete"
+    ],
+    "permissions": [],
+    "integrations": [],
+    "events": [
+     "movimentação registrada"
+    ],
+    "dependencies": [],
+    "observables": [
+     "estado do palete",
+     "ocupação da posição",
+     "histórico de movimentações"
+    ],
+    "failure_surfaces": [
+     "operações simultâneas na mesma posição"
+    ]
+   },
+   "requirements": [
+    {
+     "key": "RF-01",
+     "source_identifier": "RF-01",
+     "source_statement": "O operador registra a entrada de um palete em uma posição; o palete fica Armazenado."
+    },
+    {
+     "key": "RF-02",
+     "source_identifier": "RF-02",
+     "source_statement": "O operador transfere um palete Armazenado para outra posição livre; a origem fica livre."
+    },
+    {
+     "key": "RN-01",
+     "source_identifier": "RN-01",
+     "source_statement": "Uma posição comporta no máximo um palete."
+    },
+    {
+     "key": "RN-02",
+     "source_identifier": "RN-02",
+     "source_statement": "Entradas e transferências geram registro de movimentação com data, hora e operador."
+    },
+    {
+     "key": "CU-01",
+     "source_identifier": "CU-01",
+     "source_statement": "Entrada na posição de recebimento seguida de transferência para a posição definitiva."
+    }
+   ],
+   "claims": [
+    {
+     "key": "C1",
+     "requirement": "RF-01",
+     "text": "Após a entrada, o palete fica no estado Armazenado na posição informada."
+    },
+    {
+     "key": "C2",
+     "requirement": "RF-02",
+     "text": "Após a transferência, o palete fica na nova posição."
+    },
+    {
+     "key": "C3",
+     "requirement": "RF-02",
+     "text": "Após a transferência, a posição de origem fica livre."
+    },
+    {
+     "key": "C4",
+     "requirement": "RN-01",
+     "identifiers": [
+      "FA-01.1"
+     ],
+     "text": "A entrada em posição ocupada é recusada com a mensagem \"Posição ocupada\"."
+    },
+    {
+     "key": "C5",
+     "requirement": "RN-01",
+     "identifiers": [
+      "FA-01.1"
+     ],
+     "text": "A transferência para posição ocupada é recusada com a mensagem \"Posição ocupada\"."
+    },
+    {
+     "key": "C6",
+     "requirement": "RN-02",
+     "text": "A entrada gera um registro de movimentação com data, hora e operador responsável.",
+     "indivisible_contract": "data, hora e operador formam um único registro de auditoria"
+    },
+    {
+     "key": "C7",
+     "requirement": "RN-02",
+     "text": "A transferência gera um registro de movimentação com data, hora e operador responsável.",
+     "indivisible_contract": "data, hora e operador formam um único registro de auditoria"
+    },
+    {
+     "key": "C8",
+     "requirement": "CU-01",
+     "text": "Ao final do fluxo, o palete está na posição definitiva e a posição de recebimento está livre.",
+     "indivisible_contract": "o estado final do fluxo é uma única observação de ocupação das duas posições"
+    }
+   ],
+   "tests": [
+    {
+     "key": "T1",
+     "claims": [
+      "C1"
+     ],
+     "title": "Entrada de palete em posição livre",
+     "objective": "Verificar que a entrada deixa o palete Armazenado na posição informada.",
+     "family": "Entrada de paletes",
+     "actor": "operador de armazém",
+     "state": "posição livre",
+     "trigger": "registrar a entrada do palete na posição",
+     "expected": "O palete fica Armazenado na posição informada.",
+     "failure_domain": "armazenagem na entrada",
+     "primary_type": "FUNCTIONAL",
+     "priority": "HIGH",
+     "priority_reason": "Fluxo principal de armazenagem."
+    },
+    {
+     "key": "T2",
+     "claims": [
+      "C2"
+     ],
+     "title": "Transferência move o palete para a nova posição",
+     "objective": "Verificar que a transferência coloca o palete na nova posição.",
+     "family": "Transferências",
+     "actor": "operador de armazém",
+     "state": "palete Armazenado e posição de destino livre",
+     "trigger": "transferir o palete para a posição de destino",
+     "expected": "O palete fica na posição de destino.",
+     "failure_domain": "destino da transferência",
+     "primary_type": "FUNCTIONAL",
+     "priority": "HIGH",
+     "priority_reason": "Sem isso o estoque fica incorreto."
+    },
+    {
+     "key": "T3",
+     "claims": [
+      "C3"
+     ],
+     "title": "Transferência libera a posição de origem",
+     "objective": "Verificar que a posição de origem fica livre após a transferência.",
+     "family": "Transferências",
+     "actor": "operador de armazém",
+     "state": "palete Armazenado e posição de destino livre",
+     "trigger": "transferir o palete para a posição de destino",
+     "expected": "A posição de origem fica livre.",
+     "failure_domain": "liberação da origem",
+     "primary_type": "DATA_INTEGRITY",
+     "priority": "HIGH",
+     "priority_reason": "Posição presa bloqueia a armazenagem."
+    },
+    {
+     "key": "T4",
+     "claims": [
+      "C4"
+     ],
+     "title": "Entrada em posição ocupada é recusada",
+     "objective": "Verificar que a entrada em posição ocupada é recusada com a mensagem documentada.",
+     "family": "Posição única",
+     "actor": "operador de armazém",
+     "state": "posição ocupada por outro palete",
+     "trigger": "registrar a entrada do palete na posição ocupada",
+     "expected": "A entrada é recusada com a mensagem \"Posição ocupada\".",
+     "failure_domain": "unicidade na entrada",
+     "primary_type": "NEGATIVE",
+     "priority": "CRITICAL",
+     "priority_reason": "Dois paletes na mesma posição corrompem o inventário."
+    },
+    {
+     "key": "T5",
+     "claims": [
+      "C5"
+     ],
+     "title": "Transferência para posição ocupada é recusada",
+     "objective": "Verificar que a transferência para posição ocupada é recusada.",
+     "family": "Posição única",
+     "actor": "operador de armazém",
+     "state": "posição de destino ocupada",
+     "trigger": "transferir o palete para a posição ocupada",
+     "expected": "A transferência é recusada com a mensagem \"Posição ocupada\".",
+     "failure_domain": "unicidade na transferência",
+     "primary_type": "NEGATIVE",
+     "priority": "CRITICAL",
+     "priority_reason": "Dois paletes na mesma posição corrompem o inventário."
+    },
+    {
+     "key": "T6",
+     "claims": [
+      "C6"
+     ],
+     "title": "Entrada gera registro de movimentação",
+     "objective": "Verificar que a entrada gera o registro de movimentação completo.",
+     "family": "Rastreabilidade",
+     "actor": "operador de armazém",
+     "state": "posição livre",
+     "trigger": "registrar a entrada do palete na posição",
+     "expected": "Existe um registro de movimentação com data, hora e operador responsável.",
+     "failure_domain": "auditoria da entrada",
+     "primary_type": "AUDIT",
+     "priority": "HIGH",
+     "priority_reason": "Rastreabilidade exigida pela regra de negócio.",
+     "indivisible_contract": "data, hora e operador formam um único registro de auditoria"
+    },
+    {
+     "key": "T7",
+     "claims": [
+      "C7"
+     ],
+     "title": "Transferência gera registro de movimentação",
+     "objective": "Verificar que a transferência gera o registro de movimentação completo.",
+     "family": "Rastreabilidade",
+     "actor": "operador de armazém",
+     "state": "palete Armazenado e posição de destino livre",
+     "trigger": "transferir o palete para a posição de destino",
+     "expected": "Existe um registro de movimentação da transferência com data, hora e operador responsável.",
+     "failure_domain": "auditoria da transferência",
+     "primary_type": "AUDIT",
+     "priority": "HIGH",
+     "priority_reason": "Rastreabilidade exigida pela regra de negócio.",
+     "indivisible_contract": "data, hora e operador formam um único registro de auditoria"
+    },
+    {
+     "key": "T8",
+     "claims": [
+      "C8"
+     ],
+     "title": "Estado final do fluxo de armazenagem",
+     "objective": "Verificar o estado das posições ao final do fluxo de armazenagem.",
+     "family": "Transferências",
+     "actor": "operador de armazém",
+     "state": "palete transferido da posição de recebimento para a posição definitiva",
+     "trigger": "consultar a ocupação das posições",
+     "expected": "O palete está na posição definitiva e a posição de recebimento está livre.",
+     "failure_domain": "estado final do fluxo",
+     "primary_type": "FUNCTIONAL",
+     "priority": "MEDIUM",
+     "priority_reason": "Confirma o resultado do caso de uso.",
+     "indivisible_contract": "o estado final do fluxo é uma única observação de ocupação das duas posições"
+    }
+   ],
+   "questions": [
+    {
+     "key": "Q1",
+     "question": "O que o sistema deve fazer quando o operador tenta transferir um palete que não está Armazenado?",
+     "reason": "Os requisitos só descrevem a transferência de paletes Armazenados.",
+     "requirements": [
+      "RF-02"
+     ],
+     "impact": "EXPECTED_RESULT"
+    },
+    {
+     "key": "Q2",
+     "question": "Como tratar um palete colocado fisicamente em posição diferente da registrada?",
+     "reason": "Não há regra de conciliação entre o físico e o registro.",
+     "requirements": [
+      "RN-01"
+     ],
+     "impact": "EXPECTED_RESULT"
+    }
+   ]
+  },
+  "expansion": {
+   "dimensions": [
+    {
+     "dimension": "NEGATIVE",
+     "summary": "Operações inválidas de entrada e transferência foram avaliadas.",
+     "candidates": [
+      {
+       "key": "N1",
+       "description": "Transferir um palete que não está Armazenado.",
+       "disposition": "QUESTION_REQUIRED",
+       "question": "Q1"
+      }
+     ]
+    },
+    {
+     "dimension": "BOUNDARY",
+     "summary": "Não há limites numéricos nos requisitos além de um palete por posição, coberto pelos testes de posição única.",
+     "candidates": []
+    },
+    {
+     "dimension": "OPERATOR_ERROR",
+     "summary": "Erros do operador foram avaliados para entrada e transferência.",
+     "candidates": [
+      {
+       "key": "O1",
+       "pattern": "WRONG_RESOURCE",
+       "description": "O operador escolhe por engano uma posição já ocupada.",
+       "disposition": "ALREADY_COVERED",
+       "covered_by": [
+        "T4"
+       ],
+       "intent": {
+        "actor": "operador de armazém",
+        "state": "posição ocupada por outro palete",
+        "trigger": "registrar a entrada do palete na posição ocupada",
+        "failure_domain": "unicidade na entrada",
+        "expected": "a entrada é recusada com a mensagem Posição ocupada"
+       }
+      },
+      {
+       "key": "O2",
+       "pattern": "REPEATED_ACTION",
+       "description": "O operador registra duas vezes a entrada do mesmo palete na mesma posição.",
+       "disposition": "MATERIALIZED",
+       "test": {
+        "basis": "DERIVED",
+        "anchors": [
+         "C4"
+        ],
+        "key": "D1",
+        "title": "Entrada repetida do mesmo palete é recusada",
+        "objective": "Verificar que repetir a entrada na mesma posição não cria um segundo registro de ocupação.",
+        "family": "Posição única",
+        "actor": "operador de armazém",
+        "state": "palete já registrado na posição",
+        "trigger": "registrar novamente a entrada do mesmo palete na mesma posição",
+        "expected": "A segunda entrada é recusada com a mensagem \"Posição ocupada\".",
+        "failure_domain": "entrada duplicada",
+        "primary_type": "NEGATIVE",
+        "priority": "HIGH",
+        "priority_reason": "Duplicidade corrompe o inventário.",
+        "oracle_source": {
+         "source": "docs/requisitos.md",
+         "reference": "RN-01"
+        }
+       }
+      },
+      {
+       "key": "O3",
+       "pattern": "PHYSICAL_DIGITAL_MISMATCH",
+       "description": "O palete é colocado fisicamente em posição diferente da registrada.",
+       "disposition": "QUESTION_REQUIRED",
+       "question": "Q2"
+      }
+     ],
+     "patterns_reviewed": [
+      {
+       "items": [
+        "WRONG_RESOURCE",
+        "REPEATED_ACTION",
+        "PHYSICAL_DIGITAL_MISMATCH"
+       ],
+       "status": "CANDIDATES"
+      },
+      {
+       "items": [
+        "WRONG_ASSOCIATION",
+        "WRONG_ACTOR",
+        "WRONG_STATE",
+        "WRONG_SEQUENCE",
+        "OMITTED_ACTION",
+        "STALE_OPERATION",
+        "PARTIAL_OPERATION",
+        "CROSS_CONTEXT_MISTAKE",
+        "WRONG_ACKNOWLEDGEMENT",
+        "MANUAL_AFTER_AUTOMATIC",
+        "ABANDONED_OPERATION"
+       ],
+       "status": "NOT_APPLICABLE",
+       "reason": "o sistema tem um único ator, sem alertas, contas ou processamento automático"
+      }
+     ]
+    },
+    {
+     "dimension": "MISUSE",
+     "summary": "Não há ação que um operador possa abusar além dos erros já avaliados.",
+     "candidates": []
+    },
+    {
+     "dimension": "STATE_TRANSITION",
+     "summary": "Transições de ocupação das posições foram avaliadas.",
+     "candidates": [
+      {
+       "key": "S1",
+       "description": "Posição de origem passa de ocupada para livre na transferência.",
+       "disposition": "ALREADY_COVERED",
+       "covered_by": [
+        "T3"
+       ],
+       "intent": {
+        "actor": "operador de armazém",
+        "state": "palete Armazenado e posição de destino livre",
+        "trigger": "transferir o palete para a posição de destino",
+        "failure_domain": "liberação da origem",
+        "expected": "a posição de origem fica livre"
+       }
+      }
+     ]
+    },
+    {
+     "dimension": "DECISION_TABLE",
+     "summary": "A única decisão é posição livre ou ocupada, coberta pelos testes de entrada e transferência.",
+     "candidates": []
+    },
+    {
+     "dimension": "CONCURRENCY",
+     "summary": "Operações simultâneas na mesma posição foram avaliadas.",
+     "candidates": [
+      {
+       "key": "CC1",
+       "surface": "CONCURRENCY",
+       "description": "Dois operadores registram paletes na mesma posição livre ao mesmo tempo.",
+       "disposition": "MATERIALIZED",
+       "test": {
+        "basis": "DERIVED",
+        "anchors": [
+         "C4"
+        ],
+        "key": "D2",
+        "title": "Entradas simultâneas na mesma posição",
+        "objective": "Verificar que entradas simultâneas não deixam dois paletes na mesma posição.",
+        "family": "Posição única",
+        "actor": "dois operadores de armazém",
+        "state": "posição livre",
+        "trigger": "registrar ao mesmo tempo dois paletes diferentes na mesma posição",
+        "expected": "Apenas uma entrada é aceita e a outra é recusada com a mensagem \"Posição ocupada\".",
+        "failure_domain": "unicidade sob concorrência",
+        "primary_type": "CONCURRENCY",
+        "priority": "HIGH",
+        "priority_reason": "Condição de corrida viola a regra de posição única.",
+        "oracle_source": {
+         "source": "docs/requisitos.md",
+         "reference": "RN-01"
+        }
+       }
+      }
+     ]
+    },
+    {
+     "dimension": "RACE_CONDITION",
+     "summary": "A corrida relevante é a entrada simultânea avaliada em concorrência.",
+     "candidates": []
+    },
+    {
+     "dimension": "IDEMPOTENCY",
+     "summary": "A repetição da entrada foi avaliada como erro de operador.",
+     "candidates": []
+    },
+    {
+     "dimension": "INTEGRATION",
+     "summary": "Os requisitos não citam integrações externas.",
+     "candidates": []
+    },
+    {
+     "dimension": "RECOVERY",
+     "summary": "Não há processo assíncrono ou integração cuja recuperação precise ser verificada.",
+     "candidates": []
+    },
+    {
+     "dimension": "CHAOS",
+     "summary": "As superfícies de falha foram avaliadas contra a arquitetura descrita.",
+     "candidates": [],
+     "surfaces_reviewed": [
+      {
+       "items": [
+        "CONCURRENCY"
+       ],
+       "status": "CANDIDATES"
+      },
+      {
+       "items": [
+        "EXTERNAL_DEPENDENCY",
+        "NETWORK",
+        "MIDDLEWARE",
+        "DEVICE_HARDWARE",
+        "CACHE",
+        "DATABASE",
+        "ASYNC_WORKER",
+        "RETRY",
+        "DUPLICATE_EVENT",
+        "OUT_OF_ORDER_EVENT",
+        "PARTIAL_COMMIT",
+        "PROCESS_RESTART",
+        "SESSION_INTERRUPTION",
+        "RACE_CONDITION"
+       ],
+       "status": "NOT_APPLICABLE",
+       "reason": "o sistema descrito é uma aplicação síncrona sem integrações, filas, cache ou dispositivos"
+      }
+     ]
+    },
+    {
+     "dimension": "SECURITY",
+     "summary": "Os requisitos não definem controles de segurança.",
+     "candidates": []
+    },
+    {
+     "dimension": "AUTHORIZATION",
+     "summary": "Há um único perfil de operador; não existem restrições de permissão documentadas.",
+     "candidates": []
+    },
+    {
+     "dimension": "DATA_INTEGRITY",
+     "summary": "A integridade do histórico foi avaliada.",
+     "candidates": [
+      {
+       "key": "DI1",
+       "description": "Cada entrada precisa deixar trilha de auditoria.",
+       "disposition": "ALREADY_COVERED",
+       "covered_by": [
+        "T6"
+       ],
+       "intent": {
+        "actor": "operador de armazém",
+        "state": "posição livre",
+        "trigger": "registrar a entrada do palete na posição",
+        "failure_domain": "auditoria da entrada",
+        "expected": "existe um registro de movimentação com data, hora e operador"
+       }
+      }
+     ]
+    },
+    {
+     "dimension": "CROSS_REQUIREMENT",
+     "summary": "A interação entre transferência e posição única foi coberta pelo teste de transferência para posição ocupada.",
+     "candidates": []
+    },
+    {
+     "dimension": "E2E",
+     "summary": "O caso de uso de armazenagem foi composto a partir dos testes atômicos.",
+     "candidates": [
+      {
+       "key": "E1",
+       "use_case": "CU-01",
+       "description": "Entrada na posição de recebimento seguida de transferência para a posição definitiva.",
+       "disposition": "MATERIALIZED",
+       "test": {
+        "key": "E2E1",
+        "title": "Armazenar palete recebido de ponta a ponta",
+        "objective": "Verificar o fluxo completo de armazenagem do palete recebido.",
+        "family": "Transferências",
+        "actor": "operador de armazém",
+        "state": "posições de recebimento e definitiva livres",
+        "trigger": "registrar a entrada e transferir o palete",
+        "expected": "O palete está na posição definitiva e a posição de recebimento está livre.",
+        "failure_domain": "jornada de armazenagem",
+        "primary_type": "E2E",
+        "priority": "HIGH",
+        "priority_reason": "Jornada principal do armazém.",
+        "stages": [
+         {
+          "name": "entrada",
+          "test": "T1",
+          "trigger": "registrar a entrada do palete na posição de recebimento",
+          "observation": "o palete fica Armazenado na posição informada"
+         },
+         {
+          "name": "transferência",
+          "test": "T2",
+          "trigger": "transferir o palete para a posição definitiva",
+          "observation": "o palete fica na posição de destino"
+         },
+         {
+          "name": "liberação",
+          "test": "T3",
+          "trigger": "transferir o palete",
+          "observation": "a posição de origem fica livre"
+         }
+        ]
+       }
+      }
+     ]
+    }
+   ],
+   "test_assets": []
+  },
+  "procedures": {
+   "procedures": [
+    {
+     "test": "T1",
+     "preconditions": [
+      "OPERADOR_A está autenticado e POSICAO_LIVRE_A está livre."
+     ],
+     "test_data": [
+      {
+       "name": "OPERADOR_A",
+       "description": "usuário com perfil de operador de armazém"
+      },
+      {
+       "name": "PALETE_NOVO_A",
+       "description": "palete ainda não registrado no armazém"
+      },
+      {
+       "name": "POSICAO_LIVRE_A",
+       "description": "posição de armazenagem livre"
+      }
+     ],
+     "steps": [
+      {
+       "action": "Abrir a tela de entrada de paletes.",
+       "expected_result": "A tela exibe os campos de código do palete e posição."
+      },
+      {
+       "action": "Informar PALETE_NOVO_A e POSICAO_LIVRE_A e confirmar a entrada.",
+       "expected_result": "O palete fica Armazenado na posição informada."
+      }
+     ],
+     "automation": {
+      "suitability": "HIGH",
+      "layer": "UI"
+     }
+    },
+    {
+     "test": "T2",
+     "preconditions": [
+      "PALETE_A está Armazenado em POSICAO_ORIGEM e POSICAO_DESTINO está livre."
+     ],
+     "test_data": [
+      {
+       "name": "PALETE_A",
+       "description": "palete Armazenado"
+      },
+      {
+       "name": "POSICAO_DESTINO",
+       "description": "posição livre"
+      }
+     ],
+     "steps": [
+      {
+       "action": "Abrir a tela de transferência e selecionar PALETE_A.",
+       "expected_result": "A tela exibe a posição atual POSICAO_ORIGEM."
+      },
+      {
+       "action": "Informar POSICAO_DESTINO e confirmar a transferência.",
+       "expected_result": "O palete fica na posição de destino POSICAO_DESTINO."
+      }
+     ],
+     "automation": {
+      "suitability": "HIGH",
+      "layer": "UI"
+     }
+    },
+    {
+     "test": "T3",
+     "preconditions": [
+      "PALETE_A está Armazenado em POSICAO_ORIGEM e POSICAO_DESTINO está livre."
+     ],
+     "test_data": [
+      {
+       "name": "POSICAO_ORIGEM",
+       "description": "posição ocupada por PALETE_A"
+      }
+     ],
+     "steps": [
+      {
+       "action": "Transferir PALETE_A para POSICAO_DESTINO.",
+       "expected_result": "A transferência é confirmada."
+      },
+      {
+       "action": "Consultar a ocupação de POSICAO_ORIGEM.",
+       "expected_result": "A posição de origem POSICAO_ORIGEM fica livre."
+      }
+     ],
+     "automation": {
+      "suitability": "HIGH",
+      "layer": "UI"
+     }
+    },
+    {
+     "test": "T4",
+     "preconditions": [
+      "POSICAO_OCUPADA contém PALETE_B."
+     ],
+     "test_data": [
+      {
+       "name": "POSICAO_OCUPADA",
+       "description": "posição com PALETE_B"
+      },
+      {
+       "name": "PALETE_NOVO_A",
+       "description": "palete ainda não registrado"
+      }
+     ],
+     "steps": [
+      {
+       "action": "Abrir a tela de entrada de paletes.",
+       "expected_result": "A tela de entrada é exibida."
+      },
+      {
+       "action": "Informar PALETE_NOVO_A e POSICAO_OCUPADA e confirmar.",
+       "expected_result": "A entrada é recusada com a mensagem \"Posição ocupada\"."
+      }
+     ],
+     "automation": {
+      "suitability": "HIGH",
+      "layer": "UI"
+     }
+    },
+    {
+     "test": "T5",
+     "preconditions": [
+      "PALETE_A está em POSICAO_ORIGEM e POSICAO_OCUPADA contém PALETE_B."
+     ],
+     "test_data": [
+      {
+       "name": "POSICAO_OCUPADA",
+       "description": "posição com PALETE_B"
+      }
+     ],
+     "steps": [
+      {
+       "action": "Abrir a transferência de PALETE_A.",
+       "expected_result": "A posição atual é exibida."
+      },
+      {
+       "action": "Informar POSICAO_OCUPADA como destino e confirmar.",
+       "expected_result": "A transferência é recusada com a mensagem \"Posição ocupada\"."
+      }
+     ],
+     "automation": {
+      "suitability": "HIGH",
+      "layer": "UI"
+     }
+    },
+    {
+     "test": "T6",
+     "preconditions": [
+      "OPERADOR_A está autenticado e POSICAO_LIVRE_A está livre."
+     ],
+     "test_data": [
+      {
+       "name": "OPERADOR_A",
+       "description": "usuário com perfil de operador de armazém"
+      }
+     ],
+     "steps": [
+      {
+       "action": "Registrar a entrada de PALETE_NOVO_A em POSICAO_LIVRE_A.",
+       "expected_result": "A entrada é confirmada."
+      },
+      {
+       "action": "Abrir o histórico de movimentações de PALETE_NOVO_A.",
+       "expected_result": "Existe um registro de movimentação com data, hora e operador responsável OPERADOR_A."
+      }
+     ],
+     "automation": {
+      "suitability": "HIGH",
+      "layer": "UI"
+     }
+    },
+    {
+     "test": "T7",
+     "preconditions": [
+      "PALETE_A está Armazenado em POSICAO_ORIGEM e POSICAO_DESTINO está livre."
+     ],
+     "test_data": [
+      {
+       "name": "OPERADOR_A",
+       "description": "usuário com perfil de operador de armazém"
+      }
+     ],
+     "steps": [
+      {
+       "action": "Transferir PALETE_A para POSICAO_DESTINO como OPERADOR_A.",
+       "expected_result": "A transferência é confirmada."
+      },
+      {
+       "action": "Abrir o histórico de movimentações de PALETE_A.",
+       "expected_result": "Existe um registro de movimentação da transferência com data, hora e operador responsável OPERADOR_A."
+      }
+     ],
+     "automation": {
+      "suitability": "HIGH",
+      "layer": "UI"
+     }
+    },
+    {
+     "test": "T8",
+     "preconditions": [
+      "PALETE_A foi registrado em POSICAO_RECEBIMENTO e transferido para POSICAO_DEFINITIVA."
+     ],
+     "test_data": [
+      {
+       "name": "POSICAO_RECEBIMENTO",
+       "description": "posição usada na entrada"
+      },
+      {
+       "name": "POSICAO_DEFINITIVA",
+       "description": "posição final"
+      }
+     ],
+     "steps": [
+      {
+       "action": "Consultar a ocupação de POSICAO_DEFINITIVA e POSICAO_RECEBIMENTO.",
+       "expected_result": "O palete está na posição definitiva e a posição de recebimento está livre."
+      }
+     ],
+     "automation": {
+      "suitability": "HIGH",
+      "layer": "UI"
+     },
+     "single_step_reason": "uma única consulta observa as duas posições"
+    },
+    {
+     "test": "D1",
+     "preconditions": [
+      "PALETE_A já está registrado em POSICAO_OCUPADA."
+     ],
+     "test_data": [
+      {
+       "name": "PALETE_A",
+       "description": "palete já registrado"
+      }
+     ],
+     "steps": [
+      {
+       "action": "Abrir a tela de entrada de paletes.",
+       "expected_result": "A tela de entrada é exibida."
+      },
+      {
+       "action": "Informar novamente PALETE_A e POSICAO_OCUPADA e confirmar.",
+       "expected_result": "A segunda entrada é recusada com a mensagem \"Posição ocupada\"."
+      }
+     ],
+     "automation": {
+      "suitability": "HIGH",
+      "layer": "UI"
+     }
+    },
+    {
+     "test": "D2",
+     "preconditions": [
+      "POSICAO_LIVRE_A está livre e dois operadores estão autenticados em estações diferentes."
+     ],
+     "test_data": [
+      {
+       "name": "PALETE_X",
+       "description": "primeiro palete"
+      },
+      {
+       "name": "PALETE_Y",
+       "description": "segundo palete"
+      }
+     ],
+     "steps": [
+      {
+       "action": "Preparar a entrada de PALETE_X na estação 1 e de PALETE_Y na estação 2, ambas para POSICAO_LIVRE_A.",
+       "expected_result": "As duas telas aguardam confirmação."
+      },
+      {
+       "action": "Confirmar as duas entradas no mesmo instante.",
+       "expected_result": "Apenas uma entrada é aceita e a outra é recusada com a mensagem \"Posição ocupada\"."
+      }
+     ],
+     "automation": {
+      "suitability": "MEDIUM",
+      "layer": "API"
+     }
+    },
+    {
+     "test": "E2E1",
+     "preconditions": [
+      "POSICAO_RECEBIMENTO e POSICAO_DEFINITIVA estão livres."
+     ],
+     "test_data": [
+      {
+       "name": "OPERADOR_A",
+       "description": "usuário com perfil de operador de armazém"
+      },
+      {
+       "name": "PALETE_NOVO_A",
+       "description": "palete recebido"
+      }
+     ],
+     "steps": [
+      {
+       "action": "Registrar a entrada de PALETE_NOVO_A em POSICAO_RECEBIMENTO.",
+       "expected_result": "O palete fica Armazenado na posição de recebimento."
+      },
+      {
+       "action": "Transferir PALETE_NOVO_A para POSICAO_DEFINITIVA.",
+       "expected_result": "O palete fica na posição definitiva."
+      },
+      {
+       "action": "Consultar a ocupação das duas posições.",
+       "expected_result": "O palete está na posição definitiva e a posição de recebimento está livre."
+      }
+     ],
+     "automation": {
+      "suitability": "HIGH",
+      "layer": "UI"
+     }
+    }
+   ]
+  }
+ }
+}

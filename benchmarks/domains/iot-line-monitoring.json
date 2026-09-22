@@ -1,0 +1,804 @@
+{
+ "name": "iot-line-monitoring",
+ "domain": "Industrial / IoT",
+ "locale": "en",
+ "sources": {
+  "spec/line-monitoring.md": {
+   "role": "FUNCTIONAL_AUTHORITY",
+   "text": "# Production Line Monitoring\n\n## Temperature readings\nEach furnace sensor sends a temperature reading with the sensor id and a measurement timestamp.\nA reading whose measurement timestamp is older than the last stored reading of the same sensor is discarded.\nA reading with the same sensor id and measurement timestamp as a stored reading is ignored.\n\n## Overheat alarm\nWhen a stored reading is above 850 °C, an overheat alarm is raised for that furnace.\nAn alarm stays active until a shift supervisor acknowledges it.\n\n## Shift supervisor\nOnly a shift supervisor can acknowledge alarms.\n"
+  },
+  "gateway/ingest.py": {
+   "role": "IMPLEMENTATION_EVIDENCE",
+   "text": "OVERHEAT_LIMIT_C = 850\n\ndef accept(reading, last):\n    if last and reading.measured_at < last.measured_at:\n        return \"DISCARDED\"\n    if last and reading.measured_at == last.measured_at:\n        return \"DUPLICATE\"\n    return \"STORED\"\n"
+  }
+ },
+ "stages": {
+  "design": {
+   "domain_model": {
+    "actors": [
+     "furnace sensor",
+     "shift supervisor",
+     "operator"
+    ],
+    "entities": [
+     "temperature reading",
+     "overheat alarm",
+     "furnace"
+    ],
+    "states": [
+     "alarm active",
+     "alarm acknowledged"
+    ],
+    "operations": [
+     "ingest reading",
+     "raise alarm",
+     "acknowledge alarm"
+    ],
+    "invariants": [
+     "readings are stored in measurement order per sensor",
+     "duplicate readings are ignored"
+    ],
+    "permissions": [
+     "only shift supervisors acknowledge alarms"
+    ],
+    "integrations": [
+     "sensor gateway"
+    ],
+    "events": [
+     "reading received",
+     "alarm raised"
+    ],
+    "dependencies": [
+     "physical furnace sensors"
+    ],
+    "observables": [
+     "stored readings",
+     "alarm list"
+    ],
+    "failure_surfaces": [
+     "duplicate delivery",
+     "out-of-order delivery",
+     "sensor hardware"
+    ]
+   },
+   "requirements": [
+    {
+     "key": "READINGS",
+     "source_statement": "Sensor readings are stored in measurement order; stale and duplicate readings are not stored.",
+     "source_refs": [
+      {
+       "source": "spec/line-monitoring.md",
+       "reference": "Temperature readings"
+      }
+     ]
+    },
+    {
+     "key": "ALARM",
+     "source_statement": "Readings above 850 °C raise an overheat alarm that stays active until acknowledged.",
+     "source_refs": [
+      {
+       "source": "spec/line-monitoring.md",
+       "reference": "Overheat alarm"
+      }
+     ]
+    },
+    {
+     "key": "SUPERVISOR",
+     "source_statement": "Only a shift supervisor can acknowledge alarms.",
+     "source_refs": [
+      {
+       "source": "spec/line-monitoring.md",
+       "reference": "Shift supervisor"
+      }
+     ]
+    }
+   ],
+   "claims": [
+    {
+     "key": "C1",
+     "requirement": "READINGS",
+     "text": "A reading older than the last stored reading of the same sensor is discarded."
+    },
+    {
+     "key": "C2",
+     "requirement": "READINGS",
+     "text": "A reading repeating a stored sensor id and measurement timestamp is ignored."
+    },
+    {
+     "key": "C3",
+     "requirement": "ALARM",
+     "text": "A stored reading above 850 °C raises an overheat alarm for the furnace."
+    },
+    {
+     "key": "C4",
+     "requirement": "ALARM",
+     "text": "An overheat alarm stays active until a shift supervisor acknowledges it."
+    },
+    {
+     "key": "C5",
+     "requirement": "SUPERVISOR",
+     "text": "An operator who is not a shift supervisor cannot acknowledge an alarm."
+    }
+   ],
+   "tests": [
+    {
+     "key": "T1",
+     "claims": [
+      "C1"
+     ],
+     "title": "Stale reading is discarded",
+     "objective": "Verify that a reading older than the last stored one is discarded.",
+     "family": "Reading ingestion",
+     "actor": "furnace sensor",
+     "state": "sensor with a stored reading at 10:00:05",
+     "trigger": "sensor sends a reading measured at 10:00:01",
+     "expected": "The older reading is discarded and the stored reading stays 10:00:05.",
+     "failure_domain": "reading ordering",
+     "primary_type": "DATA_INTEGRITY",
+     "priority": "HIGH",
+     "priority_reason": "Out-of-order data would corrupt the furnace history."
+    },
+    {
+     "key": "T2",
+     "claims": [
+      "C2"
+     ],
+     "title": "Duplicate reading is ignored",
+     "objective": "Verify that a reading repeating a stored timestamp is ignored.",
+     "family": "Reading ingestion",
+     "actor": "furnace sensor",
+     "state": "sensor with a stored reading at 10:00:05",
+     "trigger": "sensor sends the same reading again",
+     "expected": "The duplicate reading is ignored and only one reading exists for 10:00:05.",
+     "failure_domain": "duplicate suppression",
+     "primary_type": "IDEMPOTENCY",
+     "priority": "HIGH",
+     "priority_reason": "Duplicates distort averages and alarms."
+    },
+    {
+     "key": "T3",
+     "claims": [
+      "C3"
+     ],
+     "title": "Reading above the limit raises an alarm",
+     "objective": "Verify that a stored reading above 850 °C raises an overheat alarm.",
+     "family": "Overheat alarm",
+     "actor": "furnace sensor",
+     "state": "furnace without active alarm",
+     "trigger": "sensor sends a reading of 851 °C",
+     "expected": "An overheat alarm is raised for the furnace.",
+     "failure_domain": "alarm raising",
+     "primary_type": "FUNCTIONAL",
+     "priority": "CRITICAL",
+     "priority_reason": "Missed alarms risk equipment damage."
+    },
+    {
+     "key": "T4",
+     "claims": [
+      "C4"
+     ],
+     "title": "Alarm stays active until acknowledged",
+     "objective": "Verify that an overheat alarm remains active without acknowledgement.",
+     "family": "Overheat alarm",
+     "actor": "shift supervisor",
+     "state": "active overheat alarm",
+     "trigger": "a later reading of 700 °C arrives without acknowledgement",
+     "expected": "The overheat alarm stays active.",
+     "failure_domain": "alarm persistence",
+     "primary_type": "STATE_TRANSITION",
+     "priority": "HIGH",
+     "priority_reason": "Self-clearing alarms hide incidents."
+    },
+    {
+     "key": "T5",
+     "claims": [
+      "C5"
+     ],
+     "title": "Operator cannot acknowledge an alarm",
+     "objective": "Verify that an operator without the supervisor role cannot acknowledge alarms.",
+     "family": "Overheat alarm",
+     "actor": "operator",
+     "state": "active overheat alarm",
+     "trigger": "operator tries to acknowledge the alarm",
+     "expected": "The acknowledgement is refused and the alarm stays active.",
+     "failure_domain": "acknowledgement authorization",
+     "primary_type": "AUTHORIZATION",
+     "priority": "HIGH",
+     "priority_reason": "Accountability of alarm handling.",
+     "indivisible_contract": "the refusal is observed as the alarm remaining active"
+    }
+   ],
+   "questions": [
+    {
+     "key": "Q1",
+     "question": "What must happen to readings buffered by the gateway while the network is down?",
+     "reason": "The specification does not describe buffering or replay.",
+     "requirements": [
+      "READINGS"
+     ],
+     "impact": "EXPECTED_RESULT"
+    }
+   ]
+  },
+  "expansion": {
+   "dimensions": [
+    {
+     "dimension": "NEGATIVE",
+     "summary": "Invalid readings were reviewed; the specification defines no validation beyond ordering and duplicates.",
+     "candidates": []
+    },
+    {
+     "dimension": "BOUNDARY",
+     "summary": "The alarm threshold boundary was reviewed.",
+     "candidates": [
+      {
+       "key": "B1",
+       "description": "A reading of exactly 850 °C does not raise an alarm.",
+       "disposition": "MATERIALIZED",
+       "test": {
+        "basis": "DERIVED",
+        "anchors": [
+         "C3"
+        ],
+        "key": "D1",
+        "title": "Reading at exactly the limit raises no alarm",
+        "objective": "Verify that 850 °C, which is not above the limit, raises no alarm.",
+        "family": "Overheat alarm",
+        "actor": "furnace sensor",
+        "state": "furnace without active alarm",
+        "trigger": "sensor sends a reading of 850 °C",
+        "expected": "No overheat alarm is raised for the furnace.",
+        "failure_domain": "alarm threshold boundary",
+        "primary_type": "BOUNDARY",
+        "priority": "HIGH",
+        "priority_reason": "Off-by-one on a safety threshold.",
+        "oracle_source": {
+         "source": "spec/line-monitoring.md",
+         "reference": "Overheat alarm"
+        }
+       }
+      }
+     ]
+    },
+    {
+     "dimension": "OPERATOR_ERROR",
+     "summary": "Human interactions are limited to alarm acknowledgement.",
+     "candidates": [
+      {
+       "key": "O1",
+       "pattern": "WRONG_ACTOR",
+       "description": "An operator acknowledges an alarm meant for the supervisor.",
+       "disposition": "ALREADY_COVERED",
+       "covered_by": [
+        "T5"
+       ],
+       "intent": {
+        "actor": "operator",
+        "state": "active overheat alarm",
+        "trigger": "operator tries to acknowledge the alarm",
+        "failure_domain": "acknowledgement authorization",
+        "expected": "the acknowledgement is refused and the alarm stays active"
+       }
+      },
+      {
+       "key": "O2",
+       "pattern": "WRONG_ACKNOWLEDGEMENT",
+       "description": "The supervisor acknowledges the alarm of the wrong furnace.",
+       "disposition": "NOT_APPLICABLE",
+       "reason": "the specification does not describe multiple simultaneous alarms or furnace selection during acknowledgement"
+      }
+     ],
+     "patterns_reviewed": [
+      {
+       "items": [
+        "WRONG_ACTOR"
+       ],
+       "status": "CANDIDATES"
+      },
+      {
+       "items": [
+        "WRONG_RESOURCE",
+        "WRONG_ASSOCIATION",
+        "WRONG_STATE",
+        "WRONG_SEQUENCE",
+        "REPEATED_ACTION",
+        "OMITTED_ACTION",
+        "STALE_OPERATION",
+        "PARTIAL_OPERATION",
+        "CROSS_CONTEXT_MISTAKE",
+        "PHYSICAL_DIGITAL_MISMATCH",
+        "MANUAL_AFTER_AUTOMATIC",
+        "ABANDONED_OPERATION"
+       ],
+       "status": "NOT_APPLICABLE",
+       "reason": "data enters through sensors, not people; the only human action is acknowledgement"
+      },
+      {
+       "items": [
+        "WRONG_ACKNOWLEDGEMENT"
+       ],
+       "status": "NOT_APPLICABLE",
+       "reason": "alarm selection during acknowledgement is not described"
+      }
+     ]
+    },
+    {
+     "dimension": "MISUSE",
+     "summary": "No user-facing input other than acknowledgement exists.",
+     "candidates": []
+    },
+    {
+     "dimension": "STATE_TRANSITION",
+     "summary": "Alarm lifecycle active and acknowledged was reviewed; persistence is covered by the acceptance test.",
+     "candidates": []
+    },
+    {
+     "dimension": "DECISION_TABLE",
+     "summary": "Ingestion has three outcomes (stored, discarded, ignored) already covered by acceptance tests.",
+     "candidates": []
+    },
+    {
+     "dimension": "CONCURRENCY",
+     "summary": "Two sensors reporting at once do not share state per the specification.",
+     "candidates": []
+    },
+    {
+     "dimension": "RACE_CONDITION",
+     "summary": "Ordering races are the out-of-order delivery reviewed in INTEGRATION.",
+     "candidates": []
+    },
+    {
+     "dimension": "IDEMPOTENCY",
+     "summary": "Duplicate delivery is covered by the duplicate acceptance test.",
+     "candidates": [
+      {
+       "key": "ID1",
+       "surface": "DUPLICATE_EVENT",
+       "description": "The gateway delivers the same reading twice.",
+       "disposition": "ALREADY_COVERED",
+       "covered_by": [
+        "T2"
+       ],
+       "intent": {
+        "actor": "furnace sensor",
+        "state": "sensor with a stored reading",
+        "trigger": "sensor sends the same reading again",
+        "failure_domain": "duplicate suppression",
+        "expected": "the duplicate reading is ignored"
+       }
+      }
+     ]
+    },
+    {
+     "dimension": "INTEGRATION",
+     "summary": "Gateway delivery order and connectivity were reviewed.",
+     "candidates": [
+      {
+       "key": "I1",
+       "surface": "OUT_OF_ORDER_EVENT",
+       "description": "Readings arrive in reverse measurement order.",
+       "disposition": "ALREADY_COVERED",
+       "covered_by": [
+        "T1"
+       ],
+       "intent": {
+        "actor": "furnace sensor",
+        "state": "sensor with a stored reading",
+        "trigger": "sensor sends an older reading",
+        "failure_domain": "reading ordering",
+        "expected": "the older reading is discarded"
+       }
+      },
+      {
+       "key": "I2",
+       "surface": "NETWORK",
+       "description": "Readings produced while the gateway network is down.",
+       "disposition": "MATERIALIZED",
+       "test": {
+        "basis": "EXPLORATORY",
+        "anchors": [
+         "C1"
+        ],
+        "key": "X1",
+        "title": "Readings produced during a network outage",
+        "objective": "Explore how readings produced during an outage reach storage once the network returns.",
+        "family": "Reading ingestion",
+        "actor": "furnace sensor",
+        "state": "gateway network interrupted for five minutes",
+        "trigger": "network is restored after the outage",
+        "expected": "Stored readings never go back in measurement time for the sensor.",
+        "failure_domain": "outage replay",
+        "primary_type": "RECOVERY",
+        "priority": "MEDIUM",
+        "priority_reason": "Outage behavior is undefined but data loss matters.",
+        "questions": [
+         "Q1"
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "dimension": "RECOVERY",
+     "summary": "Recovery after an outage depends on the undefined buffering policy explored in INTEGRATION.",
+     "candidates": []
+    },
+    {
+     "dimension": "CHAOS",
+     "summary": "Failure surfaces were compared with the described architecture.",
+     "candidates": [],
+     "surfaces_reviewed": [
+      {
+       "items": [
+        "DUPLICATE_EVENT",
+        "OUT_OF_ORDER_EVENT",
+        "NETWORK"
+       ],
+       "status": "CANDIDATES"
+      },
+      {
+       "items": [
+        "EXTERNAL_DEPENDENCY",
+        "MIDDLEWARE",
+        "DEVICE_HARDWARE",
+        "CACHE",
+        "DATABASE",
+        "ASYNC_WORKER",
+        "RETRY",
+        "PARTIAL_COMMIT",
+        "PROCESS_RESTART",
+        "SESSION_INTERRUPTION",
+        "CONCURRENCY",
+        "RACE_CONDITION"
+       ],
+       "status": "NOT_APPLICABLE",
+       "reason": "the specification describes only sensor ingestion and alarms, with no cache, queue workers, sessions or retry policy"
+      }
+     ]
+    },
+    {
+     "dimension": "SECURITY",
+     "summary": "Sensor authentication is not described by the selected sources.",
+     "candidates": []
+    },
+    {
+     "dimension": "AUTHORIZATION",
+     "summary": "Supervisor-only acknowledgement is covered by an acceptance test.",
+     "candidates": []
+    },
+    {
+     "dimension": "DATA_INTEGRITY",
+     "summary": "Reading order and duplicates are covered by acceptance tests.",
+     "candidates": []
+    },
+    {
+     "dimension": "CROSS_REQUIREMENT",
+     "summary": "Interaction between discarded readings and alarms was reviewed.",
+     "candidates": [
+      {
+       "key": "X2",
+       "description": "A stale reading above 850 °C must not raise an alarm because it is discarded.",
+       "disposition": "MATERIALIZED",
+       "test": {
+        "basis": "DERIVED",
+        "anchors": [
+         "C1",
+         "C3"
+        ],
+        "key": "D2",
+        "title": "Discarded stale reading raises no alarm",
+        "objective": "Verify that a discarded reading above the limit does not raise an alarm.",
+        "family": "Overheat alarm",
+        "actor": "furnace sensor",
+        "state": "sensor with a stored reading at 10:00:05 and no active alarm",
+        "trigger": "sensor sends a reading of 900 °C measured at 10:00:01",
+        "expected": "The reading is discarded and no overheat alarm is raised.",
+        "failure_domain": "alarm on discarded data",
+        "primary_type": "DATA_INTEGRITY",
+        "priority": "HIGH",
+        "priority_reason": "False alarms from stale data.",
+        "oracle_source": {
+         "source": "spec/line-monitoring.md",
+         "reference": "Temperature readings; Overheat alarm"
+        }
+       }
+      }
+     ]
+    },
+    {
+     "dimension": "E2E",
+     "summary": "No use case is documented; the reading-to-alarm journey is covered by composing ingestion and alarm tests.",
+     "candidates": [
+      {
+       "key": "E1",
+       "description": "Reading stored, alarm raised, alarm persists until acknowledged.",
+       "disposition": "MATERIALIZED",
+       "test": {
+        "key": "E2E1",
+        "title": "Overheat reading to active alarm",
+        "objective": "Verify the journey from an overheat reading to a persistent alarm.",
+        "family": "Overheat alarm",
+        "actor": "furnace sensor and shift supervisor",
+        "state": "furnace without active alarm",
+        "trigger": "sensor sends 851 °C then 700 °C",
+        "expected": "The overheat alarm stays active after the later reading.",
+        "failure_domain": "alarm journey",
+        "primary_type": "E2E",
+        "priority": "HIGH",
+        "priority_reason": "Safety journey.",
+        "stages": [
+         {
+          "name": "raise",
+          "test": "T3",
+          "trigger": "sensor sends a reading of 851 °C",
+          "observation": "an overheat alarm is raised"
+         },
+         {
+          "name": "persist",
+          "test": "T4",
+          "trigger": "a later reading of 700 °C arrives",
+          "observation": "the overheat alarm stays active"
+         }
+        ]
+       }
+      }
+     ]
+    }
+   ],
+   "test_assets": []
+  },
+  "procedures": {
+   "procedures": [
+    {
+     "test": "T1",
+     "preconditions": [
+      "SENSOR_A has a stored reading measured at 10:00:05."
+     ],
+     "test_data": [
+      {
+       "name": "SENSOR_A",
+       "description": "furnace sensor registered for FURNACE_A"
+      }
+     ],
+     "steps": [
+      {
+       "action": "Send a reading from SENSOR_A measured at 10:00:01.",
+       "expected_result": "The gateway answers that the reading was discarded."
+      },
+      {
+       "action": "Query the latest stored reading of SENSOR_A.",
+       "expected_result": "The older reading is discarded and the stored reading stays 10:00:05."
+      }
+     ],
+     "automation": {
+      "suitability": "HIGH",
+      "layer": "API"
+     }
+    },
+    {
+     "test": "T2",
+     "preconditions": [
+      "SENSOR_A has a stored reading measured at 10:00:05."
+     ],
+     "test_data": [
+      {
+       "name": "SENSOR_A",
+       "description": "furnace sensor registered for FURNACE_A"
+      }
+     ],
+     "steps": [
+      {
+       "action": "Send again the reading of SENSOR_A measured at 10:00:05.",
+       "expected_result": "The gateway accepts the request."
+      },
+      {
+       "action": "Query the stored readings of SENSOR_A for 10:00:05.",
+       "expected_result": "The duplicate reading is ignored and only one reading exists for 10:00:05."
+      }
+     ],
+     "automation": {
+      "suitability": "HIGH",
+      "layer": "API"
+     }
+    },
+    {
+     "test": "T3",
+     "preconditions": [
+      "FURNACE_A has no active alarm."
+     ],
+     "test_data": [
+      {
+       "name": "SENSOR_A",
+       "description": "furnace sensor registered for FURNACE_A"
+      }
+     ],
+     "steps": [
+      {
+       "action": "Send a reading of 851 °C from SENSOR_A.",
+       "expected_result": "The reading is stored."
+      },
+      {
+       "action": "Open the alarm list.",
+       "expected_result": "An overheat alarm is raised for the furnace FURNACE_A."
+      }
+     ],
+     "automation": {
+      "suitability": "HIGH",
+      "layer": "API"
+     }
+    },
+    {
+     "test": "T4",
+     "preconditions": [
+      "FURNACE_A has an active overheat alarm."
+     ],
+     "test_data": [
+      {
+       "name": "SENSOR_A",
+       "description": "furnace sensor registered for FURNACE_A"
+      }
+     ],
+     "steps": [
+      {
+       "action": "Send a reading of 700 °C from SENSOR_A without acknowledging the alarm.",
+       "expected_result": "The reading is stored."
+      },
+      {
+       "action": "Open the alarm list.",
+       "expected_result": "The overheat alarm stays active."
+      }
+     ],
+     "automation": {
+      "suitability": "HIGH",
+      "layer": "API"
+     }
+    },
+    {
+     "test": "T5",
+     "preconditions": [
+      "FURNACE_A has an active overheat alarm and USER_OPERATOR_A is signed in."
+     ],
+     "test_data": [
+      {
+       "name": "USER_OPERATOR_A",
+       "description": "user without the shift supervisor role"
+      }
+     ],
+     "steps": [
+      {
+       "action": "Open the active alarm of FURNACE_A as USER_OPERATOR_A.",
+       "expected_result": "The alarm details are shown."
+      },
+      {
+       "action": "Try to acknowledge the alarm.",
+       "expected_result": "The acknowledgement is refused and the alarm stays active."
+      }
+     ],
+     "automation": {
+      "suitability": "HIGH",
+      "layer": "UI"
+     }
+    },
+    {
+     "test": "D1",
+     "preconditions": [
+      "FURNACE_A has no active alarm."
+     ],
+     "test_data": [
+      {
+       "name": "SENSOR_A",
+       "description": "furnace sensor registered for FURNACE_A"
+      }
+     ],
+     "steps": [
+      {
+       "action": "Send a reading of 850 °C from SENSOR_A.",
+       "expected_result": "The reading is stored."
+      },
+      {
+       "action": "Open the alarm list.",
+       "expected_result": "No overheat alarm is raised for the furnace."
+      }
+     ],
+     "automation": {
+      "suitability": "HIGH",
+      "layer": "API"
+     }
+    },
+    {
+     "test": "D2",
+     "preconditions": [
+      "SENSOR_A has a stored reading at 10:00:05 and FURNACE_A has no active alarm."
+     ],
+     "test_data": [
+      {
+       "name": "SENSOR_A",
+       "description": "furnace sensor registered for FURNACE_A"
+      }
+     ],
+     "steps": [
+      {
+       "action": "Send a reading of 900 °C from SENSOR_A measured at 10:00:01.",
+       "expected_result": "The gateway answers that the reading was discarded."
+      },
+      {
+       "action": "Open the alarm list.",
+       "expected_result": "The reading is discarded and no overheat alarm is raised."
+      }
+     ],
+     "automation": {
+      "suitability": "HIGH",
+      "layer": "API"
+     }
+    },
+    {
+     "test": "X1",
+     "preconditions": [
+      "The gateway network of FURNACE_A can be interrupted in the test bench."
+     ],
+     "test_data": [
+      {
+       "name": "SENSOR_A",
+       "description": "furnace sensor registered for FURNACE_A"
+      }
+     ],
+     "steps": [
+      {
+       "action": "Interrupt the gateway network for five minutes while SENSOR_A keeps measuring.",
+       "expected_result": "The gateway reports no connectivity."
+      },
+      {
+       "action": "Restore the network and query the stored readings of SENSOR_A.",
+       "expected_result": "Stored readings never go back in measurement time for the sensor."
+      }
+     ],
+     "automation": {
+      "suitability": "LOW",
+      "layer": "HARDWARE"
+     },
+     "unknowns": [
+      {
+       "kind": "AMBIGUOUS_POLICY",
+       "detail": "buffering and replay policy is undefined",
+       "question": "Q1"
+      },
+      {
+       "kind": "EXTERNAL_DEPENDENCY_UNAVAILABLE",
+       "detail": "a physical furnace sensor bench is required"
+      }
+     ]
+    },
+    {
+     "test": "E2E1",
+     "preconditions": [
+      "FURNACE_A has no active alarm."
+     ],
+     "test_data": [
+      {
+       "name": "SENSOR_A",
+       "description": "furnace sensor registered for FURNACE_A"
+      }
+     ],
+     "steps": [
+      {
+       "action": "Send a reading of 851 °C from SENSOR_A.",
+       "expected_result": "An overheat alarm is raised."
+      },
+      {
+       "action": "Send a reading of 700 °C from SENSOR_A.",
+       "expected_result": "The reading is stored."
+      },
+      {
+       "action": "Open the alarm list.",
+       "expected_result": "The overheat alarm stays active after the later reading."
+      }
+     ],
+     "automation": {
+      "suitability": "HIGH",
+      "layer": "API"
+     }
+    }
+   ]
+  }
+ }
+}

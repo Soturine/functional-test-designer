@@ -120,6 +120,10 @@ def locale_language(locale: str) -> str:
 
 
 def _stem(word: str) -> str:
+    if word.isdigit():
+        return word
+    if len(word) > 4 and word.endswith("s"):
+        word = word[:-1]
     return word[:5]
 
 
@@ -128,7 +132,7 @@ def content_tokens(text: Any) -> set[str]:
     stop = set().union(*STOPWORDS.values())
     return {
         _stem(word) for word in normalize(text).split()
-        if len(word) >= 3 and word not in stop and not word.isdigit()
+        if (len(word) >= 3 and word not in stop) or (word.isdigit() and len(word) >= 2)
     }
 
 
@@ -138,6 +142,14 @@ def similarity(left: Any, right: Any) -> float:
     if not a or not b:
         return 0.0
     return len(a & b) / min(len(a), len(b))
+
+
+def jaccard(left: Any, right: Any) -> float:
+    """Shared meaningful tokens over all tokens: strict enough to separate generic overlap."""
+    a, b = content_tokens(left), content_tokens(right)
+    if not a or not b:
+        return 0.0
+    return len(a & b) / len(a | b)
 
 
 def require(condition: bool, errors: list[str], message: str) -> None:

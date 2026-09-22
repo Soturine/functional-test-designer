@@ -196,7 +196,8 @@ def validate_procedures(payload: dict[str, Any], context: dict[str, Any]) -> dic
                 errors.append(f"{label} step {number} expected result is not observable")
             if hidden_subtest(action):
                 errors.append(f"{label} step {number} hides independent variants; they belong to separate Test Cases")
-            check_locale(f"{label} step {number}", f"{action} {expected}", locale, errors)
+            check_locale(f"{label} step {number} action", action, locale, errors)
+            check_locale(f"{label} step {number} expected_result", expected, locale, errors)
             normalized_steps.append({
                 "step": number, "action": action, "expected_result": expected or None,
                 "needs_clarification": not expected,

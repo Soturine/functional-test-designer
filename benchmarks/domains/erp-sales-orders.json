@@ -1,0 +1,766 @@
+{
+ "name": "erp-sales-orders",
+ "domain": "ERP / order processing",
+ "locale": "es",
+ "sources": {
+  "docs/pedidos.md": {
+   "role": "FUNCTIONAL_AUTHORITY",
+   "text": "# Requisitos de Pedidos de Venta\n\nRF-01 - Confirmar Pedido\nEl vendedor confirma un pedido en estado Borrador. Al confirmar, el pedido pasa al estado Confirmado y se reserva el stock de cada línea.\n\nRN-01 - Límite de Crédito\nUn pedido no puede confirmarse si el total supera el crédito disponible del cliente; el sistema muestra el mensaje \"Crédito insuficiente\".\n\nRN-02 - Aprobación de Descuentos\nUn descuento mayor al 10 % requiere la aprobación de un supervisor antes de confirmar el pedido.\n\nCU-01 - Procesar Pedido de Venta\nFlujo principal: el vendedor crea el pedido, el supervisor aprueba el descuento y el vendedor confirma el pedido.\n"
+  }
+ },
+ "stages": {
+  "design": {
+   "domain_model": {
+    "actors": [
+     "vendedor",
+     "supervisor"
+    ],
+    "entities": [
+     "pedido",
+     "línea de pedido",
+     "cliente",
+     "stock"
+    ],
+    "states": [
+     "Borrador",
+     "Confirmado"
+    ],
+    "operations": [
+     "confirmar pedido",
+     "aprobar descuento"
+    ],
+    "invariants": [
+     "el total confirmado no supera el crédito disponible",
+     "descuentos mayores al 10 % están aprobados"
+    ],
+    "permissions": [
+     "solo el supervisor aprueba descuentos"
+    ],
+    "integrations": [],
+    "events": [
+     "pedido confirmado"
+    ],
+    "dependencies": [],
+    "observables": [
+     "estado del pedido",
+     "stock reservado",
+     "mensajes"
+    ],
+    "failure_surfaces": [
+     "reserva parcial de stock"
+    ]
+   },
+   "requirements": [
+    {
+     "key": "RF-01",
+     "source_identifier": "RF-01",
+     "source_statement": "El vendedor confirma un pedido Borrador; pasa a Confirmado y se reserva el stock."
+    },
+    {
+     "key": "RN-01",
+     "source_identifier": "RN-01",
+     "source_statement": "No se confirma un pedido cuyo total supera el crédito disponible."
+    },
+    {
+     "key": "RN-02",
+     "source_identifier": "RN-02",
+     "source_statement": "Un descuento mayor al 10 % requiere aprobación de un supervisor."
+    },
+    {
+     "key": "CU-01",
+     "source_identifier": "CU-01",
+     "source_statement": "El vendedor crea el pedido, el supervisor aprueba el descuento y el vendedor confirma."
+    }
+   ],
+   "claims": [
+    {
+     "key": "C1",
+     "requirement": "RF-01",
+     "text": "Al confirmar un pedido Borrador, el pedido pasa al estado Confirmado."
+    },
+    {
+     "key": "C2",
+     "requirement": "RF-01",
+     "text": "Al confirmar un pedido, se reserva el stock de cada línea."
+    },
+    {
+     "key": "C3",
+     "requirement": "RN-01",
+     "text": "Si el total supera el crédito disponible, el pedido no se confirma y se muestra \"Crédito insuficiente\".",
+     "indivisible_contract": "el rechazo se observa como el mensaje junto con el pedido que sigue en Borrador"
+    },
+    {
+     "key": "C4",
+     "requirement": "RN-02",
+     "text": "Un pedido con descuento mayor al 10 % sin aprobación del supervisor no se puede confirmar."
+    },
+    {
+     "key": "C5",
+     "requirement": "CU-01",
+     "text": "Al final del flujo, el pedido con el descuento aprobado queda Confirmado."
+    }
+   ],
+   "tests": [
+    {
+     "key": "T1",
+     "claims": [
+      "C1"
+     ],
+     "title": "Confirmar pedido Borrador",
+     "objective": "Verificar que la confirmación cambia el estado del pedido a Confirmado.",
+     "family": "Confirmación de pedidos",
+     "actor": "vendedor",
+     "state": "pedido Borrador dentro del crédito",
+     "trigger": "el vendedor confirma el pedido",
+     "expected": "El pedido pasa al estado Confirmado.",
+     "failure_domain": "estado del pedido",
+     "primary_type": "FUNCTIONAL",
+     "priority": "HIGH",
+     "priority_reason": "Flujo principal de ventas."
+    },
+    {
+     "key": "T2",
+     "claims": [
+      "C2"
+     ],
+     "title": "La confirmación reserva el stock",
+     "objective": "Verificar que la confirmación reserva el stock de cada línea del pedido.",
+     "family": "Confirmación de pedidos",
+     "actor": "vendedor",
+     "state": "pedido Borrador con dos líneas y stock disponible",
+     "trigger": "el vendedor confirma el pedido",
+     "expected": "El stock de cada línea queda reservado para el pedido.",
+     "failure_domain": "reserva de stock",
+     "primary_type": "DATA_INTEGRITY",
+     "priority": "HIGH",
+     "priority_reason": "Sin reserva se vende stock inexistente."
+    },
+    {
+     "key": "T3",
+     "claims": [
+      "C3"
+     ],
+     "title": "Pedido que supera el crédito no se confirma",
+     "objective": "Verificar que un pedido cuyo total supera el crédito del cliente no se confirma.",
+     "family": "Crédito",
+     "actor": "vendedor",
+     "state": "pedido Borrador con total mayor que el crédito disponible",
+     "trigger": "el vendedor confirma el pedido",
+     "expected": "Se muestra \"Crédito insuficiente\" y el pedido sigue en Borrador.",
+     "failure_domain": "límite de crédito",
+     "primary_type": "NEGATIVE",
+     "priority": "CRITICAL",
+     "priority_reason": "Riesgo financiero.",
+     "indivisible_contract": "el rechazo se observa como el mensaje junto con el pedido que sigue en Borrador"
+    },
+    {
+     "key": "T4",
+     "claims": [
+      "C4"
+     ],
+     "title": "Descuento mayor al 10 % sin aprobación bloquea la confirmación",
+     "objective": "Verificar que no se confirma un pedido con descuento no aprobado mayor al 10 %.",
+     "family": "Descuentos",
+     "actor": "vendedor",
+     "state": "pedido Borrador con descuento del 15 % sin aprobación",
+     "trigger": "el vendedor confirma el pedido",
+     "expected": "El pedido no se confirma y sigue en Borrador.",
+     "failure_domain": "aprobación de descuento",
+     "primary_type": "AUTHORIZATION",
+     "priority": "HIGH",
+     "priority_reason": "Control de margen."
+    },
+    {
+     "key": "T5",
+     "claims": [
+      "C5"
+     ],
+     "title": "Pedido con descuento aprobado queda Confirmado",
+     "objective": "Verificar el resultado final del flujo de venta con descuento aprobado.",
+     "family": "Descuentos",
+     "actor": "vendedor",
+     "state": "pedido con descuento del 15 % aprobado por el supervisor",
+     "trigger": "el vendedor confirma el pedido",
+     "expected": "El pedido con el descuento aprobado queda Confirmado.",
+     "failure_domain": "resultado del flujo de venta",
+     "primary_type": "FUNCTIONAL",
+     "priority": "MEDIUM",
+     "priority_reason": "Confirma el caso de uso."
+    }
+   ],
+   "questions": [
+    {
+     "key": "Q1",
+     "question": "¿Qué debe pasar si solo algunas líneas tienen stock al confirmar el pedido?",
+     "reason": "Los requisitos no definen la reserva parcial.",
+     "requirements": [
+      "RF-01"
+     ],
+     "impact": "EXPECTED_RESULT"
+    }
+   ]
+  },
+  "expansion": {
+   "dimensions": [
+    {
+     "dimension": "NEGATIVE",
+     "summary": "Se revisaron confirmaciones inválidas; los requisitos solo definen crédito y descuento.",
+     "candidates": []
+    },
+    {
+     "dimension": "BOUNDARY",
+     "summary": "Se revisaron los límites de crédito y de descuento.",
+     "candidates": [
+      {
+       "key": "B1",
+       "description": "Un descuento exactamente del 10 % no requiere aprobación.",
+       "disposition": "MATERIALIZED",
+       "test": {
+        "basis": "DERIVED",
+        "anchors": [
+         "C4"
+        ],
+        "key": "D1",
+        "title": "Descuento del 10 % se confirma sin aprobación",
+        "objective": "Verificar que un descuento igual al 10 % no exige aprobación.",
+        "family": "Descuentos",
+        "actor": "vendedor",
+        "state": "pedido Borrador con descuento del 10 % sin aprobación",
+        "trigger": "el vendedor confirma el pedido",
+        "expected": "El pedido pasa al estado Confirmado sin aprobación.",
+        "failure_domain": "umbral de descuento",
+        "primary_type": "BOUNDARY",
+        "priority": "HIGH",
+        "priority_reason": "Error de límite bloquea ventas.",
+        "oracle_source": {
+         "source": "docs/pedidos.md",
+         "reference": "RN-02"
+        }
+       }
+      },
+      {
+       "key": "B2",
+       "description": "Un total igual al crédito disponible se confirma.",
+       "disposition": "MATERIALIZED",
+       "test": {
+        "basis": "DERIVED",
+        "anchors": [
+         "C3"
+        ],
+        "key": "D2",
+        "title": "Total igual al crédito se confirma",
+        "objective": "Verificar que un total igual al crédito disponible no se rechaza.",
+        "family": "Crédito",
+        "actor": "vendedor",
+        "state": "pedido Borrador con total igual al crédito disponible",
+        "trigger": "el vendedor confirma el pedido",
+        "expected": "El pedido pasa al estado Confirmado porque el total no supera el crédito.",
+        "failure_domain": "umbral de crédito",
+        "primary_type": "BOUNDARY",
+        "priority": "HIGH",
+        "priority_reason": "Error de límite bloquea ventas.",
+        "oracle_source": {
+         "source": "docs/pedidos.md",
+         "reference": "RN-01"
+        }
+       }
+      }
+     ]
+    },
+    {
+     "dimension": "OPERATOR_ERROR",
+     "summary": "Se revisaron los errores del vendedor y del supervisor.",
+     "candidates": [
+      {
+       "key": "O1",
+       "pattern": "WRONG_SEQUENCE",
+       "description": "El vendedor confirma antes de que el supervisor apruebe el descuento.",
+       "disposition": "ALREADY_COVERED",
+       "covered_by": [
+        "T4"
+       ],
+       "intent": {
+        "actor": "vendedor",
+        "state": "pedido Borrador con descuento sin aprobación",
+        "trigger": "el vendedor confirma el pedido",
+        "failure_domain": "aprobación de descuento",
+        "expected": "el pedido no se confirma y sigue en Borrador"
+       }
+      },
+      {
+       "key": "O2",
+       "pattern": "WRONG_ACTOR",
+       "description": "El vendedor intenta aprobar su propio descuento.",
+       "disposition": "MATERIALIZED",
+       "test": {
+        "basis": "DERIVED",
+        "anchors": [
+         "C4"
+        ],
+        "key": "D3",
+        "title": "El vendedor no puede aprobar su propio descuento",
+        "objective": "Verificar que la aprobación de un vendedor no habilita la confirmación.",
+        "family": "Descuentos",
+        "actor": "vendedor",
+        "state": "pedido Borrador con descuento del 15 %",
+        "trigger": "el vendedor aprueba el descuento y confirma el pedido",
+        "expected": "El pedido no se confirma porque falta la aprobación de un supervisor.",
+        "failure_domain": "autoaprobación",
+        "primary_type": "AUTHORIZATION",
+        "priority": "HIGH",
+        "priority_reason": "Evita fraude de margen.",
+        "oracle_source": {
+         "source": "docs/pedidos.md",
+         "reference": "RN-02"
+        }
+       }
+      }
+     ],
+     "patterns_reviewed": [
+      {
+       "items": [
+        "WRONG_SEQUENCE",
+        "WRONG_ACTOR"
+       ],
+       "status": "CANDIDATES"
+      },
+      {
+       "items": [
+        "WRONG_RESOURCE",
+        "WRONG_ASSOCIATION",
+        "WRONG_STATE",
+        "REPEATED_ACTION",
+        "OMITTED_ACTION",
+        "STALE_OPERATION",
+        "PARTIAL_OPERATION",
+        "CROSS_CONTEXT_MISTAKE",
+        "PHYSICAL_DIGITAL_MISMATCH",
+        "WRONG_ACKNOWLEDGEMENT",
+        "MANUAL_AFTER_AUTOMATIC",
+        "ABANDONED_OPERATION"
+       ],
+       "status": "NOT_APPLICABLE",
+       "reason": "el flujo no tiene objetos físicos, alertas, procesos automáticos ni operaciones en varios documentos"
+      }
+     ]
+    },
+    {
+     "dimension": "MISUSE",
+     "summary": "El abuso relevante es la autoaprobación, revisada como error de operador.",
+     "candidates": []
+    },
+    {
+     "dimension": "STATE_TRANSITION",
+     "summary": "La transición Borrador a Confirmado está cubierta por la prueba de aceptación.",
+     "candidates": []
+    },
+    {
+     "dimension": "DECISION_TABLE",
+     "summary": "Se revisó la tabla crédito por descuento.",
+     "candidates": [
+      {
+       "key": "DT1",
+       "description": "Pedido que supera el crédito con descuento aprobado.",
+       "disposition": "ALREADY_COVERED",
+       "covered_by": [
+        "T3"
+       ],
+       "intent": {
+        "actor": "vendedor",
+        "state": "pedido Borrador con total mayor que el crédito",
+        "trigger": "el vendedor confirma el pedido",
+        "failure_domain": "límite de crédito",
+        "expected": "se muestra Crédito insuficiente y el pedido sigue en Borrador"
+       }
+      }
+     ]
+    },
+    {
+     "dimension": "CONCURRENCY",
+     "summary": "Se revisaron dos pedidos que reservan el mismo stock; la regla de prioridad no existe.",
+     "candidates": [
+      {
+       "key": "CC1",
+       "surface": "CONCURRENCY",
+       "description": "Dos pedidos confirman al mismo tiempo el último stock.",
+       "disposition": "QUESTION_REQUIRED",
+       "question": "Q1"
+      }
+     ]
+    },
+    {
+     "dimension": "RACE_CONDITION",
+     "summary": "La carrera relevante es la reserva simultánea de stock.",
+     "candidates": []
+    },
+    {
+     "dimension": "IDEMPOTENCY",
+     "summary": "Confirmar un pedido ya Confirmado no está descrito en los requisitos.",
+     "candidates": []
+    },
+    {
+     "dimension": "INTEGRATION",
+     "summary": "Los requisitos no describen integraciones externas.",
+     "candidates": []
+    },
+    {
+     "dimension": "RECOVERY",
+     "summary": "No hay procesos asíncronos que recuperar según las fuentes.",
+     "candidates": []
+    },
+    {
+     "dimension": "CHAOS",
+     "summary": "Se compararon las superficies de falla con la aplicación descrita.",
+     "candidates": [],
+     "surfaces_reviewed": [
+      {
+       "items": [
+        "CONCURRENCY",
+        "PARTIAL_COMMIT"
+       ],
+       "status": "CANDIDATES"
+      },
+      {
+       "items": [
+        "EXTERNAL_DEPENDENCY",
+        "NETWORK",
+        "MIDDLEWARE",
+        "DEVICE_HARDWARE",
+        "CACHE",
+        "DATABASE",
+        "ASYNC_WORKER",
+        "RETRY",
+        "DUPLICATE_EVENT",
+        "OUT_OF_ORDER_EVENT",
+        "PROCESS_RESTART",
+        "SESSION_INTERRUPTION",
+        "RACE_CONDITION"
+       ],
+       "status": "NOT_APPLICABLE",
+       "reason": "la aplicación descrita es síncrona, sin integraciones, dispositivos, colas ni caché"
+      }
+     ]
+    },
+    {
+     "dimension": "SECURITY",
+     "summary": "Las fuentes no describen controles de seguridad.",
+     "candidates": []
+    },
+    {
+     "dimension": "AUTHORIZATION",
+     "summary": "La aprobación de descuentos por supervisor está cubierta.",
+     "candidates": []
+    },
+    {
+     "dimension": "DATA_INTEGRITY",
+     "summary": "Se revisó la reserva parcial de stock.",
+     "candidates": [
+      {
+       "key": "DI1",
+       "surface": "PARTIAL_COMMIT",
+       "description": "La confirmación reserva solo una parte de las líneas.",
+       "disposition": "QUESTION_REQUIRED",
+       "question": "Q1"
+      }
+     ]
+    },
+    {
+     "dimension": "CROSS_REQUIREMENT",
+     "summary": "La combinación de crédito y descuento se cubrió en la tabla de decisión.",
+     "candidates": []
+    },
+    {
+     "dimension": "E2E",
+     "summary": "El caso de uso de venta se compuso con pruebas atómicas.",
+     "candidates": [
+      {
+       "key": "E1",
+       "use_case": "CU-01",
+       "description": "Pedido con descuento aprobado y confirmado.",
+       "disposition": "MATERIALIZED",
+       "test": {
+        "key": "E2E1",
+        "title": "Procesar pedido de venta con descuento",
+        "objective": "Verificar el flujo de venta con descuento aprobado hasta la confirmación.",
+        "family": "Descuentos",
+        "actor": "vendedor y supervisor",
+        "state": "pedido Borrador con descuento del 15 %",
+        "trigger": "el supervisor aprueba y el vendedor confirma",
+        "expected": "El pedido con el descuento aprobado queda Confirmado.",
+        "failure_domain": "flujo de venta",
+        "primary_type": "E2E",
+        "priority": "HIGH",
+        "priority_reason": "Recorrido principal de ventas.",
+        "stages": [
+         {
+          "name": "bloqueo",
+          "test": "T4",
+          "trigger": "el vendedor confirma antes de la aprobación",
+          "observation": "el pedido no se confirma y sigue en Borrador"
+         },
+         {
+          "name": "confirmación",
+          "test": "T5",
+          "trigger": "el vendedor confirma después de la aprobación",
+          "observation": "el pedido con el descuento aprobado queda Confirmado"
+         }
+        ]
+       }
+      }
+     ]
+    }
+   ],
+   "test_assets": []
+  },
+  "procedures": {
+   "procedures": [
+    {
+     "test": "T1",
+     "preconditions": [
+      "VENDEDOR_A tiene sesión iniciada y existe PEDIDO_BORRADOR_A dentro del crédito del cliente."
+     ],
+     "test_data": [
+      {
+       "name": "VENDEDOR_A",
+       "description": "usuario con perfil de vendedor"
+      },
+      {
+       "name": "PEDIDO_BORRADOR_A",
+       "description": "pedido Borrador sin descuento"
+      }
+     ],
+     "steps": [
+      {
+       "action": "Abrir PEDIDO_BORRADOR_A.",
+       "expected_result": "El pedido se muestra en estado Borrador."
+      },
+      {
+       "action": "Confirmar el pedido.",
+       "expected_result": "El pedido pasa al estado Confirmado."
+      }
+     ],
+     "automation": {
+      "suitability": "HIGH",
+      "layer": "UI"
+     }
+    },
+    {
+     "test": "T2",
+     "preconditions": [
+      "PEDIDO_DOS_LINEAS está en Borrador y hay stock para sus dos líneas."
+     ],
+     "test_data": [
+      {
+       "name": "PEDIDO_DOS_LINEAS",
+       "description": "pedido Borrador con dos líneas"
+      }
+     ],
+     "steps": [
+      {
+       "action": "Confirmar PEDIDO_DOS_LINEAS.",
+       "expected_result": "El pedido se confirma."
+      },
+      {
+       "action": "Consultar el stock reservado de cada producto del pedido.",
+       "expected_result": "El stock de cada línea queda reservado para el pedido."
+      }
+     ],
+     "automation": {
+      "suitability": "HIGH",
+      "layer": "UI"
+     }
+    },
+    {
+     "test": "T3",
+     "preconditions": [
+      "CLIENTE_SIN_CREDITO tiene crédito disponible menor que el total de PEDIDO_CARO."
+     ],
+     "test_data": [
+      {
+       "name": "PEDIDO_CARO",
+       "description": "pedido Borrador con total mayor que el crédito"
+      }
+     ],
+     "steps": [
+      {
+       "action": "Abrir PEDIDO_CARO.",
+       "expected_result": "El pedido se muestra en estado Borrador."
+      },
+      {
+       "action": "Confirmar el pedido.",
+       "expected_result": "Se muestra \"Crédito insuficiente\" y el pedido sigue en Borrador."
+      }
+     ],
+     "automation": {
+      "suitability": "HIGH",
+      "layer": "UI"
+     }
+    },
+    {
+     "test": "T4",
+     "preconditions": [
+      "PEDIDO_DESC_15 tiene un descuento del 15 % sin aprobación."
+     ],
+     "test_data": [
+      {
+       "name": "PEDIDO_DESC_15",
+       "description": "pedido Borrador con descuento del 15 %"
+      }
+     ],
+     "steps": [
+      {
+       "action": "Abrir PEDIDO_DESC_15.",
+       "expected_result": "El pedido muestra el descuento pendiente de aprobación."
+      },
+      {
+       "action": "Confirmar el pedido.",
+       "expected_result": "El pedido no se confirma y sigue en Borrador."
+      }
+     ],
+     "automation": {
+      "suitability": "HIGH",
+      "layer": "UI"
+     }
+    },
+    {
+     "test": "T5",
+     "preconditions": [
+      "SUPERVISOR_A aprobó el descuento del 15 % de PEDIDO_DESC_15."
+     ],
+     "test_data": [
+      {
+       "name": "SUPERVISOR_A",
+       "description": "usuario con perfil de supervisor"
+      }
+     ],
+     "steps": [
+      {
+       "action": "Abrir PEDIDO_DESC_15 como VENDEDOR_A.",
+       "expected_result": "El pedido muestra el descuento aprobado."
+      },
+      {
+       "action": "Confirmar el pedido.",
+       "expected_result": "El pedido con el descuento aprobado queda Confirmado."
+      }
+     ],
+     "automation": {
+      "suitability": "HIGH",
+      "layer": "UI"
+     }
+    },
+    {
+     "test": "D1",
+     "preconditions": [
+      "PEDIDO_DESC_10 tiene un descuento del 10 % sin aprobación."
+     ],
+     "test_data": [
+      {
+       "name": "PEDIDO_DESC_10",
+       "description": "pedido Borrador con descuento del 10 %"
+      }
+     ],
+     "steps": [
+      {
+       "action": "Abrir PEDIDO_DESC_10.",
+       "expected_result": "El pedido se muestra en estado Borrador."
+      },
+      {
+       "action": "Confirmar el pedido.",
+       "expected_result": "El pedido pasa al estado Confirmado sin aprobación."
+      }
+     ],
+     "automation": {
+      "suitability": "HIGH",
+      "layer": "UI"
+     }
+    },
+    {
+     "test": "D2",
+     "preconditions": [
+      "PEDIDO_JUSTO tiene total igual al crédito disponible del cliente."
+     ],
+     "test_data": [
+      {
+       "name": "PEDIDO_JUSTO",
+       "description": "pedido Borrador con total igual al crédito"
+      }
+     ],
+     "steps": [
+      {
+       "action": "Abrir PEDIDO_JUSTO.",
+       "expected_result": "El pedido se muestra en estado Borrador."
+      },
+      {
+       "action": "Confirmar el pedido.",
+       "expected_result": "El pedido pasa al estado Confirmado porque el total no supera el crédito."
+      }
+     ],
+     "automation": {
+      "suitability": "HIGH",
+      "layer": "UI"
+     }
+    },
+    {
+     "test": "D3",
+     "preconditions": [
+      "VENDEDOR_A tiene sesión iniciada y PEDIDO_DESC_15 no tiene aprobación."
+     ],
+     "test_data": [
+      {
+       "name": "VENDEDOR_A",
+       "description": "usuario con perfil de vendedor"
+      }
+     ],
+     "steps": [
+      {
+       "action": "Intentar aprobar el descuento de PEDIDO_DESC_15 como VENDEDOR_A.",
+       "expected_result": "La aprobación no queda registrada como aprobación de supervisor."
+      },
+      {
+       "action": "Confirmar el pedido.",
+       "expected_result": "El pedido no se confirma porque falta la aprobación de un supervisor."
+      }
+     ],
+     "automation": {
+      "suitability": "HIGH",
+      "layer": "UI"
+     }
+    },
+    {
+     "test": "E2E1",
+     "preconditions": [
+      "PEDIDO_DESC_15 está en Borrador sin aprobación."
+     ],
+     "test_data": [
+      {
+       "name": "VENDEDOR_A",
+       "description": "usuario con perfil de vendedor"
+      },
+      {
+       "name": "SUPERVISOR_A",
+       "description": "usuario con perfil de supervisor"
+      }
+     ],
+     "steps": [
+      {
+       "action": "Confirmar PEDIDO_DESC_15 como VENDEDOR_A.",
+       "expected_result": "El pedido no se confirma y sigue en Borrador."
+      },
+      {
+       "action": "Aprobar el descuento como SUPERVISOR_A.",
+       "expected_result": "El descuento queda aprobado."
+      },
+      {
+       "action": "Confirmar el pedido como VENDEDOR_A.",
+       "expected_result": "El pedido con el descuento aprobado queda Confirmado."
+      }
+     ],
+     "automation": {
+      "suitability": "HIGH",
+      "layer": "UI"
+     }
+    }
+   ]
+  }
+ }
+}
