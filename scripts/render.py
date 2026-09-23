@@ -130,6 +130,13 @@ def requirement_label(requirement: dict[str, Any]) -> str:
     return str(requirement["id"])
 
 
+def _identifier_title(identifier: str, requirements: dict[str, dict[str, Any]]) -> str:
+    for requirement in requirements.values():
+        if requirement.get("source_identifier") == identifier:
+            return requirement_label(requirement)
+    return identifier
+
+
 def is_operator_error(case: dict[str, Any]) -> bool:
     return case.get("expansion_dimension") in OPERATOR_DIMENSIONS or "operator-error" in {
         str(tag).casefold() for tag in case.get("tags", [])
@@ -237,6 +244,8 @@ def render_case_markdown(
     ]
     if family:
         header.append(f"**{labels['family']}:** {family}")
+    if case.get("source_identifiers"):
+        header.append(f"**{labels['identifiers']}:** " + " ".join(f"`{value}`" for value in case["source_identifiers"]))
     sections = [f"# {case['id']} - {case['title']}", "  \n".join(header)]
     if case.get("schema_version") == "2.2":
         design = [f"**{labels['basis']}:** {case.get('test_basis')}"]
@@ -466,6 +475,12 @@ def render_case_html(
     requirement_names = [
         requirement_label(requirements[ref]) if ref in requirements else ref for ref in case["requirement_refs"]
     ]
+    # Every authoritative identifier recorded during design, visible without expanding.
+    chips = "".join(
+        f'<span class="chip" title="{esc(_identifier_title(value, requirements))}">{esc(value)}</span>'
+        for value in case.get("source_identifiers", [])
+    )
+    chips = f'<span class="identifier-chips">{chips}</span>' if chips else ""
     automation = ""
     if case.get("automation_suitability"):
         rows = [
@@ -503,7 +518,7 @@ def render_case_html(
     flow += f'<pre class="mermaid-source" hidden>{esc(mermaid)}</pre>'
     return f"""
 <details class="tc-card" data-status="{esc(case['status'])}" data-priority="{esc(case['priority'])}" data-family="{esc(family_id)}" data-features="{esc(' '.join(sorted(flags)))}" data-search="{esc(search)}">
-  <summary><span class="tc-heading"><span class="tc-id">{esc(case['id'])}</span>{esc(case['title'])}</span><span class="badges">{''.join(badges)}</span></summary>
+  <summary><span class="tc-heading"><span class="tc-id">{esc(case['id'])}</span>{esc(case['title'])}{chips}</span><span class="badges">{''.join(badges)}</span></summary>
   <div class="tc-content">
     <section><h3>{esc(labels['objective'])}</h3><p>{esc(case['objective'])}</p></section>
     <p class="related-requirements"><strong>{esc(labels['requirements'])}:</strong> {esc('; '.join(requirement_names))}</p>
@@ -701,7 +716,9 @@ input,select {{ width:100%; min-height:38px; border:1px solid #aeb7bc; border-ra
 .tc-group-title h3 {{ margin:0; font-size:17px; }} .tc-group-title span {{ color:var(--muted); font-size:12px; }} .group-toggle {{ margin-left:auto; }}
 .tc-card {{ margin-bottom:10px; border:1px solid var(--line); border-radius:8px; background:#fff; }}
 .tc-card>summary {{ display:flex; align-items:center; justify-content:space-between; gap:16px; padding:12px 16px; cursor:pointer; font-weight:700; }}
-.tc-heading {{ display:flex; gap:10px; align-items:baseline; }} .tc-id {{ color:var(--muted); font-size:13px; white-space:nowrap; }}
+.tc-heading {{ display:flex; gap:10px; align-items:baseline; flex-wrap:wrap; }}
+.identifier-chips {{ display:inline-flex; gap:4px; flex-wrap:wrap; }}
+.chip {{ border:1px solid #9fd8c6; background:#eaf7f2; color:#075e47; border-radius:4px; padding:1px 6px; font-size:11px; font-weight:700; }} .tc-id {{ color:var(--muted); font-size:13px; white-space:nowrap; }}
 .badges {{ display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end; }}
 .badge {{ display:inline-block; border:1px solid var(--line); border-radius:999px; padding:2px 8px; font-size:11px; font-weight:750; white-space:nowrap; }}
 .status-ready {{ color:#08633f; background:#eaf7f0; border-color:#b8dfc9; }} .status-needs_review {{ color:#765500; background:#fff6dd; }}

@@ -41,8 +41,10 @@ READINESS_ORDER = (
 PROCEDURE_KEYS = {"procedures"}
 PROCEDURE_FIELDS = {
     "test", "preconditions", "test_data", "steps", "postconditions", "cleanup", "oracle_step",
-    "single_step_reason", "unknowns", "automation", "notes",
+    "single_step_reason", "unknowns", "automation", "notes", "evidence_refs",
 }
+# Unknowns that honestly explain why a procedure cannot cite its execution path yet.
+PATH_UNKNOWNS = {"MISSING_EXECUTION_SURFACE", "UNKNOWN_SETUP_PATH"}
 
 GENERIC_PRECONDITION = re.compile(
     r"^\s*(?:preconditions? for|pr[eé]-?condi[cç][oõ]es? para|precondiciones? para)\b|"
@@ -78,6 +80,12 @@ SEQUENCE_MARKER = re.compile(
     r"(?:;|\s(?:>|→)\s|\b(?:then|and then|next|after that|depois|e depois|em seguida|e ent[aã]o|ap[oó]s isso)\b)",
     re.IGNORECASE,
 )
+AUTH_ONLY = re.compile(
+    r"^\s*(?:autentic\w*|fa[cç]a login|fazer login|efetuar login|entrar no (?:sistema|aplicativo)|"
+    r"logar|log in|sign in|authenticate|iniciar sess[aã]o|iniciar sesi[oó]n)\b[^,;]{0,60}$",
+    re.IGNORECASE,
+)
+AUTH_WORDS = re.compile(r"\b(?:login|autentic|authentic|sign in|senha|password|credencia|credential|sess[aã]o|session)", re.IGNORECASE)
 INDEPENDENT_VARIANTS = re.compile(
     r"\b(?:separately|execute separately|valid and invalid|each variant|repeat for each|"
     r"cada variante|v[aá]lido e inv[aá]lido|separadamente|repetir para cada)\b",
@@ -181,6 +189,13 @@ def validate_procedures(payload: dict[str, Any], context: dict[str, Any]) -> dic
                 errors.append(f"{label} unknown {kind} links unknown question {question}")
             unknowns.append({"kind": kind, "detail": _text(unknown.get("detail")), "question": question})
         missing_oracle = any(unknown["kind"] == "MISSING_ORACLE" for unknown in unknowns)
+        evidence_refs = [dict(ref) for ref in item.get("evidence_refs", []) or [] if isinstance(ref, dict)]
+        if not evidence_refs and not any(unknown["kind"] in PATH_UNKNOWNS for unknown in unknowns):
+            errors.append(
+                f"{label} is not grounded in selected evidence; cite evidence_refs for the execution path "
+                "or declare MISSING_EXECUTION_SURFACE / UNKNOWN_SETUP_PATH"
+            )
+        about_auth = bool(AUTH_WORDS.search(f"{test['title']} {test['trigger']} {test['objective']}"))
         normalized_steps = []
         if not steps:
             errors.append(f"{label} requires at least one step")
@@ -194,6 +209,11 @@ def validate_procedures(payload: dict[str, Any], context: dict[str, Any]) -> dic
                 errors.append(f"{label} step {number} action is abstract; name the concrete operation")
             if expected and ABSTRACT_OBSERVATION.search(expected):
                 errors.append(f"{label} step {number} expected result is not observable")
+            if AUTH_ONLY.search(action) and not about_auth:
+                errors.append(
+                    f"{label} step {number} only authenticates; put the signed-in actor in preconditions and "
+                    "describe the real execution path"
+                )
             if hidden_subtest(action):
                 errors.append(f"{label} step {number} hides independent variants; they belong to separate Test Cases")
             check_locale(f"{label} step {number} action", action, locale, errors)
@@ -241,7 +261,7 @@ def validate_procedures(payload: dict[str, Any], context: dict[str, Any]) -> dic
             "postconditions": [_text(v) for v in item.get("postconditions", []) or [] if _text(v)],
             "cleanup": [_text(v) for v in item.get("cleanup", []) or [] if _text(v)],
             "notes": [_text(v) for v in item.get("notes", []) or [] if _text(v)],
-            "unknowns": unknowns, "oracle_step": oracle_step,
+            "unknowns": unknowns, "oracle_step": oracle_step, "evidence_refs": evidence_refs,
             "single_step_reason": _text(item.get("single_step_reason")) or None,
             "automation_suitability": suitability, "automation_layer": layer,
             "automation_tool_hint": hint, **classification,
@@ -253,11 +273,38 @@ def validate_procedures(payload: dict[str, Any], context: dict[str, Any]) -> dic
         errors.append(f"{len(missing)} Test Case(s) have no procedure: " + ", ".join(missing[:20]))
     if errors:
         raise StageError("procedures", errors)
-    return {"procedures": procedures, "warnings": procedure_warnings(procedures)}
+    return {"procedures": procedures, "warnings": procedure_warnings(procedures), "metrics": procedure_metrics(procedures)}
+
+
+def _template(action: str) -> str:
+    text = re.sub(r"\b[A-Z][A-Z0-9_]{2,}\b", "<fixture>", action)
+    return " ".join(re.sub(r"\d+", "<n>", text).casefold().split())
+
+
+def procedure_metrics(procedures: dict[str, dict[str, Any]]) -> dict[str, Any]:
+    actions = [_template(step["action"]) for item in procedures.values() for step in item["steps"]]
+    counts: dict[str, int] = {}
+    for action in actions:
+        counts[action] = counts.get(action, 0) + 1
+    repeated = sum(count for count in counts.values() if count > 1)
+    return {
+        "procedures_generated": len(procedures),
+        "procedures_with_evidence_refs": sum(bool(item["evidence_refs"]) for item in procedures.values()),
+        "procedures_requiring_additional_evidence": sum(
+            any(u["kind"] in PATH_UNKNOWNS for u in item["unknowns"]) for item in procedures.values()
+        ),
+        "distinct_evidence_sources_cited": len({ref.get("source") for item in procedures.values() for ref in item["evidence_refs"]}),
+        "repeated_step_template_ratio": round(repeated / len(actions), 3) if actions else 0.0,
+    }
 
 
 def procedure_warnings(procedures: dict[str, dict[str, Any]]) -> list[str]:
     warnings = []
+    metrics = procedure_metrics(procedures)
+    if len(procedures) >= 10 and metrics["repeated_step_template_ratio"] > 0.5:
+        warnings.append(
+            f"PROCEDURE_BOILERPLATE: {metrics['repeated_step_template_ratio']:.0%} of steps repeat another step's template"
+        )
     for test_id, procedure in procedures.items():
         for step in procedure["steps"]:
             if len(procedure["steps"]) > 1 and compressed_action(step["action"]):

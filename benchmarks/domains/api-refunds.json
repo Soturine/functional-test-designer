@@ -227,6 +227,12 @@
      ],
      "coverage_disposition": "IMPLEMENTATION_CHARACTERIZATION"
     }
+   ],
+   "structure_reviews": [
+    {
+     "identifier": "REQ-4",
+     "reason": "the 404 response is how the single isolation rule is observed"
+    }
    ]
   },
   "expansion": {
@@ -282,11 +288,11 @@
         "T3"
        ],
        "intent": {
-        "actor": "API client",
-        "state": "refund already created with key",
-        "trigger": "client repeats the same request with the same key",
-        "failure_domain": "idempotent creation",
-        "expected": "the API returns the original response and no second refund exists"
+        "actor": "API client operator",
+        "state": "refund already created after the first click",
+        "trigger": "the operator clicks submit again and the client repeats the request with the same key",
+        "failure_domain": "idempotent creation of a duplicate click",
+        "expected": "the original response is returned and only one refund exists"
        }
       },
       {
@@ -298,11 +304,11 @@
         "T5"
        ],
        "intent": {
-        "actor": "API client",
-        "state": "refund created by another client",
-        "trigger": "client reads the refund of another client",
-        "failure_domain": "cross-client isolation",
-        "expected": "the API returns 404"
+        "actor": "API client integration",
+        "state": "refund id copied from another client's log",
+        "trigger": "the client reads a refund id that another client created",
+        "failure_domain": "cross-client isolation of refund reads",
+        "expected": "the API answers 404"
        }
       }
      ],
@@ -408,11 +414,11 @@
         "T3"
        ],
        "intent": {
-        "actor": "API client",
-        "state": "refund already created with key",
-        "trigger": "client retries the request with the same key",
-        "failure_domain": "idempotent creation",
-        "expected": "the original response is returned and no second refund exists"
+        "actor": "API client after a timeout",
+        "state": "refund already created with the key but the response was lost",
+        "trigger": "the client retries the same request with the same key",
+        "failure_domain": "idempotent creation after retry",
+        "expected": "the original response is returned and no second refund is created"
        }
       }
      ]
@@ -543,11 +549,11 @@
       "T1"
      ],
      "intent": {
-      "actor": "API client",
-      "state": "captured payment",
-      "trigger": "client posts a refund",
-      "failure_domain": "refund creation",
-      "expected": "the API returns 201 with the refund id"
+      "actor": "pytest client fixture",
+      "state": "payment fixture captured for 100",
+      "trigger": "the test posts a refund of 10",
+      "failure_domain": "refund creation success",
+      "expected": "status 201 with a refund id"
      }
     },
     {
@@ -557,11 +563,11 @@
       "T2"
      ],
      "intent": {
-      "actor": "API client",
-      "state": "captured payment",
-      "trigger": "client posts a refund above the capture",
-      "failure_domain": "capture limit",
-      "expected": "the API returns 422 with code AMOUNT_EXCEEDS_CAPTURE"
+      "actor": "pytest client fixture",
+      "state": "payment fixture captured for 100",
+      "trigger": "the test posts a refund of 999 above the capture",
+      "failure_domain": "capture limit rejection",
+      "expected": "422 with code AMOUNT_EXCEEDS_CAPTURE"
      }
     },
     {
@@ -655,7 +661,17 @@
       "suitability": "HIGH",
       "layer": "API"
      },
-     "single_step_reason": "one request both triggers and returns the observable result"
+     "single_step_reason": "one request both triggers and returns the observable result",
+     "evidence_refs": [
+      {
+       "source": "api/payments-api.md",
+       "reference": "REQ-1"
+      },
+      {
+       "source": "service/refunds.py",
+       "reference": "create_refund"
+      }
+     ]
     },
     {
      "test": "T2",
@@ -682,7 +698,17 @@
       "suitability": "HIGH",
       "layer": "API"
      },
-     "single_step_reason": "one request both triggers and returns the observable result"
+     "single_step_reason": "one request both triggers and returns the observable result",
+     "evidence_refs": [
+      {
+       "source": "api/payments-api.md",
+       "reference": "REQ-1"
+      },
+      {
+       "source": "service/refunds.py",
+       "reference": "create_refund"
+      }
+     ]
     },
     {
      "test": "T3",
@@ -713,7 +739,17 @@
       "suitability": "HIGH",
       "layer": "API"
      },
-     "oracle_step": 2
+     "oracle_step": 2,
+     "evidence_refs": [
+      {
+       "source": "api/payments-api.md",
+       "reference": "REQ-2"
+      },
+      {
+       "source": "service/refunds.py",
+       "reference": "create_refund"
+      }
+     ]
     },
     {
      "test": "T4",
@@ -745,6 +781,16 @@
        "kind": "EXTERNAL_DEPENDENCY_UNAVAILABLE",
        "detail": "no acquirer sandbox is available in the selected environment"
       }
+     ],
+     "evidence_refs": [
+      {
+       "source": "api/payments-api.md",
+       "reference": "REQ-3"
+      },
+      {
+       "source": "service/refunds.py",
+       "reference": "create_refund"
+      }
      ]
     },
     {
@@ -768,7 +814,17 @@
       "suitability": "HIGH",
       "layer": "API"
      },
-     "single_step_reason": "one read request is the whole isolation check"
+     "single_step_reason": "one read request is the whole isolation check",
+     "evidence_refs": [
+      {
+       "source": "api/payments-api.md",
+       "reference": "REQ-4"
+      },
+      {
+       "source": "service/refunds.py",
+       "reference": "create_refund"
+      }
+     ]
     },
     {
      "test": "D1",
@@ -791,7 +847,17 @@
       "suitability": "HIGH",
       "layer": "API"
      },
-     "single_step_reason": "one request both triggers and returns the observable result"
+     "single_step_reason": "one request both triggers and returns the observable result",
+     "evidence_refs": [
+      {
+       "source": "api/payments-api.md",
+       "reference": "REQ-1"
+      },
+      {
+       "source": "service/refunds.py",
+       "reference": "create_refund"
+      }
+     ]
     },
     {
      "test": "D2",
@@ -817,7 +883,17 @@
      "automation": {
       "suitability": "MEDIUM",
       "layer": "API"
-     }
+     },
+     "evidence_refs": [
+      {
+       "source": "api/payments-api.md",
+       "reference": "REQ-1"
+      },
+      {
+       "source": "service/refunds.py",
+       "reference": "create_refund"
+      }
+     ]
     },
     {
      "test": "CH1",
@@ -840,7 +916,17 @@
       "suitability": "HIGH",
       "layer": "API"
      },
-     "single_step_reason": "one request both triggers and returns the observable result"
+     "single_step_reason": "one request both triggers and returns the observable result",
+     "evidence_refs": [
+      {
+       "source": "api/payments-api.md",
+       "reference": "REQ-1"
+      },
+      {
+       "source": "service/refunds.py",
+       "reference": "create_refund"
+      }
+     ]
     },
     {
      "test": "E2E1",
@@ -879,6 +965,20 @@
       {
        "kind": "EXTERNAL_DEPENDENCY_UNAVAILABLE",
        "detail": "no acquirer sandbox is available in the selected environment"
+      }
+     ],
+     "evidence_refs": [
+      {
+       "source": "api/payments-api.md",
+       "reference": "REQ-1"
+      },
+      {
+       "source": "api/payments-api.md",
+       "reference": "REQ-3"
+      },
+      {
+       "source": "service/refunds.py",
+       "reference": "create_refund"
       }
      ]
     }

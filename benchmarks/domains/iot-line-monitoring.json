@@ -273,11 +273,11 @@
         "T5"
        ],
        "intent": {
-        "actor": "operator",
-        "state": "active overheat alarm",
-        "trigger": "operator tries to acknowledge the alarm",
-        "failure_domain": "acknowledgement authorization",
-        "expected": "the acknowledgement is refused and the alarm stays active"
+        "actor": "operator covering the shift",
+        "state": "overheat alarm active on the furnace",
+        "trigger": "the operator acknowledges the alarm in place of the supervisor",
+        "failure_domain": "acknowledgement authorization by role",
+        "expected": "the acknowledgement is refused and the alarm remains active"
        }
       },
       {
@@ -360,11 +360,11 @@
         "T2"
        ],
        "intent": {
-        "actor": "furnace sensor",
-        "state": "sensor with a stored reading",
-        "trigger": "sensor sends the same reading again",
-        "failure_domain": "duplicate suppression",
-        "expected": "the duplicate reading is ignored"
+        "actor": "sensor gateway",
+        "state": "sensor reading already stored",
+        "trigger": "the sensor reading is sent again by the gateway",
+        "failure_domain": "duplicate suppression of redelivery",
+        "expected": "the duplicate reading is ignored and only one reading is kept"
        }
       }
      ]
@@ -382,11 +382,11 @@
         "T1"
        ],
        "intent": {
-        "actor": "furnace sensor",
-        "state": "sensor with a stored reading",
-        "trigger": "sensor sends an older reading",
-        "failure_domain": "reading ordering",
-        "expected": "the older reading is discarded"
+        "actor": "sensor gateway",
+        "state": "sensor with a newer stored reading",
+        "trigger": "the sensor sends an older reading that arrives late",
+        "failure_domain": "reading ordering of late delivery",
+        "expected": "the older reading is discarded and the stored reading stays unchanged"
        }
       },
       {
@@ -573,7 +573,13 @@
      "automation": {
       "suitability": "HIGH",
       "layer": "API"
-     }
+     },
+     "evidence_refs": [
+      {
+       "source": "spec/line-monitoring.md",
+       "reference": "Temperature readings"
+      }
+     ]
     },
     {
      "test": "T2",
@@ -599,7 +605,13 @@
      "automation": {
       "suitability": "HIGH",
       "layer": "API"
-     }
+     },
+     "evidence_refs": [
+      {
+       "source": "spec/line-monitoring.md",
+       "reference": "Temperature readings"
+      }
+     ]
     },
     {
      "test": "T3",
@@ -625,7 +637,13 @@
      "automation": {
       "suitability": "HIGH",
       "layer": "API"
-     }
+     },
+     "evidence_refs": [
+      {
+       "source": "spec/line-monitoring.md",
+       "reference": "Overheat alarm"
+      }
+     ]
     },
     {
      "test": "T4",
@@ -651,7 +669,13 @@
      "automation": {
       "suitability": "HIGH",
       "layer": "API"
-     }
+     },
+     "evidence_refs": [
+      {
+       "source": "spec/line-monitoring.md",
+       "reference": "Overheat alarm"
+      }
+     ]
     },
     {
      "test": "T5",
@@ -677,7 +701,13 @@
      "automation": {
       "suitability": "HIGH",
       "layer": "UI"
-     }
+     },
+     "evidence_refs": [
+      {
+       "source": "spec/line-monitoring.md",
+       "reference": "Shift supervisor"
+      }
+     ]
     },
     {
      "test": "D1",
@@ -703,7 +733,13 @@
      "automation": {
       "suitability": "HIGH",
       "layer": "API"
-     }
+     },
+     "evidence_refs": [
+      {
+       "source": "spec/line-monitoring.md",
+       "reference": "Overheat alarm"
+      }
+     ]
     },
     {
      "test": "D2",
@@ -729,7 +765,17 @@
      "automation": {
       "suitability": "HIGH",
       "layer": "API"
-     }
+     },
+     "evidence_refs": [
+      {
+       "source": "spec/line-monitoring.md",
+       "reference": "Temperature readings"
+      },
+      {
+       "source": "spec/line-monitoring.md",
+       "reference": "Overheat alarm"
+      }
+     ]
     },
     {
      "test": "X1",
@@ -766,6 +812,12 @@
        "kind": "EXTERNAL_DEPENDENCY_UNAVAILABLE",
        "detail": "a physical furnace sensor bench is required"
       }
+     ],
+     "evidence_refs": [
+      {
+       "source": "spec/line-monitoring.md",
+       "reference": "Temperature readings"
+      }
      ]
     },
     {
@@ -796,7 +848,13 @@
      "automation": {
       "suitability": "HIGH",
       "layer": "API"
-     }
+     },
+     "evidence_refs": [
+      {
+       "source": "spec/line-monitoring.md",
+       "reference": "Overheat alarm"
+      }
+     ]
     }
    ]
   }

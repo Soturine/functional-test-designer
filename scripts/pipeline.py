@@ -151,6 +151,7 @@ def verify_manifest(path: Path, *, require_publication: bool = True) -> dict[str
 
 
 def _check_sources_unchanged(run: dict[str, Any], records: list[dict[str, Any]]) -> None:
+    """Digest check once per stage (never per Test Case); contents are not reread."""
     workspace = Path(run["workspace"])
     for record in records:
         path = workspace / record["path"]
@@ -277,6 +278,7 @@ def submit_stage(run_dir: Path, stage: str, payload: dict[str, Any]) -> dict[str
         raise ValueError("stage payload must be a JSON object")
     verify_manifest(run_dir / "run-manifest.json", require_publication=False)
     _check_sources_unchanged(run, source_state["records"])
+    _save_state(run_dir, integrity_checks=state.get("integrity_checks", 0) + 1)
     records = source_state["records"]
     workspace = Path(run["workspace"])
     texts = {}
@@ -332,6 +334,20 @@ def submit_stage(run_dir: Path, stage: str, payload: dict[str, Any]) -> dict[str
     order = _work_order(run_dir)
     return {"stage": stage, "recorded": True, "next_stage": following, "work_order": str(order),
             "warnings": result.get("warnings", [])}
+
+
+def merge_payloads(payloads: list[dict[str, Any]]) -> dict[str, Any]:
+    """Combine batch files of one stage: list fields concatenate in the given order."""
+    merged: dict[str, Any] = {}
+    for payload in payloads:
+        for key, value in payload.items():
+            if isinstance(value, list):
+                merged.setdefault(key, []).extend(value)
+            elif key in merged and merged[key] != value:
+                raise ValueError(f"batch files disagree on {key!r}")
+            else:
+                merged[key] = value
+    return merged
 
 
 def _epoch(stamp: str) -> float:
@@ -477,7 +493,8 @@ def build_canonical(run_dir: Path, baseline_comparison: dict[str, Any] | None = 
             "schema_version": "2.2", "id": test["id"], "title": test["title"], "status": procedure["status"],
             "priority": test["priority"], "type": test["primary_type"], "objective": test["objective"],
             "requirement_refs": test["requirement_refs"], "scenario_refs": [family_of[test["id"]]],
-            "coverage_point_refs": test["cp_refs"], "source_refs": _clean_refs(test["source_refs"]),
+            "coverage_point_refs": test["cp_refs"],
+            "source_refs": _clean_refs(test["source_refs"] + procedure.get("evidence_refs", [])),
             "preconditions": procedure["preconditions"], "test_data": procedure["test_data"],
             "steps": procedure["steps"], "postconditions": procedure["postconditions"],
             "cleanup": procedure["cleanup"],
@@ -731,6 +748,19 @@ def finalize_run(run_dir: Path, formats: Any = None, baseline: dict[str, Any] | 
             outputs={"fingerprint": document["semantic_fingerprint"]})
     _bind(run_dir, "canonical", {"file": canonical_path.name, "sha256": file_digest(canonical_path)})
     metrics = validation.suite_metrics(document["index"], document["cases"], document["questions"]["questions"])
+    procedure_metrics = _result(run_dir, "procedures").get("metrics", {})
+    procedure_seconds = state.get("stage_seconds", {}).get("procedures")
+    metrics.update({
+        **procedure_metrics,
+        "procedure_generation_seconds": procedure_seconds,
+        "average_procedure_generation_seconds": round(procedure_seconds / procedure_metrics["procedures_generated"], 3)
+        if procedure_seconds and procedure_metrics.get("procedures_generated") else None,
+        # The runtime reads each source once at start; later stages only verify digests.
+        "runtime_source_reads": len(source_state["records"]),
+        "runtime_source_rereads": 0,
+        "source_integrity_checks": state.get("integrity_checks", 0),
+        "targeted_source_lookups": None,
+    })
     metrics.update({"stage_seconds": state.get("stage_seconds", {}), "stage_rejections": state.get("rejections", {}),
                     "authority_identifiers": len(source_state["authority_index"]),
                     "test_assets_discovered": len(source_state["test_assets"]),
@@ -856,9 +886,25 @@ def _work_order(run_dir: Path) -> Path:
         order["use_cases"] = [e for e in source_state["authority_index"] if e["kind"] == "USE_CASE"]
         order["test_assets"] = source_state["test_assets"]
     elif stage == "procedures":
-        order["tests"] = [{k: t.get(k) for k in ("id", "key", "basis", "title", "objective", "actor", "state",
-                                                 "trigger", "expected", "failure_domain", "dimension")}
-                          for t in _all_tests(run_dir)]
+        # Lightweight, already-indexed context: the model writes procedures from these
+        # slices and targeted lookups instead of rereading the corpus per Test Case.
+        design = _result(run_dir, "design")
+        claims = {c["id"]: c["text"] for c in design["claims"]}
+        excerpts = {normalize_identifier(e["identifier"]): (e["identifier"], e["excerpt"][:400])
+                    for e in source_state["authority_index"]}
+        tests = _all_tests(run_dir)
+        order["evidence_index"] = [{k: r[k] for k in ("path", "role")} for r in source_state["records"]
+                                   if r["role"] != "FUNCTIONAL_AUTHORITY" and r["status"] in {"READ", "TRANSCRIBED"}]
+        order["tests"] = [{
+            **{k: t.get(k) for k in ("id", "key", "basis", "title", "objective", "actor", "state", "trigger",
+                                     "expected", "failure_domain", "dimension", "family")},
+            "claims": [claims[c] for c in t["claims"] if c in claims],
+            "authority_excerpts": dict(excerpts[i] for i in t["identifiers"] if i in excerpts),
+        } for t in tests]
+        batches: dict[str, list[str]] = {}
+        for t in tests:
+            batches.setdefault(t["family"], []).append(t["id"])
+        order["batches"] = [{"family": family, "tests": ids} for family, ids in batches.items()]
     path = run_dir / "work-order.json"
     write_json(path, order)
     return path
@@ -894,7 +940,8 @@ def main(argv: list[str] | None = None) -> int:
     submit = commands.add_parser("submit", help="submit one model stage payload")
     submit.add_argument("--run", required=True, type=Path)
     submit.add_argument("--stage", required=True, choices=sorted(MODEL_STAGES))
-    submit.add_argument("--file", required=True, type=Path)
+    submit.add_argument("--file", required=True, type=Path, action="append",
+                        help="stage payload; repeat to merge batch files (e.g. one per Scenario Family)")
     final = commands.add_parser("finalize", help="validate, persist canonical state and publish")
     final.add_argument("--run", required=True, type=Path)
     final.add_argument("--formats", help="defaults to the formats requested at start")
@@ -917,7 +964,7 @@ def main(argv: list[str] | None = None) -> int:
                 source_order=[group.split(",") for group in args.order],
             )
         elif args.command == "submit":
-            result = submit_stage(args.run, args.stage, read_json(args.file))
+            result = submit_stage(args.run, args.stage, merge_payloads([read_json(path) for path in args.file]))
         elif args.command == "finalize":
             result = finalize_run(args.run, args.formats, read_json(args.baseline) if args.baseline else None)
             result.pop("metrics", None)

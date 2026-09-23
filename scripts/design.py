@@ -44,6 +44,7 @@ TEST_INTENT_FIELDS = (
 )
 DESIGN_KEYS = {
     "domain_model", "requirements", "claims", "tests", "dispositions", "questions", "findings",
+    "structure_reviews",
 }
 # Universal reasoning dimensions. Their values are inferred by the model from the
 # selected sources; the framework stores them and never interprets their meaning.
@@ -331,8 +332,7 @@ def validate_design(payload: dict[str, Any], context: dict[str, Any]) -> dict[st
         test = {
             "key": key, "basis": "ACCEPTANCE", "claims": [claim["id"] for claim in linked],
             "claim_keys": claim_keys,
-            "requirement_refs": list(dict.fromkeys(claim["requirement_ref"] for claim in linked)),
-            "identifiers": list(dict.fromkeys(i for claim in linked for i in claim["identifiers"])),
+            **traceability(linked, item.get("related_identifiers"), label, authority, authority_texts, requirements, errors),
             "source_refs": [ref for claim in linked for ref in claim["source_refs"]],
             **{field: _text(item.get(field)) for field in TEST_INTENT_FIELDS},
             "primary_type": str(item.get("primary_type", "FUNCTIONAL")),
@@ -350,6 +350,7 @@ def validate_design(payload: dict[str, Any], context: dict[str, Any]) -> dict[st
             errors.append(f"claim {claim['key']} has destination TEST but no acceptance test exercises it")
 
     explicit = validate_explicit_dispositions(payload.get("dispositions", []) or [], authority, question_keys, errors)
+    reviews = structure_review(context["authority_index"], claims, payload.get("structure_reviews", []) or [], errors)
     ledger = identifier_ledger(context["authority_index"], claims, tests, explicit, errors)
     if errors:
         from common import StageError
@@ -357,9 +358,33 @@ def validate_design(payload: dict[str, Any], context: dict[str, Any]) -> dict[st
     return {
         "domain_model": domain_model, "requirements": requirements, "claims": claims, "tests": tests,
         "questions": questions, "findings": findings, "dispositions": explicit,
-        "identifier_ledger": ledger, "baseline": baseline_snapshot(tests),
+        "identifier_ledger": ledger, "baseline": baseline_snapshot(tests), "structure_reviews": reviews,
         "warnings": priority_warnings(tests),
     }
+
+
+def traceability(
+    claims: list[dict[str, Any]], related: Any, label: str, authority: dict[str, dict[str, Any]],
+    authority_texts: list[str], requirements: list[dict[str, Any]], errors: list[str],
+) -> dict[str, list[str]]:
+    """Every authoritative identifier a test is grounded in stays visible on the test.
+
+    Claims carry the identifiers they exercise (coverage). `related_identifiers` records
+    further authority the test is substantively grounded in (traceability only). Both
+    are decided during semantic design; the renderer never infers them.
+    """
+    identifiers = [i for claim in claims for i in claim["identifiers"]]
+    for value in related or []:
+        key = normalize_identifier(value)
+        if key not in authority and not identifier_mentioned(key, authority_texts):
+            errors.append(f"{label} relates identifier {value} that is absent from selected authority")
+        identifiers.append(key)
+    identifiers = list(dict.fromkeys(identifiers))
+    by_identifier = {
+        normalize_identifier(item["source_identifier"]): item["id"] for item in requirements if item.get("source_identifier")
+    }
+    refs = [claim["requirement_ref"] for claim in claims] + [by_identifier[i] for i in identifiers if i in by_identifier]
+    return {"requirement_refs": list(dict.fromkeys(refs)), "identifiers": identifiers}
 
 
 def validate_domain_model(value: Any, errors: list[str]) -> dict[str, list[str]]:
@@ -378,6 +403,35 @@ def validate_domain_model(value: Any, errors: list[str]) -> dict[str, list[str]]
         if not model[key]:
             errors.append(f"domain_model.{key} must list what the selected sources define")
     return model
+
+
+def structure_review(
+    authority_index: list[dict[str, Any]], claims: list[dict[str, Any]], reviews: list[dict[str, Any]],
+    errors: list[str],
+) -> list[dict[str, Any]]:
+    """A section with several structural items may not silently become one summary claim.
+
+    The runtime only counts bullets and substantive sentences; whether they are really
+    one obligation is the model's call, recorded as a reason that stays auditable.
+    """
+    reasons = {normalize_identifier(item.get("identifier")): _text(item.get("reason")) for item in reviews}
+    recorded = []
+    for entry in authority_index:
+        key = normalize_identifier(entry["identifier"])
+        own = [claim for claim in claims if key in claim["identifiers"]]
+        items = int(entry.get("structural_items", 0))
+        if items >= 2 and len(own) == 1:
+            reason = reasons.get(key, "")
+            if len(reason.split()) < 5:
+                errors.append(
+                    f"identifier {entry['identifier']} has {items} structural items in the authority but one claim; "
+                    "decompose its independently observable obligations or record a structure_review reason"
+                )
+            recorded.append({"identifier": entry["identifier"], "structural_items": items, "claims": 1, "reason": reason})
+    unknown = sorted(set(reasons) - {normalize_identifier(e["identifier"]) for e in authority_index})
+    if unknown:
+        errors.append(f"structure_reviews name identifiers the authority does not define: {unknown}")
+    return recorded
 
 
 def validate_explicit_dispositions(

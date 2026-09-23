@@ -327,11 +327,11 @@
         "T3"
        ],
        "intent": {
-        "actor": "técnico de instalação",
-        "state": "componente com última inspeção Reprovada",
-        "trigger": "solicitar a liberação para instalação",
-        "failure_domain": "liberação indevida",
-        "expected": "a liberação é recusada para o componente"
+        "actor": "técnico de instalação distraído",
+        "state": "componente Bloqueado pela reprovação mais recente",
+        "trigger": "o técnico pede a liberação do componente bloqueado para instalação",
+        "failure_domain": "liberação indevida de componente reprovado",
+        "expected": "a liberação do componente é recusada"
        }
       }
      ],
@@ -568,7 +568,13 @@
      "automation": {
       "suitability": "HIGH",
       "layer": "UI"
-     }
+     },
+     "evidence_refs": [
+      {
+       "source": "normas/inspecao-componentes.md",
+       "reference": "RF-01"
+      }
+     ]
     },
     {
      "test": "T2",
@@ -594,7 +600,13 @@
      "automation": {
       "suitability": "HIGH",
       "layer": "UI"
-     }
+     },
+     "evidence_refs": [
+      {
+       "source": "normas/inspecao-componentes.md",
+       "reference": "RF-02"
+      }
+     ]
     },
     {
      "test": "T3",
@@ -620,7 +632,13 @@
      "automation": {
       "suitability": "HIGH",
       "layer": "UI"
-     }
+     },
+     "evidence_refs": [
+      {
+       "source": "normas/inspecao-componentes.md",
+       "reference": "RF-02"
+      }
+     ]
     },
     {
      "test": "T4",
@@ -646,7 +664,13 @@
      "automation": {
       "suitability": "HIGH",
       "layer": "UI"
-     }
+     },
+     "evidence_refs": [
+      {
+       "source": "normas/inspecao-componentes.md",
+       "reference": "RN-01"
+      }
+     ]
     },
     {
      "test": "T5",
@@ -672,7 +696,13 @@
      "automation": {
       "suitability": "HIGH",
       "layer": "UI"
-     }
+     },
+     "evidence_refs": [
+      {
+       "source": "normas/inspecao-componentes.md",
+       "reference": "RN-02"
+      }
+     ]
     },
     {
      "test": "T6",
@@ -702,7 +732,13 @@
      "automation": {
       "suitability": "HIGH",
       "layer": "UI"
-     }
+     },
+     "evidence_refs": [
+      {
+       "source": "normas/inspecao-componentes.md",
+       "reference": "RN-03"
+      }
+     ]
     },
     {
      "test": "T7",
@@ -728,7 +764,13 @@
      "automation": {
       "suitability": "HIGH",
       "layer": "UI"
-     }
+     },
+     "evidence_refs": [
+      {
+       "source": "normas/inspecao-componentes.md",
+       "reference": "RN-03"
+      }
+     ]
     },
     {
      "test": "D1",
@@ -760,6 +802,12 @@
        "kind": "MISSING_FIXTURE",
        "detail": "a automação precisa controlar a data corrente"
       }
+     ],
+     "evidence_refs": [
+      {
+       "source": "normas/inspecao-componentes.md",
+       "reference": "RN-01"
+      }
      ]
     },
     {
@@ -786,7 +834,13 @@
      "automation": {
       "suitability": "HIGH",
       "layer": "UI"
-     }
+     },
+     "evidence_refs": [
+      {
+       "source": "normas/inspecao-componentes.md",
+       "reference": "RN-03"
+      }
+     ]
     },
     {
      "test": "E2E1",
@@ -820,7 +874,17 @@
      "automation": {
       "suitability": "HIGH",
       "layer": "UI"
-     }
+     },
+     "evidence_refs": [
+      {
+       "source": "normas/inspecao-componentes.md",
+       "reference": "RN-03"
+      },
+      {
+       "source": "normas/inspecao-componentes.md",
+       "reference": "RF-02"
+      }
+     ]
     }
    ]
   }

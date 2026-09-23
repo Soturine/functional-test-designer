@@ -284,6 +284,12 @@
      ],
      "impact": "EXPECTED_RESULT"
     }
+   ],
+   "structure_reviews": [
+    {
+     "identifier": "RF-01",
+     "reason": "a segunda frase descreve o estado resultante do mesmo registro de entrada"
+    }
    ]
   },
   "expansion": {
@@ -318,10 +324,10 @@
         "T4"
        ],
        "intent": {
-        "actor": "operador de armazém",
-        "state": "posição ocupada por outro palete",
-        "trigger": "registrar a entrada do palete na posição ocupada",
-        "failure_domain": "unicidade na entrada",
+        "actor": "operador de armazém desatento",
+        "state": "posição escolhida já ocupada por outro palete",
+        "trigger": "o operador confirma a entrada na posição errada ocupada",
+        "failure_domain": "unicidade da posição na entrada",
         "expected": "a entrada é recusada com a mensagem Posição ocupada"
        }
       },
@@ -407,10 +413,10 @@
        ],
        "intent": {
         "actor": "operador de armazém",
-        "state": "palete Armazenado e posição de destino livre",
-        "trigger": "transferir o palete para a posição de destino",
-        "failure_domain": "liberação da origem",
-        "expected": "a posição de origem fica livre"
+        "state": "palete Armazenado na origem e destino livre",
+        "trigger": "o operador conclui a transferência do palete",
+        "failure_domain": "liberação da posição de origem",
+        "expected": "a posição de origem volta a ficar livre"
        }
       }
      ]
@@ -530,10 +536,10 @@
        ],
        "intent": {
         "actor": "operador de armazém",
-        "state": "posição livre",
-        "trigger": "registrar a entrada do palete na posição",
-        "failure_domain": "auditoria da entrada",
-        "expected": "existe um registro de movimentação com data, hora e operador"
+        "state": "posição livre para receber o palete",
+        "trigger": "o operador conclui a entrada do palete",
+        "failure_domain": "trilha de auditoria da entrada",
+        "expected": "há um registro de movimentação com data, hora e operador"
        }
       }
      ]
@@ -626,7 +632,13 @@
      "automation": {
       "suitability": "HIGH",
       "layer": "UI"
-     }
+     },
+     "evidence_refs": [
+      {
+       "source": "docs/requisitos.md",
+       "reference": "RF-01"
+      }
+     ]
     },
     {
      "test": "T2",
@@ -656,7 +668,13 @@
      "automation": {
       "suitability": "HIGH",
       "layer": "UI"
-     }
+     },
+     "evidence_refs": [
+      {
+       "source": "docs/requisitos.md",
+       "reference": "RF-02"
+      }
+     ]
     },
     {
      "test": "T3",
@@ -682,7 +700,13 @@
      "automation": {
       "suitability": "HIGH",
       "layer": "UI"
-     }
+     },
+     "evidence_refs": [
+      {
+       "source": "docs/requisitos.md",
+       "reference": "RF-02"
+      }
+     ]
     },
     {
      "test": "T4",
@@ -712,7 +736,13 @@
      "automation": {
       "suitability": "HIGH",
       "layer": "UI"
-     }
+     },
+     "evidence_refs": [
+      {
+       "source": "docs/requisitos.md",
+       "reference": "RN-01"
+      }
+     ]
     },
     {
      "test": "T5",
@@ -738,7 +768,13 @@
      "automation": {
       "suitability": "HIGH",
       "layer": "UI"
-     }
+     },
+     "evidence_refs": [
+      {
+       "source": "docs/requisitos.md",
+       "reference": "RN-01"
+      }
+     ]
     },
     {
      "test": "T6",
@@ -764,7 +800,13 @@
      "automation": {
       "suitability": "HIGH",
       "layer": "UI"
-     }
+     },
+     "evidence_refs": [
+      {
+       "source": "docs/requisitos.md",
+       "reference": "RN-02"
+      }
+     ]
     },
     {
      "test": "T7",
@@ -790,7 +832,13 @@
      "automation": {
       "suitability": "HIGH",
       "layer": "UI"
-     }
+     },
+     "evidence_refs": [
+      {
+       "source": "docs/requisitos.md",
+       "reference": "RN-02"
+      }
+     ]
     },
     {
      "test": "T8",
@@ -817,7 +865,13 @@
       "suitability": "HIGH",
       "layer": "UI"
      },
-     "single_step_reason": "uma única consulta observa as duas posições"
+     "single_step_reason": "uma única consulta observa as duas posições",
+     "evidence_refs": [
+      {
+       "source": "docs/requisitos.md",
+       "reference": "CU-01"
+      }
+     ]
     },
     {
      "test": "D1",
@@ -843,7 +897,13 @@
      "automation": {
       "suitability": "HIGH",
       "layer": "UI"
-     }
+     },
+     "evidence_refs": [
+      {
+       "source": "docs/requisitos.md",
+       "reference": "RN-01"
+      }
+     ]
     },
     {
      "test": "D2",
@@ -873,7 +933,13 @@
      "automation": {
       "suitability": "MEDIUM",
       "layer": "API"
-     }
+     },
+     "evidence_refs": [
+      {
+       "source": "docs/requisitos.md",
+       "reference": "RN-01"
+      }
+     ]
     },
     {
      "test": "E2E1",
@@ -907,7 +973,17 @@
      "automation": {
       "suitability": "HIGH",
       "layer": "UI"
-     }
+     },
+     "evidence_refs": [
+      {
+       "source": "docs/requisitos.md",
+       "reference": "RF-01"
+      },
+      {
+       "source": "docs/requisitos.md",
+       "reference": "RF-02"
+      }
+     ]
     }
    ]
   }

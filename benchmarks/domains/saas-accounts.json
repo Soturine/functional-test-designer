@@ -310,6 +310,12 @@
       "T5"
      ]
     }
+   ],
+   "structure_reviews": [
+    {
+     "identifier": "BR-01",
+     "reason": "the second sentence only states the rejection message of the same seat limit invariant"
+    }
    ]
   },
   "expansion": {
@@ -372,10 +378,10 @@
         "T6"
        ],
        "intent": {
-        "actor": "Member",
-        "state": "account with free seats",
-        "trigger": "member submits an invitation",
-        "failure_domain": "invite authorization",
+        "actor": "Member acting as Owner",
+        "state": "account with seats still free",
+        "trigger": "the member tries to send an invitation",
+        "failure_domain": "invite authorization by role",
         "expected": "the invitation is refused as not permitted"
        }
       },
@@ -433,10 +439,10 @@
        ],
        "intent": {
         "actor": "invited user",
-        "state": "pending valid invitation",
-        "trigger": "invited user accepts the invitation",
-        "failure_domain": "membership creation",
-        "expected": "the user joins the account with the Member role"
+        "state": "invitation pending and not expired",
+        "trigger": "the invited user accepts it",
+        "failure_domain": "membership creation on acceptance",
+        "expected": "the user becomes a member of the account with the Member role"
        }
       }
      ]
@@ -636,11 +642,11 @@
       "T1"
      ],
      "intent": {
-      "actor": "Owner",
-      "state": "account with free seats",
-      "trigger": "owner submits an invitation for an email",
-      "failure_domain": "invitation creation",
-      "expected": "a pending invitation is created"
+      "actor": "owner fixture",
+      "state": "account fixture with free seats",
+      "trigger": "the test owner submits an invitation for a@example.com",
+      "failure_domain": "invitation creation success",
+      "expected": "the invitation status is PENDING"
      }
     },
     {
@@ -650,11 +656,11 @@
       "T5"
      ],
      "intent": {
-      "actor": "Owner",
-      "state": "account with all seats used",
-      "trigger": "owner submits an invitation",
-      "failure_domain": "seat limit enforcement",
-      "expected": "the invitation is rejected"
+      "actor": "owner fixture",
+      "state": "full account fixture with every seat used",
+      "trigger": "the test owner submits an invitation for b@example.com",
+      "failure_domain": "seat limit enforcement on invite",
+      "expected": "a ValueError rejects the invitation"
      }
     },
     {
@@ -694,7 +700,13 @@
      "automation": {
       "suitability": "HIGH",
       "layer": "UI"
-     }
+     },
+     "evidence_refs": [
+      {
+       "source": "docs/requirements.md",
+       "reference": "FR-01"
+      }
+     ]
     },
     {
      "test": "T2",
@@ -726,6 +738,12 @@
        "kind": "MISSING_FIXTURE",
        "detail": "a clock or seeded invitation date is needed to automate the age"
       }
+     ],
+     "evidence_refs": [
+      {
+       "source": "docs/requirements.md",
+       "reference": "FR-01"
+      }
      ]
     },
     {
@@ -752,7 +770,13 @@
      "automation": {
       "suitability": "HIGH",
       "layer": "UI"
-     }
+     },
+     "evidence_refs": [
+      {
+       "source": "docs/requirements.md",
+       "reference": "FR-02"
+      }
+     ]
     },
     {
      "test": "T4",
@@ -778,7 +802,13 @@
      "automation": {
       "suitability": "HIGH",
       "layer": "UI"
-     }
+     },
+     "evidence_refs": [
+      {
+       "source": "docs/requirements.md",
+       "reference": "FR-02"
+      }
+     ]
     },
     {
      "test": "T5",
@@ -804,7 +834,13 @@
      "automation": {
       "suitability": "HIGH",
       "layer": "UI"
-     }
+     },
+     "evidence_refs": [
+      {
+       "source": "docs/requirements.md",
+       "reference": "BR-01"
+      }
+     ]
     },
     {
      "test": "T6",
@@ -827,7 +863,13 @@
       "suitability": "HIGH",
       "layer": "API"
      },
-     "single_step_reason": "one request is the whole authorization check"
+     "single_step_reason": "one request is the whole authorization check",
+     "evidence_refs": [
+      {
+       "source": "docs/requirements.md",
+       "reference": "BR-02"
+      }
+     ]
     },
     {
      "test": "T7",
@@ -850,7 +892,13 @@
       "suitability": "HIGH",
       "layer": "API"
      },
-     "single_step_reason": "one request is the whole authorization check"
+     "single_step_reason": "one request is the whole authorization check",
+     "evidence_refs": [
+      {
+       "source": "docs/requirements.md",
+       "reference": "BR-02"
+      }
+     ]
     },
     {
      "test": "T8",
@@ -876,7 +924,13 @@
      "automation": {
       "suitability": "HIGH",
       "layer": "UI"
-     }
+     },
+     "evidence_refs": [
+      {
+       "source": "docs/requirements.md",
+       "reference": "UC-01"
+      }
+     ]
     },
     {
      "test": "D1",
@@ -902,7 +956,13 @@
      "automation": {
       "suitability": "HIGH",
       "layer": "UI"
-     }
+     },
+     "evidence_refs": [
+      {
+       "source": "docs/requirements.md",
+       "reference": "BR-01"
+      }
+     ]
     },
     {
      "test": "D2",
@@ -937,7 +997,13 @@
       "suitability": "MEDIUM",
       "layer": "API"
      },
-     "oracle_step": 3
+     "oracle_step": 3,
+     "evidence_refs": [
+      {
+       "source": "docs/requirements.md",
+       "reference": "BR-01"
+      }
+     ]
     },
     {
      "test": "X1",
@@ -969,6 +1035,12 @@
        "kind": "AMBIGUOUS_POLICY",
        "detail": "delivery failure policy is undefined",
        "question": "Q-EMAIL"
+      }
+     ],
+     "evidence_refs": [
+      {
+       "source": "docs/requirements.md",
+       "reference": "FR-01"
       }
      ]
     },
@@ -1004,7 +1076,21 @@
      "automation": {
       "suitability": "HIGH",
       "layer": "UI"
-     }
+     },
+     "evidence_refs": [
+      {
+       "source": "docs/requirements.md",
+       "reference": "FR-01"
+      },
+      {
+       "source": "docs/requirements.md",
+       "reference": "FR-02"
+      },
+      {
+       "source": "docs/requirements.md",
+       "reference": "UC-01"
+      }
+     ]
     }
    ]
   }

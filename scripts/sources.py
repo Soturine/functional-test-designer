@@ -48,6 +48,7 @@ IDENTIFIER_KINDS = (
 DEFAULT_IDENTIFIER = r"[A-Z]{2,5}[-_]?\d{1,4}(?:\.\d+)*"
 _DEFINITION_PREFIX = r"^\s*(?:[#>*\-•●▪◦·]+\s*)?(?:\d+(?:\.\d+)*\.?\s+)?"
 _TITLE_SEPARATOR = r"\s*(?:[-–—:|)]\s*|\s+)"
+_STRUCTURAL_ITEM = re.compile(r"^\s*(?:[•●▪◦·*\-]\s+|\d{1,2}[.)]\s+\S)")
 
 
 class ScopeError(ValueError):
@@ -309,9 +310,16 @@ def extract_identifiers(text: str, path: str, pattern: str | None = None) -> lis
             not any(value.strip() for value in lines[min(other, number) + 1:max(other, number)])
             for other in neighbours
         )
+        # Bullets and numbered items inside a definition are structural units the
+        # design must reconcile; they are counted, never interpreted.
+        items = sum(bool(_STRUCTURAL_ITEM.match(value)) for value in lines[number + 1:end])
+        prose = " ".join(value.strip() for value in lines[number + 1:end] if value.strip())
+        sentences = sum(len(part.split()) >= 6 for part in re.split(r"(?<=[.;!?])\s+", prose))
+        items = max(items, sentences)
         by_key.setdefault(normalize_identifier(raw_id), []).append({
             "identifier": raw_id, "kind": identifier_kind(raw_id), "title": title,
-            "source": path, "line": number + 1, "excerpt": body[:1200], "_listing": listing,
+            "source": path, "line": number + 1, "excerpt": body[:1200], "structural_items": items,
+            "_listing": listing,
         })
     chosen = []
     for occurrences in by_key.values():

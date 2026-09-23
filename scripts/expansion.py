@@ -13,7 +13,7 @@ from typing import Any
 
 from common import StageError, jaccard, normalize, normalize_identifier, similarity
 from design import (
-    check_locale, unknown_keys, validate_questions_and_findings, validate_test_intent,
+    check_locale, traceability, unknown_keys, validate_questions_and_findings, validate_test_intent,
 )
 
 
@@ -64,6 +64,10 @@ ASSET_DISPOSITIONS = {
     "TECHNICAL_ONLY", "DUPLICATE", "OUT_OF_SCOPE_WITH_REASON",
 }
 INTENT_FIELDS = ("actor", "state", "trigger", "failure_domain", "expected")
+ADVERSARIAL_DIMENSIONS = {
+    "NEGATIVE", "BOUNDARY", "OPERATOR_ERROR", "MISUSE", "CONCURRENCY", "RACE_CONDITION", "IDEMPOTENCY",
+    "INTEGRATION", "RECOVERY", "CHAOS", "SECURITY", "AUTHORIZATION",
+}
 ALIGNMENT_THRESHOLDS = {
     "actor": 0.34, "state": 0.34, "trigger": 0.34, "failure_domain": 0.4, "expected": 0.34,
 }
@@ -91,6 +95,20 @@ def intent_alignment(intent: dict[str, Any], target: dict[str, Any]) -> dict[str
     return {"scores": scores, "aligned": not misaligned, "misaligned_fields": misaligned}
 
 
+def _copied(intent: dict[str, Any], target: dict[str, Any]) -> bool:
+    same = sum(normalize(intent.get(field)) == normalize(target.get(field)) for field in INTENT_FIELDS)
+    return same >= 4
+
+
+def _test_text(target: dict[str, Any]) -> str:
+    return " ".join(str(target.get(field, "")) for field in ("title", "state", "trigger", "expected", "failure_domain"))
+
+
+def _happy_path(target: dict[str, Any]) -> bool:
+    """An Acceptance test of plain functional behavior exercises no failure condition."""
+    return target["basis"] == "ACCEPTANCE" and target["primary_type"] in {"FUNCTIONAL", "FIELD", "PERFORMANCE"}
+
+
 def _resolve_test(ref: str, tests_by_ref: dict[str, dict[str, Any]]) -> dict[str, Any] | None:
     return tests_by_ref.get(ref)
 
@@ -98,6 +116,7 @@ def _resolve_test(ref: str, tests_by_ref: dict[str, dict[str, Any]]) -> dict[str
 def validate_expansion(payload: dict[str, Any], context: dict[str, Any]) -> dict[str, Any]:
     errors = unknown_keys(payload, EXPANSION_KEYS, "expansion")
     locale = context["locale"]
+    context = {**context, "authority": {normalize_identifier(e["identifier"]): e for e in context["authority_index"]}}
     design = context["design"]
     roles = {record["path"]: record["role"] for record in context["source_records"]}
     requirement_keys = {item["key"] for item in design["requirements"]}
@@ -119,6 +138,7 @@ def validate_expansion(payload: dict[str, Any], context: dict[str, Any]) -> dict
     candidates: list[dict[str, Any]] = []
     pending_coverage: list[tuple[str, dict[str, Any], list[str], dict[str, Any]]] = []
     pending_e2e: list[tuple[str, dict[str, Any], dict[str, Any]]] = []
+    asset_targets: dict[tuple[str, ...], list[tuple[str, dict[str, Any]]]] = {}
 
     def build_test(raw: dict[str, Any], label: str, dimension: str, basis_hint: str | None) -> dict[str, Any] | None:
         if not isinstance(raw, dict):
@@ -162,8 +182,8 @@ def validate_expansion(payload: dict[str, Any], context: dict[str, Any]) -> dict
         test = {
             "key": key, "basis": basis, "dimension": dimension,
             "claims": [claim["id"] for claim in anchored], "claim_keys": anchors,
-            "requirement_refs": list(dict.fromkeys(claim["requirement_ref"] for claim in anchored)),
-            "identifiers": list(dict.fromkeys(i for claim in anchored for i in claim["identifiers"])),
+            **traceability(anchored, raw.get("related_identifiers"), label, context["authority"],
+                           context["authority_texts"], design["requirements"], errors),
             "source_refs": [ref for claim in anchored for ref in claim["source_refs"]]
             + ([dict(oracle)] if isinstance(oracle, dict) else []),
             **{field: _text(raw.get(field)) for field in (
@@ -216,7 +236,7 @@ def validate_expansion(payload: dict[str, Any], context: dict[str, Any]) -> dict
                 "description": _text(candidate.get("description")), "pattern": pattern,
                 "surface": surface, "use_case": _text(candidate.get("use_case")) or None,
                 "test_ref": None, "covered_by": [], "question": None, "reason": None,
-                "alignment": None,
+                "alignment": None, "shared_policy": _text(candidate.get("shared_policy")) or None,
             }
             if disposition == "MATERIALIZED":
                 test = build_test(candidate.get("test"), label, dimension, None)
@@ -282,7 +302,7 @@ def validate_expansion(payload: dict[str, Any], context: dict[str, Any]) -> dict
             errors.append(f"{label} disposition must be one of {sorted(ASSET_DISPOSITIONS)}")
         intent = item.get("intent") if isinstance(item.get("intent"), dict) else {}
         record = {
-            "asset": asset, "source": assets[asset]["source"], "disposition": disposition,
+            "asset": asset, "source": assets[asset]["source"], "disposition": disposition, "dimension": None,
             "intent": {field: _text(intent.get(field)) for field in INTENT_FIELDS},
             "covered_by": [], "test_ref": None, "question": None,
             "reason": _text(item.get("reason")) or None, "alignment": None,
@@ -349,6 +369,42 @@ def validate_expansion(payload: dict[str, Any], context: dict[str, Any]) -> dict
             errors.append(
                 f"{label} is not semantically covered by {covered}: "
                 f"misaligned {best['misaligned_fields']} (scores {best['scores']})"
+            )
+        if any(_copied(intent, target) for target in targets):
+            errors.append(
+                f"{label} intent repeats the target test word for word; describe the scenario actually "
+                "considered (its own trigger, context, failure condition and oracle)"
+            )
+        description = _text(raw.get("description"))
+        if description and not any(similarity(description, _test_text(target)) >= 0.25 for target in targets):
+            errors.append(f"{label} description does not describe the behavior of {covered}")
+        adversarial = entry.get("pattern") or entry.get("surface") or entry.get("dimension") in ADVERSARIAL_DIMENSIONS
+        if adversarial and all(_happy_path(target) for target in targets):
+            errors.append(
+                f"{label} is an adversarial or failure scenario; a happy-path test {covered} does not exercise it"
+            )
+        if entry.get("asset"):
+            asset_targets.setdefault(tuple(covered), []).append((entry["asset"], intent))
+
+    # Different existing tests may share a target only when they describe the same failure.
+    for covered, members in asset_targets.items():
+        for index, (left_asset, left) in enumerate(members):
+            for right_asset, right in members[index + 1:]:
+                if jaccard(left["failure_domain"], right["failure_domain"]) < 0.4 and jaccard(left["expected"], right["expected"]) < 0.4:
+                    errors.append(
+                        f"test assets {left_asset} and {right_asset} describe different behaviors but converge on {list(covered)}"
+                    )
+
+    # One unresolved Question may cover several failure surfaces only for a shared policy.
+    surfaces_by_question: dict[str, dict[str, dict[str, Any]]] = {}
+    for candidate in candidates:
+        if candidate["disposition"] == "QUESTION_REQUIRED" and candidate["surface"]:
+            surfaces_by_question.setdefault(candidate["question"], {})[candidate["surface"]] = candidate
+    for question, by_surface in surfaces_by_question.items():
+        if len(by_surface) > 1 and any(len(_text(c.get("shared_policy")).split()) < 5 for c in by_surface.values()):
+            errors.append(
+                f"question {question} dispositions surfaces {sorted(by_surface)}; each failure surface needs its "
+                "own disposition unless shared_policy explains the single unresolved policy"
             )
 
     for label, test, candidate in pending_e2e:

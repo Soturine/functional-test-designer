@@ -198,6 +198,12 @@
      ],
      "impact": "EXPECTED_RESULT"
     }
+   ],
+   "structure_reviews": [
+    {
+     "identifier": "RN-01",
+     "reason": "el mensaje describe el mismo rechazo por crédito insuficiente"
+    }
    ]
   },
   "expansion": {
@@ -280,11 +286,11 @@
         "T4"
        ],
        "intent": {
-        "actor": "vendedor",
-        "state": "pedido Borrador con descuento sin aprobación",
-        "trigger": "el vendedor confirma el pedido",
-        "failure_domain": "aprobación de descuento",
-        "expected": "el pedido no se confirma y sigue en Borrador"
+        "actor": "vendedor apresurado",
+        "state": "pedido Borrador con descuento del 15 % pendiente del supervisor",
+        "trigger": "el vendedor confirma sin esperar la aprobación",
+        "failure_domain": "aprobación de descuento pendiente",
+        "expected": "el pedido no se confirma y permanece en Borrador"
        }
       },
       {
@@ -367,10 +373,10 @@
        ],
        "intent": {
         "actor": "vendedor",
-        "state": "pedido Borrador con total mayor que el crédito",
-        "trigger": "el vendedor confirma el pedido",
-        "failure_domain": "límite de crédito",
-        "expected": "se muestra Crédito insuficiente y el pedido sigue en Borrador"
+        "state": "pedido Borrador con descuento aprobado y total superior al crédito",
+        "trigger": "el vendedor confirma el pedido aprobado",
+        "failure_domain": "límite de crédito con descuento aprobado",
+        "expected": "aparece Crédito insuficiente y el pedido sigue en Borrador"
        }
       }
      ]
@@ -384,7 +390,8 @@
        "surface": "CONCURRENCY",
        "description": "Dos pedidos confirman al mismo tiempo el último stock.",
        "disposition": "QUESTION_REQUIRED",
-       "question": "Q1"
+       "question": "Q1",
+       "shared_policy": "la regla de reserva parcial de stock no está definida en los requisitos"
       }
      ]
     },
@@ -460,7 +467,8 @@
        "surface": "PARTIAL_COMMIT",
        "description": "La confirmación reserva solo una parte de las líneas.",
        "disposition": "QUESTION_REQUIRED",
-       "question": "Q1"
+       "question": "Q1",
+       "shared_policy": "la regla de reserva parcial de stock no está definida en los requisitos"
       }
      ]
     },
@@ -542,7 +550,13 @@
      "automation": {
       "suitability": "HIGH",
       "layer": "UI"
-     }
+     },
+     "evidence_refs": [
+      {
+       "source": "docs/pedidos.md",
+       "reference": "RF-01"
+      }
+     ]
     },
     {
      "test": "T2",
@@ -568,7 +582,13 @@
      "automation": {
       "suitability": "HIGH",
       "layer": "UI"
-     }
+     },
+     "evidence_refs": [
+      {
+       "source": "docs/pedidos.md",
+       "reference": "RF-01"
+      }
+     ]
     },
     {
      "test": "T3",
@@ -594,7 +614,13 @@
      "automation": {
       "suitability": "HIGH",
       "layer": "UI"
-     }
+     },
+     "evidence_refs": [
+      {
+       "source": "docs/pedidos.md",
+       "reference": "RN-01"
+      }
+     ]
     },
     {
      "test": "T4",
@@ -620,7 +646,13 @@
      "automation": {
       "suitability": "HIGH",
       "layer": "UI"
-     }
+     },
+     "evidence_refs": [
+      {
+       "source": "docs/pedidos.md",
+       "reference": "RN-02"
+      }
+     ]
     },
     {
      "test": "T5",
@@ -646,7 +678,13 @@
      "automation": {
       "suitability": "HIGH",
       "layer": "UI"
-     }
+     },
+     "evidence_refs": [
+      {
+       "source": "docs/pedidos.md",
+       "reference": "CU-01"
+      }
+     ]
     },
     {
      "test": "D1",
@@ -672,7 +710,13 @@
      "automation": {
       "suitability": "HIGH",
       "layer": "UI"
-     }
+     },
+     "evidence_refs": [
+      {
+       "source": "docs/pedidos.md",
+       "reference": "RN-02"
+      }
+     ]
     },
     {
      "test": "D2",
@@ -698,7 +742,13 @@
      "automation": {
       "suitability": "HIGH",
       "layer": "UI"
-     }
+     },
+     "evidence_refs": [
+      {
+       "source": "docs/pedidos.md",
+       "reference": "RN-01"
+      }
+     ]
     },
     {
      "test": "D3",
@@ -724,7 +774,13 @@
      "automation": {
       "suitability": "HIGH",
       "layer": "UI"
-     }
+     },
+     "evidence_refs": [
+      {
+       "source": "docs/pedidos.md",
+       "reference": "RN-02"
+      }
+     ]
     },
     {
      "test": "E2E1",
@@ -758,7 +814,17 @@
      "automation": {
       "suitability": "HIGH",
       "layer": "UI"
-     }
+     },
+     "evidence_refs": [
+      {
+       "source": "docs/pedidos.md",
+       "reference": "RN-02"
+      },
+      {
+       "source": "docs/pedidos.md",
+       "reference": "CU-01"
+      }
+     ]
     }
    ]
   }
