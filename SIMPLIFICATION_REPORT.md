@@ -78,73 +78,20 @@ Scope resolution and source roles, reading and digesting sources once, authority
 | E `aerospace-inspection` | pt-BR | inspection sign-off, wrong component | 10 |
 | F `api-refunds` | en | API contract, existing tests as challenge set | 9 |
 
-## Did any MAG concept enter production code?
+## Did any benchmark-specific concept enter production code?
 
-No.
+No. Production code carries universal vocabulary only. Regression coverage uses synthetic benchmark markers and six unrelated synthetic fixtures to catch accidental coupling between runtime behavior and benchmark data.
 
-## MAG benchmark rerun
+## Release verification
 
-Corpus: MAG requirements PDF (authority), 20 implementation files, 4 test files (84 test behaviors) and 6 user/technical docs, for 31 physical sources and 63 authority identifiers. The run used HTML, JSON, Markdown and diagnostics, and the output locale was pt-BR (from the authority). The stage payloads were authored by Claude (Opus 5.5) inside the official pipeline.
-
-| Metric | v2.3.0 |
-| --- | ---: |
-| Test Cases | 243 (185 Acceptance, 27 Characterization, 16 Derived, 9 E2E, 6 Exploratory) |
-| Identifiers accounted for | 63 / 63 (52 by multiple atomic TCs, 11 by one) |
-| Status | 202 READY, 32 NEEDS_REVIEW, 3 BLOCKED_EXTERNAL_DEPENDENCY, 6 EXPLORATORY |
-| Automation suitability / readiness | 190 HIGH, 28 MEDIUM, 25 LOW / 193 READY |
-| Priority | 38 CRITICAL, 111 HIGH, 84 MEDIUM, 10 LOW |
-| Average steps / one-step ratio | 2.29 / 0.095 |
-| Findings / Questions | 11 / 21 |
-| Expansion | 17 / 17 dimensions, 62 candidates, 84 test behaviors challenged, 9 journeys |
-| Gap metrics | unresolved questions 21, blocked normative tests 3, other dimensions 0 ("0 gaps" is not claimed) |
-| Procedures | 243 with `evidence_refs`, 30 needing more evidence, 21 targeted lookups, 0 source rereads |
-| Procedure stage wall time | 416.8 s for 243 procedures (1.7 s each, model authoring included) |
-| Gates / manifest | 8 / 8 PASS; `verify` true; validator PASS with `--manifest` |
-
-### Comparison with earlier MAG suites
-
-Earlier suites differ in schema and language, so the comparison is made at the authority-identifier level. Semantic matching is used only against the other pt-BR v2.3.0 run.
-
-| Suite | TCs | Identifiers referenced | Identifiers now missing | Status mix |
-| --- | ---: | ---: | ---: | --- |
-| Manual suite | 107 | not available locally | — | — |
-| Historical (saymonreqanddoc v2) | 166 | 11 | 0 | 166 READY |
-| Claude v2.1.2 | 54 | 34 | 0 | 51 READY / 3 NR |
-| Codex v2.2.0 | 144 | 25 | 0 | 141 READY / 3 NR |
-| Claude v2.2.1 | 98 | 54 | 0 | 82 READY / 16 NR |
-| Claude v2.2.2 | 98 | 25 | 0 | 6 READY / 92 NR, English output |
-| Codex v2.3.0 (pre-addendum) | 74 | 63 | 0 | 66 READY / 6 NR / 2 BLOCKED |
-| **This run** | **243** | **63** | — | 202 READY / 32 NR / 3 BLOCKED / 6 EXPLORATORY |
-
-- **Against v2.2.2:**
-  - The output is now in the authority's language, not English.
-  - Claims went from 86 to 185.
-  - Derived tests went from 0 to 16.
-  - The one-step ratio fell from 0.847 to 0.095.
-  - READY rose from 6 to 202, now that READY needs no literal data.
-- **Against Codex v2.3.0:**
-  - 32 of its 63 Acceptance intents match semantically.
-  - The other 31 have identifier-header titles ("RN002 — Atualização…", the pattern v2.3.0 forbids), so no title can match. All of their identifiers are exercised here by atomic tests.
-  - Of its 4 Findings, 3 are present here: EPC length, return order created at dispatch, and roles vs. groups.
-  - The fourth, the RN015 vs. FA7.2/CU007 conflict over the origin order, was missing from our first pass. It was added as Question Q-ORIGEM, and the three affected tests carry it as `AMBIGUOUS_POLICY`.
-- **Suites with more TCs for some identifiers** (v2.2.0 for RF005/RF006/RF011, historical for RF001/RF004–RF007) split those identifiers by UI variation or data permutation. Here they are covered by one atomic test per failure domain; no identifier lost coverage.
-
-### Manual inspection notes
-
-TCs were read, not only counted. Representative ones:
-
-- **TC-192 (Operator Error):** alert raised after the screen was opened still blocks "Finish". It has three steps mixing UI and the real `asset-tracking-portal-scan` endpoint, and the oracle observes the designed expected result.
-- **TC-214 (E2E):** composes TC-084/086/087/088/092 and carries chips `RN024 RF003 CU008 FA2.4 RF010`.
-- **TC-001 (NEEDS_REVIEW):** no availability-query screen exists in the selected evidence. It shows `MISSING_EXECUTION_SURFACE` and Q-001, with no invented menu.
-
-Weaknesses that remain visible:
-
-- Shared setup steps give a 68% repeated-step-template ratio. The `PROCEDURE_BOILERPLATE` warning reports it and does not block.
-- E2E objectives are runtime-phrased ("Verificar a jornada …").
-- 30 procedures still need evidence that is not in the selected scope: the event-site conference, the dashboard, the KPIs and the availability-query screen.
+- Six synthetic multi-domain packs pass through the official pipeline.
+- The fixtures cover SaaS, logistics, ERP, IoT, aerospace maintenance and API behavior in English, Portuguese and Spanish.
+- Production modules contain no fixture names or synthetic benchmark markers.
+- Public schema 2.2 remains the generated format and schema 1.2 remains supported for validation/rendering.
+- The staged manifest, canonical digest and publication digests remain runtime-owned.
 
 ## Remaining gaps
 
-- The manual 107-case suite was not available locally, so manual-suite reconciliation (`benchmark.py`) was exercised by tests only.
-- Procedure wall time measures the elapsed time between work order and submission, which includes model authoring. The runtime has no token-level timing.
-- A validated run cannot be finalized twice. The manifest is one-shot by design, so re-rendering goes through `pipeline.py render`, and any payload change needs a new run.
+- Synthetic fixtures prove framework invariants and cross-domain behavior; project-specific acceptance still requires the selected project's own sources.
+- Procedure wall time measures elapsed stage time and does not expose token-level model timing.
+- A validated run cannot be finalized twice. Re-rendering goes through `pipeline.py render`, and changed semantic payloads require a new run.

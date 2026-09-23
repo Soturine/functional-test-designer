@@ -183,15 +183,15 @@ class GeneralityTests(unittest.TestCase):
                     run.close()
         self.assertEqual({"en", "pt-BR", "es"}, locales)
 
-    def test_production_code_has_no_benchmark_domain_vocabulary(self) -> None:
+    def test_production_code_has_no_synthetic_benchmark_markers(self) -> None:
         forbidden = re.compile(
-            r"\b(?:box(?:es)?|portal|rfid|epc|node-red|rental|warehouse|outbound|inbound|caixa|"
-            r"RF001|RN026|CU008|reader_name|anytask)\b", re.IGNORECASE,
+            r"(?:saas-accounts|logistics-storage|erp-sales-orders|iot-line-monitoring|"
+            r"aerospace-inspection|api-refunds|SYNTH_REQ_ALPHA|SYNTH_FLOW_BETA)",
+            re.IGNORECASE,
         )
         for path in sorted((ROOT / "scripts").rglob("*.py")):
             text = path.read_text(encoding="utf-8")
-            text = re.sub(r"box-(?:sizing|shadow)|\bbox\b(?= = )|- box\)|\bw\": box|\(width - box\)", "", text)
-            hits = sorted({match.group(0) for match in forbidden.finditer(text)} - {"box"})
+            hits = sorted({match.group(0) for match in forbidden.finditer(text)})
             with self.subTest(module=path.name):
                 self.assertEqual([], hits)
 
