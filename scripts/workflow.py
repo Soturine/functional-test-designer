@@ -21,11 +21,12 @@ if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
 import pipeline  # noqa: E402
+import challenge as challenge_stage  # noqa: E402
 from integrations.azure_devops import build_preview, build_suite_mapping, write_fallback_export  # noqa: E402
 from procedures import audit_case  # noqa: E402
 
 
-INTENTS = ("ftd-gen", "ftd-clarify", "ftd-check", "ftd-render", "ftd-mcp")
+INTENTS = ("ftd-gen", "ftd-clarify", "ftd-check", "ftd-render", "ftd-mcp", "ftd-challenge")
 # Pre-v2.3 callers sent the whole semantic answer up front; that entry point is gone.
 LEGACY_REQUEST_FIELDS = {
     "source_items", "source_units", "opportunities", "risk_conditions", "use_case_flows",
@@ -40,6 +41,8 @@ def normalize_intent(request: str) -> str:
     if alias in INTENTS:
         return alias
     signals = (
+        ("ftd-challenge", ("challenge the", "challenge this suite", "post-suite", "real-world scenarios",
+                           "go beyond the seed", "physical device", "in the field", "desafie a suíte")),
         ("ftd-mcp", ("azure devops", "test plans", "preview before writing", "prepare the last suite")),
         ("ftd-render", ("render", "renderize", "last run as", "última execução como")),
         ("ftd-check", ("audit", "check", "audite", "verifique se", "executable by")),
@@ -145,6 +148,13 @@ def dispatch(intent: str, **request: Any) -> Any:
         return check_suite(cases, focus=request.get("focus", "everything"))
     if intent == "ftd-render":
         return pipeline.render_run(_run_dir(request), request.get("formats"))
+    if intent == "ftd-challenge":
+        if not request.get("challenge_id"):
+            raise ValueError("ftd-challenge requires a challenge_id for this run")
+        return challenge_stage.start_challenge(
+            _run_dir(request), request["challenge_id"],
+            seeds=[Path(p) for p in request.get("seeds", []) or []], focus=request.get("focus", ""),
+        )
     cases = request.get("cases")
     if cases is None:
         cases = _canonical(request)["cases"]
