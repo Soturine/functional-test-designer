@@ -232,6 +232,15 @@ class CatalogReuseTests(unittest.TestCase):
         self.assertEqual(before, file_digest(frozen / "canonical-suite.json"))
 
 
+class HostFileTests(unittest.TestCase):
+    def test_json_written_with_a_utf8_bom_is_accepted(self) -> None:
+        from common import read_json
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / "result.json"
+            path.write_bytes(b"\xef\xbb\xbf" + json.dumps({"status": "CATALOGED"}).encode("utf-8"))
+            self.assertEqual({"status": "CATALOGED"}, read_json(path))
+
+
 class SourceKeyTests(unittest.TestCase):
     def test_keys_are_stable_and_collision_safe(self) -> None:
         self.assertEqual(reading.source_key("foo/bar.py"), reading.source_key("foo\\bar.py"))
