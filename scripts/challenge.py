@@ -146,7 +146,13 @@ def _domain_model_summary(run_dir: Path) -> dict[str, Any]:
 
 def start_challenge(
     run_dir: Path, challenge_id: str, *, seeds: list[Path] | None = None, focus: str = "",
+    seed_items: list[dict[str, Any]] | None = None, seed_source: dict[str, Any] | None = None,
+    formats: list[str] | None = None,
 ) -> dict[str, Any]:
+    """`seeds` are Markdown seed files segmented structurally; `seed_items` are already
+    anchored items (e.g. `instructions.md#seed-003`) normalized by the host from an
+    instructions file described by `seed_source` ({"path", "digest"}). Both are
+    inspiration only. `formats` are the public outputs published at finalize."""
     run_dir = Path(run_dir).resolve()
     _require_frozen(run_dir)
     challenge_dir = _challenge_dir(run_dir, challenge_id)
@@ -162,6 +168,17 @@ def start_challenge(
         items = segment_seed(seed_path.name, content)
         seed_files.append({
             "path": seed_path.name, "digest": file_digest(seed_path), "content": content, "items": items,
+        })
+    if seed_items:
+        anchors = [str(item.get("anchor", "")) for item in seed_items]
+        if len(set(anchors)) != len(anchors) or not all(anchors):
+            raise ChallengeError("seed items need unique, non-empty anchors")
+        source = seed_source or {}
+        seed_files.append({
+            "path": Path(str(source.get("path") or "instructions.md")).name, "digest": source.get("digest"),
+            "content": "\n".join(f"- {item['text']}" for item in seed_items),
+            "items": [{"anchor": item["anchor"], "text": item["text"],
+                       **({"section": item["section"]} if item.get("section") else {})} for item in seed_items],
         })
     sources_state = read_json(run_dir / "sources.json")
     evidence_index = [
@@ -221,7 +238,8 @@ def start_challenge(
         "parent_canonical_digest": work_order["parent_canonical_digest"],
         "seed_refs": [{"path": s["path"], "digest": s["digest"]} for s in seed_files],
         "seed_items": [item["anchor"] for s in seed_files for item in s["items"]],
-        "focus": focus, "created_at": now(), "status": "STARTED",
+        "focus": focus, "formats": list(formats or ["JSON", "MARKDOWN", "HTML"]),
+        "created_at": now(), "status": "STARTED",
     })
     return {"challenge_dir": str(challenge_dir), "work_order": str(challenge_dir / "work-order.json"),
             "seeds_received": len(seed_files),
@@ -281,7 +299,7 @@ def _validate_steps(steps: list[dict[str, Any]], label: str, locale: str, errors
         if not action:
             errors.append(f"{label} step {number} requires an action")
         if ABSTRACT_ACTION.search(action):
-            errors.append(f"{label} step {number} action is abstract; name the concrete operation")
+            errors.append(f"{label} step {number} action is abstract; say who does which atomic action to which target (and where, with which semantic data) as the evidence supports, or keep the known intent and declare MISSING_EXECUTION_SURFACE / UNKNOWN_SETUP_PATH")
         if expected and ABSTRACT_OBSERVATION.search(expected):
             errors.append(f"{label} step {number} expected result is not observable")
         if AUTH_ONLY.search(action):
@@ -660,10 +678,10 @@ def finalize_challenge(
     if azure:
         import azure_export
         # Reuses the shared canonical+Challenge packaging path, scoped to just this
-        # challenge run, so a CH case is previewed with its stable challenge:<id>:CH-nnn
+        # chaos run, so a CH case is previewed with its stable chaos:<id>:CH-nnn
         # export key and never collides with another challenge run's own CH-001.
-        package = azure_export.build_export_package(run_dir, challenge_ids=[challenge_id])
-        state = azure_export.load_integration_state(run_dir)
+        package = azure_export.build_export_package(run_dir, chaos_ids=[challenge_id])
+        state = azure_export.migrate_integration_state(azure_export.load_integration_state(run_dir))
         preview = azure_export.preview_export(
             package, project=azure["project"], plan=azure["plan"], suite=azure["suite"],
             mapping={"test_cases": state.get("test_cases", {})},
@@ -672,7 +690,81 @@ def finalize_challenge(
         files.append("azure-devops-preview.json")
     lineage.update({"outputs": files})  # picks up azure-devops-preview.json when it was produced above
     write_json(challenge_dir / "challenge-run.json", lineage)
-    return {"challenge_dir": str(challenge_dir), "files": files, "cases": len(result["cases"])}
+    published = publish_outputs(run_dir, challenge_id, lineage.get("formats") or ["JSON", "MARKDOWN", "HTML"])
+    return {"challenge_dir": str(challenge_dir), "files": files, "cases": len(result["cases"]),
+            "published": [str(path) for path in published]}
+
+
+def _inline_html(text: str) -> str:
+    import html
+    escaped = html.escape(text)
+    escaped = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", escaped)
+    escaped = re.sub(r"(?<![\w*])_(.+?)_(?![\w*])", r"<em>\1</em>", escaped)
+    return escaped
+
+
+def plan_html(markdown: str, title: str) -> str:
+    """Self-contained, offline HTML for the Manual/Physical/Field plan (its own small
+    heading/bullet/paragraph Markdown subset; no external assets)."""
+    import html
+    body: list[str] = []
+    in_list = False
+    for line in markdown.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("- "):
+            if not in_list:
+                body.append("<ul>")
+                in_list = True
+            body.append(f"<li>{_inline_html(stripped[2:])}</li>")
+            continue
+        if in_list:
+            body.append("</ul>")
+            in_list = False
+        if stripped.startswith("#"):
+            level = min(len(stripped) - len(stripped.lstrip("#")), 6)
+            body.append(f"<h{level}>{_inline_html(stripped[level:].strip())}</h{level}>")
+        elif stripped:
+            body.append(f"<p>{_inline_html(stripped)}</p>")
+    if in_list:
+        body.append("</ul>")
+    return (
+        "<!doctype html>\n<html lang=\"en\"><head><meta charset=\"utf-8\">"
+        "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
+        f"<title>{html.escape(title)}</title><style>"
+        ":root{--bg:#fff;--fg:#1d2330;--muted:#5b6475;--line:#d9dee7}"
+        "@media (prefers-color-scheme: dark){:root{--bg:#14171d;--fg:#e6e9ef;--muted:#a3abba;--line:#2c323d}}"
+        "body{margin:0 auto;max-width:960px;padding:24px 16px;background:var(--bg);color:var(--fg);"
+        "font:15px/1.55 system-ui,-apple-system,Segoe UI,sans-serif}"
+        "h1{font-size:1.6rem}h2{font-size:1.15rem;margin-top:2rem;border-bottom:1px solid var(--line);"
+        "padding-bottom:.3rem}li{margin:.35rem 0}em{color:var(--muted)}"
+        "</style></head><body>\n" + "\n".join(body) + "\n</body></html>\n"
+    )
+
+
+def publish_outputs(run_dir: Path, challenge_id: str, formats: list[str]) -> list[Path]:
+    """Public, local chaos outputs under `<artifact_root>/output/chaos/<id>/` in the
+    requested formats. The private challenge state stays under the run."""
+    run_dir = Path(run_dir).resolve()
+    challenge_dir = _challenge_dir(run_dir, challenge_id)
+    run = read_json(run_dir / "run.json")
+    destination = Path(run["artifact_root"]) / "output" / "chaos" / challenge_id
+    destination.mkdir(parents=True, exist_ok=True)
+    selected = {str(value).upper() for value in formats}
+    written: list[Path] = []
+    if "JSON" in selected:
+        cases = read_json(challenge_dir / "challenge-cases.json")
+        dispositions = read_json(challenge_dir / "seed-dispositions.json")
+        write_json(destination / "chaos-cases.json", {"chaos_run_id": challenge_id, **cases})
+        write_json(destination / "seed-dispositions.json", dispositions)
+        written += [destination / "chaos-cases.json", destination / "seed-dispositions.json"]
+    plan = (challenge_dir / "challenge-plan.md").read_text(encoding="utf-8")
+    if "MARKDOWN" in selected:
+        (destination / "chaos-plan.md").write_text(plan, encoding="utf-8")
+        written.append(destination / "chaos-plan.md")
+    if "HTML" in selected:
+        (destination / "chaos-plan.html").write_text(plan_html(plan, f"Chaos plan — {challenge_id}"), encoding="utf-8")
+        written.append(destination / "chaos-plan.html")
+    return written
 
 
 def verify_challenge(run_dir: Path, challenge_id: str) -> dict[str, Any]:
