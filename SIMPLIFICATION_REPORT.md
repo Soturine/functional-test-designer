@@ -2,7 +2,7 @@
 
 ## Did this release make the framework simpler?
 
-Yes. The runtime is about half the code, a quarter of the modules and under a third of the gates. The entry point went from a large pre-authored semantic request to "these sources, with these roles". The QA reasoning moved back to the model, and the runtime keeps only the invariants whose failure makes a suite invalid. Generated quality went up on the MAG benchmark rather than down (see below).
+Yes. The runtime is about half the code, a quarter of the modules and under a third of the gates. The entry point went from a large pre-authored semantic request to "these sources, with these roles". The QA reasoning moved back to the model, and the runtime keeps only the invariants whose failure makes a suite invalid. Generated quality improved on the synthetic multi-domain benchmark suite rather than regressing.
 
 | | v2.2.2 (`109d865`) | v2.3.0 |
 | --- | ---: | ---: |
