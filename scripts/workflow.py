@@ -22,11 +22,12 @@ if str(SCRIPT_DIR) not in sys.path:
 
 import pipeline  # noqa: E402
 import challenge as challenge_stage  # noqa: E402
+import azure_export  # noqa: E402
 from integrations.azure_devops import build_preview, build_suite_mapping, write_fallback_export  # noqa: E402
 from procedures import audit_case  # noqa: E402
 
 
-INTENTS = ("ftd-gen", "ftd-clarify", "ftd-check", "ftd-render", "ftd-mcp", "ftd-challenge")
+INTENTS = ("ftd-gen", "ftd-clarify", "ftd-check", "ftd-render", "ftd-mcp", "ftd-challenge", "ftd-azure")
 # Pre-v2.3 callers sent the whole semantic answer up front; that entry point is gone.
 LEGACY_REQUEST_FIELDS = {
     "source_items", "source_units", "opportunities", "risk_conditions", "use_case_flows",
@@ -35,15 +36,35 @@ LEGACY_REQUEST_FIELDS = {
 VALID_FOCI = {"everything", "procedure", "automation", "coverage", "outputs"}
 
 
+GENERATION_VERB = re.compile(
+    r"(?:generate|create|design|gere|gerar|crie|criar|genera|generar).*"
+    r"(?:test ?cases?|tcs|casos de (?:teste|prueba))"
+)
+# Ambiguous words like "physical device" or "real-world" also show up in ordinary
+# generation requests ("generate test cases for this physical device"); a clear
+# generation verb always wins over those. Challenge phrasing must unambiguously name
+# challenging an already-generated/finalized suite, not merely mention a domain.
 def normalize_intent(request: str) -> str:
     text = " ".join(request.strip().casefold().split())
     alias = (text.split(maxsplit=1)[0] if text else "").lstrip("/$")
     if alias in INTENTS:
         return alias
+    if GENERATION_VERB.search(text):
+        return "ftd-gen"
+    # ftd-azure's phrases are specific enough (package/input/grouping language) that they
+    # never collide with ftd-mcp's own narrower, backward-compatible phrasing below.
     signals = (
-        ("ftd-challenge", ("challenge the", "challenge this suite", "post-suite", "real-world scenarios",
-                           "go beyond the seed", "physical device", "in the field", "desafie a suíte")),
-        ("ftd-mcp", ("azure devops", "test plans", "preview before writing", "prepare the last suite")),
+        ("ftd-challenge", (
+            "challenge the finalized", "challenge the final", "challenge this finalized suite",
+            "challenge this final suite", "challenge the suite", "challenge this suite",
+            "post-suite challenge", "post suite challenge",
+            "desafie a suíte finalizada", "desafie a suíte final", "desafie a suíte já gerada",
+        )),
+        ("ftd-azure", ("azure export package", "azure devops package", "azure package",
+                       "prepare this run for azure", "prepare this finalized", "azure devops input",
+                       "test plans input", "grouped by requirement")),
+        ("ftd-mcp", ("azure devops", "test plans", "preview before writing",
+                    "prepare the last suite", "mcp preview")),
         ("ftd-render", ("render", "renderize", "last run as", "última execução como")),
         ("ftd-check", ("audit", "check", "audite", "verifique se", "executable by")),
         ("ftd-clarify", ("ask me", "important questions", "pergunte", "ambiguous", "ambígu")),
@@ -52,8 +73,6 @@ def normalize_intent(request: str) -> str:
     for intent, phrases in signals:
         if any(phrase in text for phrase in phrases):
             return intent
-    if re.search(r"(?:generate|create|design|gere|gerar|crie|criar|genera|generar).*(?:test ?cases?|tcs|casos de (?:teste|prueba))", text):
-        return "ftd-gen"
     raise ValueError("Could not determine a functional-test-designer intent from the request")
 
 
@@ -155,6 +174,23 @@ def dispatch(intent: str, **request: Any) -> Any:
             _run_dir(request), request["challenge_id"],
             seeds=[Path(p) for p in request.get("seeds", []) or []], focus=request.get("focus", ""),
         )
+    if intent == "ftd-azure":
+        run_dir = _run_dir(request)
+        package = azure_export.build_export_package(
+            run_dir, challenge_ids=request.get("challenge_ids"),
+            requirement_mapping=request.get("requirement_mapping"),
+        )
+        if not request.get("project"):
+            return package
+        state = azure_export.load_integration_state(run_dir)
+        preview = azure_export.preview_export(
+            package, project=request["project"], plan=request["plan"], suite=request["suite"],
+            mapping={"test_cases": state.get("test_cases", {})},
+            include_needs_review=request.get("include_needs_review", True),
+        )
+        if not request.get("mcp_available", True):
+            preview["fallback_exports"] = [str(p) for p in write_fallback_export(request.get("artifact_root", run_dir), preview)]
+        return {"package": package, "preview": preview}
     cases = request.get("cases")
     if cases is None:
         cases = _canonical(request)["cases"]

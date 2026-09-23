@@ -49,6 +49,32 @@ RISK_SUITE_TAGS = (
 )
 
 
+def build_group_suite_mapping(groups: list[dict[str, Any]]) -> dict[str, Any]:
+    """Azure Test Plan/Suite placement for arbitrary named groups.
+
+    Each group is `{"suite": name, "suite_type": optional, "export_keys": [...]}`.
+    One export key may belong to several groups without being cloned — this is the
+    generic Azure-side placement mechanism `ftd-azure` uses for requirement-by-
+    requirement organization, and the same one `build_suite_mapping` below uses for
+    risk-tag static suites. Callers (e.g. azure_export.py) decide what a "group" means
+    in their own domain; this function only owns the Azure suite-membership shape.
+    """
+    memberships: dict[str, list[dict[str, Any]]] = {}
+    suite_members: dict[str, list[str]] = {}
+    for group in groups:
+        suite = group["suite"]
+        for key in group.get("export_keys", []):
+            memberships.setdefault(key, []).append(
+                {"suite": suite, "suite_type": group.get("suite_type", "REQUIREMENT_BASED")}
+            )
+            suite_members.setdefault(suite, []).append(key)
+    return {
+        "memberships": [{"local_id": key, "suites": suites} for key, suites in memberships.items()],
+        "suite_members": {name: sorted(set(keys)) for name, keys in sorted(suite_members.items())},
+        "canonical_test_cases": len(memberships), "cloned_test_cases": 0,
+    }
+
+
 def build_suite_mapping(
     cases: list[dict[str, Any]],
     *,
@@ -156,9 +182,19 @@ def write_fallback_export(root: Path, preview: dict[str, Any]) -> list[Path]:
     return paths
 
 
+def _integration_state_path(run_dir: Path) -> Path:
+    return Path(run_dir) / "integration-state" / "azure-devops.json"
+
+
 def persist_integration_state(run_dir: Path, state: dict[str, Any]) -> Path:
     """Persist non-secret idempotency metadata under the private run directory."""
-    path = run_dir / "integration-state" / "azure-devops.json"
+    path = _integration_state_path(run_dir)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(state, indent=2) + "\n", encoding="utf-8")
     return path
+
+
+def load_integration_state(run_dir: Path) -> dict[str, Any]:
+    """The read side of `persist_integration_state`; empty state when nothing was synced yet."""
+    path = _integration_state_path(run_dir)
+    return json.loads(path.read_text(encoding="utf-8")) if path.is_file() else {"test_cases": {}}
