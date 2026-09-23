@@ -1,6 +1,6 @@
 ---
 name: functional-test-designer
-description: Designs traceable, executable functional Test Cases from only user-selected sources for any domain. Use for atomic normative coverage, a mandatory second QA pass (negative, operator error, concurrency, recovery, security, E2E), existing-test challenge, executable procedures, readiness and automation classification, offline HTML/Markdown/JSON, and preview-first Test Management export.
+description: Designs traceable, executable functional Test Cases from only user-selected sources for any domain. Use for atomic normative coverage, a mandatory second QA pass (negative, operator error, concurrency, recovery, security, E2E), existing-test challenge, executable procedures, readiness and automation classification, offline HTML/Markdown/JSON, an optional post-suite real-world challenge over a finalized run, and preview-first Test Management export.
 ---
 
 # Functional Test Designer
@@ -78,7 +78,16 @@ The baseline is frozen; expansion only adds. Evaluate every dimension: `NEGATIVE
 
 ## Other intents
 
-Natural language is primary; `ftd-gen`, `ftd-clarify`, `ftd-check`, `ftd-render`, `ftd-mcp` are optional aliases through `scripts/workflow.py`. Clarify at most five high-impact Questions per round. `ftd-check` audits a published suite read-only. `ftd-render` re-renders a validated run from canonical state (`python scripts/pipeline.py render --run <run>`). `ftd-mcp` previews an Azure DevOps export and writes nothing without explicit approval. See [workflow.md](references/workflow.md).
+Natural language is primary; `ftd-gen`, `ftd-clarify`, `ftd-check`, `ftd-render`, `ftd-mcp`, `ftd-challenge` are optional aliases through `scripts/workflow.py`. Clarify at most five high-impact Questions per round. `ftd-check` audits a published suite read-only. `ftd-render` re-renders a validated run from canonical state (`python scripts/pipeline.py render --run <run>`). `ftd-mcp` previews an Azure DevOps export and writes nothing without explicit approval. See [workflow.md](references/workflow.md).
+
+## Post-suite challenge (optional)
+
+Generate the canonical suite first. Challenge it second. `ftd-challenge` runs only after `finalize`, reasons freely over the frozen suite, and can never rewrite it.
+
+- Reuse the parent run's own persisted context (canonical cases, findings, Questions, authority identifiers, evidence index) instead of rereading sources. Zero, one or several informal Markdown seed files are inspiration, never authority — disposition every seed file honestly and go beyond it using the project's own actors, rules, states and evidence.
+- New cases get their own `CH-*` id, never `TC-*`. Ground actionable steps exactly like procedures: `evidence_refs` or an honest `MISSING_EXECUTION_SURFACE`/`UNKNOWN_SETUP_PATH`, real preconditions, observable results. A physical, manual or otherwise non-automatable case stays in the plan; it is never dropped for being hard to automate.
+- The parent's canonical digest is checked at every step; a changed parent stops the challenge rather than silently rewriting it. A finding that looks normative becomes an advisory `canonical_gap_candidate`, reviewed by a human and resolved only through a new canonical generation, never a silent patch.
+- `finalize` produces `challenges/<id>/challenge-cases.json`, `seed-dispositions.json` and the Manual/Physical/Field Test Plan (`challenge-plan.md`), plus an optional local, read-only Azure DevOps preview. See [workflow.md](references/workflow.md).
 
 ## Completion
 

@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased (targeting 2.4.0)
+
+Optional post-suite challenge, additive to the frozen v2.3.0 pipeline. Not yet released or tagged; `VERSION` stays at 2.3.0.
+
+- Added `ftd-challenge` and `scripts/challenge.py`: a start → submit → finalize workflow that runs only after `finalize` (`run-state.json` status `VALIDATED`) and never modifies the parent canonical suite, `run-manifest.json` or `TC-*` identities. The parent's canonical digest is captured at `start` and re-checked at `submit`, `finalize` and `verify`.
+- New cases use a separate `CH-*` namespace under `<run>/challenges/<challenge-id>/`. Any number of independent challenge runs can target the same frozen parent.
+- Zero, one or several Markdown seed files are accepted as `CHALLENGE_SEED` (inspiration, not authority); every seed file needs an honest `seed_dispositions` entry, and the model is expected to derive cases beyond what the seeds mention.
+- Challenge cases are grounded like procedures (`evidence_refs` or an honest `MISSING_EXECUTION_SURFACE`/`UNKNOWN_SETUP_PATH`, real preconditions, observable results) and classified with `execution_tags` (`AUTOMATABLE`, `MANUAL`, `PHYSICAL_DEVICE`, `EXTERNAL_ENVIRONMENT`, `EXPLORATORY`, `CHAOS_RECOVERY`); a non-automatable case is never dropped for that reason.
+- `finalize` produces `challenge-cases.json`, `seed-dispositions.json`, the Manual/Physical/Field Test Plan (`challenge-plan.md`, which references parent Test Cases rather than cloning them) and, given `--azure-project/--azure-plan/--azure-suite`, a local, read-only `azure-devops-preview.json` reusing the existing adapter.
+- A challenge case may carry an advisory `canonical_gap_candidate`; it never patches the parent suite. Reviewing it and, if accepted, running a new canonical generation is the only way to change canonical output.
+- No new gates: canonical immutability, reference integrity and explicit-only remote publication are checked directly, the same way the existing integrity contracts are.
+
 ## 2.3.0
 
 Simplification, quality recovery and model-first design.

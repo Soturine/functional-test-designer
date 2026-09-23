@@ -101,6 +101,18 @@ python scripts/pipeline.py verify --run <run>
 
 O JSON é a fonte de verdade, e Markdown e HTML são projeções do estado canônico. Renderizar não relê fontes nem refaz o test design. O schema público continua 2.2, com campos opcionais novos, e suítes 1.2 continuam validando e renderizando.
 
+## Desafio pós-suíte (opcional)
+
+Depois de `finalize`, `ftd-challenge` faz uma última passada adversarial/operacional/física sobre a suíte já congelada, sem nunca reescrevê-la:
+
+```bash
+python scripts/challenge.py start --run <run> --challenge-id campo-1 --seed qa-ideas.md --focus "erro de operador e dispositivos físicos"
+python scripts/challenge.py submit --run <run> --challenge-id campo-1 --file challenge.json
+python scripts/challenge.py finalize --run <run> --challenge-id campo-1
+```
+
+Arquivos Markdown de seed são inspiração, nunca autoridade: cada um recebe uma disposição honesta, e o modelo pode (e deve) ir além deles usando os atores, regras e evidências que a suíte já estabeleceu. Os novos casos usam o namespace `CH-*`, nunca `TC-*`, ficam em `<run>/challenges/<id>/` e nunca tocam `canonical-suite.json`: o digest canônico do pai é conferido a cada passo. `finalize` produz o Manual/Physical/Field Test Plan (`challenge-plan.md`), que reúne os novos `CH-*` com os TCs canônicos manuais/físicos/bloqueados por referência, e opcionalmente um preview local do Azure DevOps.
+
 ## Validar e testar
 
 ```bash
@@ -127,6 +139,7 @@ scripts/pipeline.py         runtime: start, submit, finalize, render, verify
 scripts/render.py           Markdown, HTML offline e catálogo de expansão
 scripts/workflow.py         intents em linguagem natural e aliases ftd-*
 scripts/benchmark.py        packs, comparação com baseline, reconciliação
+scripts/challenge.py        desafio pós-suíte opcional (CH-*), sem tocar a suíte canônica
 scripts/integrations/       preview do Azure DevOps Test Plans
 benchmarks/domains/         packs A–F: SaaS, logística, ERP, IoT, aeronáutica, API
 examples/                   exemplo sintético (schema 1.2)
