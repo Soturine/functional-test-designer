@@ -45,6 +45,8 @@ finalize    (runtime)  validação (8 gates) → estado canônico → HTML / JSO
 
 Cada estágio do modelo é um JSON enviado ao runtime. Um estágio inválido é rejeitado com todos os problemas de uma vez e nada é gravado. Depois de cada estágio o runtime escreve um `work-order.json` dizendo o que o próximo precisa contabilizar.
 
+Para um corpus novo ou não cacheado, `start` planeja por padrão uma tarefa de leitura/catalogação por fonte elegível (`reading-task-plan.json`), pensada para agentes leves em paralelo (Haiku, quando o host oferece), com concorrência limitada. O usuário pode pedir explicitamente sequencial, um número fixo de workers ou outro modelo (`--reading-strategy`, `--reading-model`, `--reading-concurrency`); o agente principal continua sendo o único a decidir domain model, claims, oracles e tudo posterior. Fontes com o mesmo digest em execuções anteriores sob a mesma raiz de artefatos são marcadas reaproveitáveis.
+
 ```bash
 python scripts/pipeline.py start --workspace <raiz> \
     --source "docs/requisitos.pdf=FUNCTIONAL_AUTHORITY" \
@@ -111,7 +113,19 @@ python scripts/challenge.py submit --run <run> --challenge-id campo-1 --file cha
 python scripts/challenge.py finalize --run <run> --challenge-id campo-1
 ```
 
-Arquivos Markdown de seed são inspiração, nunca autoridade: cada um recebe uma disposição honesta, e o modelo pode (e deve) ir além deles usando os atores, regras e evidências que a suíte já estabeleceu. Os novos casos usam o namespace `CH-*`, nunca `TC-*`, ficam em `<run>/challenges/<id>/` e nunca tocam `canonical-suite.json`: o digest canônico do pai é conferido a cada passo. `finalize` produz o Manual/Physical/Field Test Plan (`challenge-plan.md`), que reúne os novos `CH-*` com os TCs canônicos manuais/físicos/bloqueados por referência, e opcionalmente um preview local do Azure DevOps.
+Cada arquivo de seed é inspiração, nunca autoridade, e é dividido em itens endereçáveis (`qa-ideas.md#seed-001`, um por bullet); cada item recebe uma disposição honesta, e o modelo pode (e deve) ir além deles usando os atores, regras e evidências que a suíte já estabeleceu. Para fundamentar um passo em evidência real, `challenge.py lookup` busca um trecho delimitado no snapshot de evidências já gravado da execução (nunca relendo o projeto); só uma busca real conta em `runtime_targeted_lookups`. Os novos casos usam o namespace `CH-*`, nunca `TC-*`, seguem o estado `STARTED → SUBMITTED → FINALIZED` (sem reescrita: um erro se corrige com um novo `challenge-id`) e nunca tocam `canonical-suite.json`. `finalize` produz o Manual/Physical/Field Test Plan (`challenge-plan.md`), que reúne os novos `CH-*` com os TCs canônicos manuais/físicos/bloqueados por referência.
+
+## Exportação para Azure DevOps (`ftd-azure`)
+
+`ftd-azure` projeta os TCs canônicos de uma execução finalizada, mais as execuções de desafio já finalizadas, em um pacote organizado requisito a requisito:
+
+```bash
+python scripts/azure_export.py prepare --run <run>
+python scripts/azure_export.py preview --run <run> --project P --plan L --suite S
+python scripts/azure_export.py publish --run <run> --approved
+```
+
+`scripts/azure_export.py` só agrega estado da FTD (execução + desafios finalizados, chaves de exportação, relação requisito↔caso); `scripts/integrations/azure_devops.py` continua sendo o único dono do mapeamento, da colocação em Suites, do diff create/update/unchanged/conflict e da publicação. Um caso `CH-017` nunca vira `TC-244`: só a chave de exportação (`challenge:<id>:CH-017`) o identifica como Test Case no Azure, e chaves distintas por execução evitam colisão entre desafios que reutilizem `CH-001`. `ftd-mcp` (só canônico, uma suíte) continua funcionando sem mudanças.
 
 ## Validar e testar
 
@@ -140,7 +154,8 @@ scripts/render.py           Markdown, HTML offline e catálogo de expansão
 scripts/workflow.py         intents em linguagem natural e aliases ftd-*
 scripts/benchmark.py        packs, comparação com baseline, reconciliação
 scripts/challenge.py        desafio pós-suíte opcional (CH-*), sem tocar a suíte canônica
-scripts/integrations/       preview do Azure DevOps Test Plans
+scripts/azure_export.py     agregação FTD (execução + desafios) para exportação ao Azure
+scripts/integrations/       único dono do mapeamento, Suites, diff e publicação no Azure DevOps
 benchmarks/domains/         packs A–F: SaaS, logística, ERP, IoT, aeronáutica, API
 examples/                   exemplo sintético (schema 1.2)
 tests/                      testes de regressão
