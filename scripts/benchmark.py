@@ -173,6 +173,7 @@ def run_pack(pack: dict[str, Any], root: Path, formats: tuple[str, ...] = ("HTML
     started = pipeline.start_run(
         workspace=workspace, sources_selected=selected, artifact_root=root / "artifacts",
         run_id=pack["name"], locale=pack.get("locale"), request_text=pack.get("request", ""),
+        reading={"strategy": "SEQUENTIAL"},  # packs replay recorded stages; no reader workers
     )
     run_dir = Path(started["run_dir"])
     for stage in ("design", "expansion", "procedures"):

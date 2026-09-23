@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import ast
 import glob
+import json
 import re
 from pathlib import Path
 from typing import Any, Iterable
@@ -215,8 +216,23 @@ def read_text(path: Path) -> tuple[str | None, str, str]:
     return None, "UNSUPPORTED", f"unsupported format {suffix}"
 
 
+def _extract(path: Path, digest: str, text_cache: Path | None) -> tuple[str | None, str, str]:
+    """Text extraction keyed by content digest: an unchanged source (e.g. a large PDF)
+    is never re-extracted for a new run; a changed one always is."""
+    cached = text_cache / f"{digest}.json" if text_cache else None
+    if cached and cached.is_file():
+        entry = json.loads(cached.read_text(encoding="utf-8"))
+        return entry["text"], entry["status"], entry["reason"]
+    text, status, reason = read_text(path)
+    if cached and status == "READ":
+        cached.parent.mkdir(parents=True, exist_ok=True)
+        cached.write_text(json.dumps({"text": text, "status": status, "reason": reason}), encoding="utf-8")
+    return text, status, reason
+
+
 def build_source_records(
     workspace: Path, roles: dict[str, str], transcriptions: dict[str, Path] | None = None,
+    text_cache: Path | None = None,
 ) -> tuple[list[dict[str, Any]], dict[str, str]]:
     """One record per physical source plus the readable text of every source.
 
@@ -228,10 +244,11 @@ def build_source_records(
     texts: dict[str, str] = {}
     for relative, role in sorted(roles.items()):
         path = (Path(workspace) / relative).resolve()
-        text, status, reason = read_text(path)
+        digest = file_digest(path)
+        text, status, reason = _extract(path, digest, text_cache)
         record: dict[str, Any] = {
             "path": relative, "role": role, "authority": ROLES[role], "status": status,
-            "reason": reason, "content_digest": file_digest(path),
+            "reason": reason, "content_digest": digest,
             "size_bytes": path.stat().st_size,
         }
         if text is None and relative in transcriptions:
@@ -259,48 +276,6 @@ def build_source_records(
     if not any(item["role"] == "FUNCTIONAL_AUTHORITY" and item["path"] in texts for item in records):
         raise ScopeError("no selected Functional Authority source contains readable text")
     return records, texts
-
-
-# --- reading task plan (default multi-agent source ingestion) -----------------------
-
-READING_DISPOSITIONS = ("READ_AND_CATALOGED", "UNSUPPORTED", "FAILED_TO_READ", "EXCLUDED_WITH_REASON")
-
-
-def plan_reading_tasks(
-    records: list[dict[str, Any]], *, strategy: str | None = None, worker_model: str | None = None,
-    concurrency: int | None = None, prior_digests: dict[str, str] | None = None,
-) -> dict[str, Any]:
-    """The deterministic half of default multi-agent source ingestion.
-
-    One logical reading/cataloging task per eligible source is the default; an
-    explicit user preference (sequential, a fixed worker count, one worker per file,
-    a named model) always overrides it. This function only plans the work and records
-    an honest disposition for every selected source — it never reads or reasons about
-    content itself; a host agent executes the tasks (see SKILL.md).
-    """
-    prior_digests = prior_digests or {}
-    strategy = strategy or "MULTI_AGENT_PER_SOURCE"
-    tasks = []
-    for record in records:
-        eligible = record["status"] in {"READ", "TRANSCRIBED"}
-        if eligible:
-            disposition = "READ_AND_CATALOGED"
-        elif record["status"] == "METADATA_ONLY":
-            disposition = "UNSUPPORTED"
-        elif record["status"] in {"NEEDS_TRANSCRIPTION", "FAILED"}:
-            disposition = "FAILED_TO_READ"
-        else:
-            disposition = "EXCLUDED_WITH_REASON"
-        tasks.append({
-            "path": record["path"], "role": record["role"], "disposition": disposition,
-            "reused_catalog": bool(eligible and prior_digests.get(record["path"]) == record["content_digest"]),
-        })
-    return {
-        "strategy": strategy, "worker_model": worker_model if strategy != "SEQUENTIAL" else None,
-        "concurrency": concurrency, "tasks": tasks,
-        "sources_selected": len(records), "sources_eligible": sum(t["disposition"] == "READ_AND_CATALOGED" for t in tasks),
-        "sources_reused": sum(t["reused_catalog"] for t in tasks),
-    }
 
 
 # --- authority identifiers ----------------------------------------------------------

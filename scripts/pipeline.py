@@ -40,6 +40,7 @@ from common import (  # noqa: E402
 import design as design_stage  # noqa: E402
 import expansion as expansion_stage  # noqa: E402
 import procedures as procedure_stage  # noqa: E402
+import reading as reading_stage  # noqa: E402
 import sources  # noqa: E402
 import validation  # noqa: E402
 
@@ -172,35 +173,13 @@ def _result(run_dir: Path, stage: str) -> dict[str, Any]:
 
 # --- start: scope lock and semantic extraction ---------------------------------------
 
-def _prior_source_digests(artifact_root: Path, run_id: str) -> dict[str, str]:
-    """Path -> digest already catalogued by an earlier run sharing this artifact root.
-
-    This is the reuse half of default multi-agent source ingestion: an unchanged
-    source does not need a host agent to read and catalog it again. It only reuses
-    the deterministic facts this runtime itself persisted, never a semantic judgment.
-    """
-    runs_dir = Path(artifact_root).resolve() / ".ftd" / "runs"
-    digests: dict[str, str] = {}
-    if not runs_dir.is_dir():
-        return digests
-    for run_path in sorted(runs_dir.iterdir()):
-        if run_path.name == run_id or not (run_path / "sources.json").is_file():
-            continue
-        try:
-            prior = read_json(run_path / "sources.json")
-        except Exception:
-            continue
-        for record in prior.get("records", []):
-            digests.setdefault(record["path"], record["content_digest"])
-    return digests
-
-
 def start_run(
     *, workspace: Path, sources_selected: list[dict[str, Any]], artifact_root: Path, run_id: str,
     locale: str | None = None, request_text: str = "", transcriptions: dict[str, Any] | None = None,
     id_pattern: str | None = None, allow_source_root: bool = False, formats: Any = None,
     diagnostics: bool = False, source_order: list[list[str]] | None = None,
     clarifications: list[dict[str, Any]] | None = None, reading: dict[str, Any] | None = None,
+    normalized_request: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Lock scope, read sources, index authority and issue the design work order.
 
@@ -212,7 +191,11 @@ def start_run(
     (default) | "SEQUENTIAL" | "MULTI_AGENT_BATCHED", "worker_model": "haiku" | ...,
     "concurrency": int}. This runtime never spawns agents itself; it only plans the
     work deterministically (one task per eligible source by default) and records what
-    was requested so the invoking agent can follow it. See sources.plan_reading_tasks.
+    was requested so the invoking agent can follow it. See reading.py.
+
+    `normalized_request` is the host's semantic reading of the instructions file merged with
+    explicit overrides (see instructions.py). It is persisted as normalized-request.json
+    and its guidance/seeds reach every model work order — as guidance, never authority.
     """
     began = now()
     requested = _normalize_formats(formats, diagnostics)
@@ -230,7 +213,9 @@ def start_run(
         if outside:
             raise sources.ScopeError("source order names sources outside the selection: " + ", ".join(outside))
     transcripts = {str(key): Path(value) for key, value in (transcriptions or {}).items()}
-    records, texts = sources.build_source_records(workspace, selection["roles"], transcripts)
+    records, texts = sources.build_source_records(
+        workspace, selection["roles"], transcripts, text_cache=root / ".ftd" / "text-cache",
+    )
     events = []
     if (run_dir / "run.json").is_file():
         previous = read_json(run_dir / "sources.json")
@@ -251,7 +236,7 @@ def start_run(
     text_dir = run_dir / "authority-text"
     for record in records:
         if record["role"] == "FUNCTIONAL_AUTHORITY":
-            name = re.sub(r"[^A-Za-z0-9_.-]+", "_", record["path"]) + ".txt"
+            name = reading_stage.source_key(record["path"]) + ".txt"
             (text_dir / name).parent.mkdir(parents=True, exist_ok=True)
             (text_dir / name).write_text(texts[record["path"]], encoding="utf-8")
     # Every eligible source's text is snapshotted once, run-scoped, so later stages and
@@ -263,18 +248,18 @@ def start_run(
         entry = {"path": record["path"], "role": record["role"], "status": record["status"],
                  "content_digest": record["content_digest"], "text_ref": None, "line_count": None}
         if text is not None:
-            name = re.sub(r"[^A-Za-z0-9_.-]+", "_", record["path"]) + ".txt"
+            name = reading_stage.source_key(record["path"]) + ".txt"
             evidence_dir.mkdir(parents=True, exist_ok=True)
             (evidence_dir / name).write_text(text, encoding="utf-8")
             entry.update({"text_ref": f"text/{name}", "line_count": len(text.splitlines())})
         catalog.append(entry)
     write_json(run_dir / "evidence" / "source-catalog.json", {"sources": catalog})
-    reading = dict(reading or {})
-    reading_plan = sources.plan_reading_tasks(
-        records, strategy=reading.get("strategy"), worker_model=reading.get("worker_model"),
-        concurrency=reading.get("concurrency"), prior_digests=_prior_source_digests(root, run_id),
+    reading_request = dict(reading or {})
+    reading_plan = reading_stage.plan(
+        records, root, run_dir, strategy=reading_request.get("strategy"),
+        worker_model=reading_request.get("worker_model"), concurrency=reading_request.get("concurrency"),
     )
-    write_json(run_dir / "reading-task-plan.json", reading_plan)
+    reading_states = reading_stage.summary(reading_plan)
     run = {
         "run_id": run_id, "generator": GENERATOR, "workspace": str(workspace),
         "artifact_root": str(root), "created_at": began, "request_text": request_text,
@@ -286,6 +271,10 @@ def start_run(
         **locale_info,
     }
     write_json(run_dir / "run.json", run)
+    if normalized_request is not None:
+        write_json(run_dir / "normalized-request.json", normalized_request)
+    elif (run_dir / "normalized-request.json").is_file():
+        (run_dir / "normalized-request.json").unlink()
     write_json(run_dir / "sources.json", {
         "scope": {key: selection[key] for key in ("selected_scope_roots", "resolved_scope_paths")},
         "records": records, "authority_index": authority_index, "test_assets": test_assets,
@@ -295,13 +284,53 @@ def start_run(
             files=[])
     _record(run_dir, "SEMANTIC_EXTRACTION", started_at=began, inputs=[r["content_digest"] for r in records],
             outputs={"authority_index": authority_index, "test_assets": test_assets, **locale_info})
-    _save_state(run_dir, status="IN_PROGRESS", next_stage="design", events=events,
+    if reading_states["PLANNED"] == 0:
+        # Nothing left for readers (sequential, or every catalog reused): reconcile now.
+        if reading_plan["strategy"] != "SEQUENTIAL":
+            _reconcile_and_bind(run_dir, root)
+        first = "design"
+    else:
+        first = "reading"
+    _save_state(run_dir, status="IN_PROGRESS", next_stage=first, events=events,
                 rejections={}, stage_seconds={}, stage_started_at=now())
     order = _work_order(run_dir)
     return {"run_dir": str(run_dir), "resumed": False, "work_order": str(order), **locale_info,
             "authority_identifiers": len(authority_index), "test_assets": len(test_assets),
-            "reading_task_plan": str(run_dir / "reading-task-plan.json"), "reading": run["reading"],
-            "sources_reused": reading_plan["sources_reused"]}
+            "reading_task_plan": str(run_dir / "reading" / "task-plan.json"), "reading": run["reading"],
+            "reading_states": reading_states, "next_stage": first}
+
+
+# --- reading: reader results and reconciliation ------------------------------------------
+
+def _reconcile_and_bind(run_dir: Path, artifact_root: Path) -> dict[str, Any]:
+    result = reading_stage.reconcile(run_dir, artifact_root)
+    # Bound into the TEST_DESIGN manifest record, so Design provably ran on this catalog.
+    write_json(run_dir / "stages" / "reading.reconciliation.json", result)
+    return result
+
+
+def submit_reading(run_dir: Path, results: list[dict[str, Any]]) -> dict[str, Any]:
+    run_dir = Path(run_dir).resolve()
+    state = _state(run_dir)
+    if state.get("next_stage") != "reading":
+        raise IntegrityError(f"reader results are not expected now (next: {state.get('next_stage')})")
+    outcome = reading_stage.submit(run_dir, results)
+    return {**outcome, "next_stage": "reading",
+            "reconcile": f"python scripts/pipeline.py reading-reconcile --run \"{run_dir}\""}
+
+
+def reconcile_reading(run_dir: Path) -> dict[str, Any]:
+    run_dir = Path(run_dir).resolve()
+    run, _ = _load(run_dir)
+    state = _state(run_dir)
+    if state.get("next_stage") != "reading":
+        raise IntegrityError(f"reading is not the next stage (next: {state.get('next_stage')})")
+    result = _reconcile_and_bind(run_dir, Path(run["artifact_root"]))
+    _save_state(run_dir, next_stage="design", stage_started_at=now())
+    order = _work_order(run_dir)
+    return {"reconciled": True, "next_stage": "design", "work_order": str(order),
+            "states": result["states"], "identifier_conflicts": len(result["identifier_conflicts"]),
+            "worker_failures": len(result["worker_failures"])}
 
 
 # --- model stages ------------------------------------------------------------------------
@@ -339,7 +368,7 @@ def submit_stage(run_dir: Path, stage: str, payload: dict[str, Any]) -> dict[str
     texts = {}
     for record in records:
         if record["role"] == "FUNCTIONAL_AUTHORITY":
-            name = re.sub(r"[^A-Za-z0-9_.-]+", "_", record["path"]) + ".txt"
+            name = reading_stage.source_key(record["path"]) + ".txt"
             texts[record["path"]] = (run_dir / "authority-text" / name).read_text(encoding="utf-8")
     base = {"locale": run["output_locale"], "source_records": records,
             "authority_index": source_state["authority_index"], "authority_texts": list(texts.values())}
@@ -380,8 +409,12 @@ def submit_stage(run_dir: Path, stage: str, payload: dict[str, Any]) -> dict[str
     write_json(payload_path, payload)
     write_json(result_path, result)
     started = state.get("stage_started_at") or now()
+    bound = [payload_path, result_path]
+    reconciliation = stages_dir / "reading.reconciliation.json"
+    if stage == "design" and reconciliation.is_file():
+        bound.append(reconciliation)
     _record(run_dir, MODEL_STAGES[stage], started_at=started, inputs=payload, outputs=result,
-            files=[payload_path, result_path])
+            files=bound)
     following = {"design": "expansion", "expansion": "procedures", "procedures": "finalize"}[stage]
     seconds = state.get("stage_seconds", {})
     seconds[stage] = round(time.time() - _epoch(started), 3)
@@ -880,8 +913,13 @@ def status(run_dir: Path) -> dict[str, Any]:
 # --- work orders -------------------------------------------------------------------------
 
 STAGE_GUIDE = {
+    "reading": [
+        "Spawn one lightweight source-reader task per PLANNED source in `reading_tasks` (prefer the lightweight model this host offers, e.g. Haiku on Claude), honoring `concurrency` as an upper bound and any explicit user preference recorded in `reading`.",
+        "Give each reader only its own source (the evidence snapshot path) and the catalog contract; readers catalog facts — headings, identifiers with their stated titles, actors, entities, states, operations, integrations, config_facts, candidate_rules, flows, test_assets, excerpts with line spans, references to other selected sources, ambiguities. They never decide claims, oracles, Test Cases, Findings, Questions, coverage or authority.",
+        "Submit every reader result (CATALOGED, or FAILED with an error — never omit a source) with `pipeline.py reading-submit`, then run `pipeline.py reading-reconcile`. If sub-agents are unavailable, restart the run with --reading-strategy SEQUENTIAL and read the sources yourself; say which mode actually ran.",
+    ],
     "design": [
-        "Read every selected source yourself (authority text is also in authority-text/). You own the QA reasoning; the runtime only validates.",
+        "Use the reconciled reader catalog (reading/source-catalog.json and reconciliation.json) as your index of the corpus, then read what you need from the evidence snapshots or authority-text/. Conflicts listed in reconciliation are for you to judge — nothing was majority-voted. You own the QA reasoning; the runtime only validates.",
         "Build a lightweight domain_model from the sources: actors, entities, states, operations, invariants, permissions, integrations, events, dependencies, observables, failure_surfaces. Use the project's own vocabulary.",
         "Create one requirement per authority identifier or unidentified requirement. Keep source_identifier/source_title exactly as the authority states them (see authority_identifiers).",
         "Decompose each requirement AND each business rule into atomic claims: one independently diagnosable obligation each. Transversal rules (uniqueness, audit, roles, state machines, deduplication, idempotency, history/KPIs, isolation, lifecycle) need their own claims.",
@@ -899,6 +937,7 @@ STAGE_GUIDE = {
     ],
     "procedures": [
         "Write an executable procedure for every Test Case: preconditions (real starting context), test_data, steps (action + observable expected_result), postconditions/cleanup when relevant.",
+        "Write each step once, for two readers: a tester who has never seen the product and an agent that will later translate it into UI/API/load automation. Make clear, when evidence supports it, WHO acts (actor/session), WHERE (execution surface), WHAT (one atomic action), on which TARGET, with which DATA (semantic fixture), and the EXPECTED observable result. Never invent selectors, test ids, labels, screens, routes, endpoints, credentials, columns, device commands, messages or timeouts — declare an unknown instead. Keep canonical steps tool-agnostic (no Playwright/TestSprite/k6 syntax).",
         "Use semantic fixtures (ROLE_A, ENTITY_ACTIVE_A, ACCOUNT_B) with clear properties when exact values are unnecessary; use real values only when evidence provides them. Never invent routes, labels or ids.",
         "One step only when one action completes the failure domain (explain single_step_reason); never compress a multi-action flow.",
         "The oracle_step (default: last) must observe the designed expected result.",
@@ -916,7 +955,10 @@ def _work_order(run_dir: Path) -> Path:
         "run_dir": str(run_dir), "next_stage": stage, "output_locale": run["output_locale"],
         "locale_source": run["locale_source"], "instructions": STAGE_GUIDE.get(stage, []),
         "submit": f"python scripts/pipeline.py submit --run \"{run_dir}\" --stage {stage} --file <payload.json>"
-        if stage in MODEL_STAGES else f"python scripts/pipeline.py finalize --run \"{run_dir}\"",
+        if stage in MODEL_STAGES else (
+            f"python scripts/pipeline.py reading-submit --run \"{run_dir}\" --file <reader-result.json> (repeatable), "
+            f"then python scripts/pipeline.py reading-reconcile --run \"{run_dir}\""
+            if stage == "reading" else f"python scripts/pipeline.py finalize --run \"{run_dir}\""),
         "contract": "references/stage-contracts.md",
         "requested_formats": run.get("formats"),
     }
@@ -924,8 +966,34 @@ def _work_order(run_dir: Path) -> Path:
         order["source_order"] = run["source_order"]
     if run.get("clarifications"):
         order["user_clarifications"] = run["clarifications"]
+    if stage in MODEL_STAGES and (run_dir / "normalized-request.json").is_file():
+        normalized = read_json(run_dir / "normalized-request.json")
+        order["user_guidance"] = {
+            "guidance": normalized.get("guidance", []), "seeds": normalized.get("seeds", []),
+            "note": "From the instructions file: seeds and guidance provoke reasoning and never limit it. "
+                    "They are not authority — a seed the selected authority/evidence does not support "
+                    "is never promoted to a normative Test Case, Finding or oracle.",
+        }
+    if stage == "reading":
+        task_plan = read_json(run_dir / "reading" / "task-plan.json")
+        catalog = {e["path"]: e for e in read_json(run_dir / "evidence" / "source-catalog.json")["sources"]}
+        order["reading"] = {k: task_plan[k] for k in ("strategy", "worker_model", "concurrency", "reader_role")}
+        order["reading_tasks"] = [{
+            **{k: t[k] for k in ("source_key", "path", "role", "content_digest")},
+            "snapshot": str(run_dir / "evidence" / catalog[t["path"]]["text_ref"]) if catalog[t["path"]]["text_ref"] else None,
+            "line_count": catalog[t["path"]]["line_count"],
+        } for t in reading_stage.pending(task_plan)]
+        order["reader_result_contract"] = {
+            "fields": sorted(reading_stage.RESULT_FIELDS), "status": ["CATALOGED", "FAILED"],
+            "catalog_sections": sorted(reading_stage.CATALOG_FIELDS),
+            "forbidden_catalog_sections": sorted(reading_stage.FORBIDDEN_FIELDS),
+            "reader": {"role": reading_stage.READER_ROLE, "model": "the model that actually ran"},
+        }
     if stage == "design":
         order["sources"] = [{k: r[k] for k in ("path", "role", "status", "reason")} for r in source_state["records"]]
+        if (run_dir / "reading" / "reconciliation.json").is_file():
+            order["reader_catalog"] = str(run_dir / "reading" / "source-catalog.json")
+            order["reading_reconciliation"] = str(run_dir / "reading" / "reconciliation.json")
         order["authority_identifiers"] = source_state["authority_index"]
         order["domain_dimensions"] = list(design_stage.DOMAIN_DIMENSIONS)
     elif stage == "expansion":
@@ -980,7 +1048,7 @@ def _parse_mapping(values: list[str], label: str) -> list[tuple[str, str]]:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     commands = parser.add_subparsers(dest="command", required=True)
-    start = commands.add_parser("start", help="lock scope, read sources and issue the design work order")
+    start = commands.add_parser("start", help="lock scope, plan source readers and issue the first work order")
     start.add_argument("--workspace", required=True, type=Path)
     start.add_argument("--source", action="append", required=True, help="SELECTOR=ROLE (repeatable)")
     start.add_argument("--artifact-root", required=True, type=Path)
@@ -1008,9 +1076,12 @@ def main(argv: list[str] | None = None) -> int:
     again = commands.add_parser("render", help="re-render a validated run from canonical state")
     again.add_argument("--run", required=True, type=Path)
     again.add_argument("--formats", default=",".join(DEFAULT_FORMATS))
-    for name in ("status", "verify"):
+    for name in ("status", "verify", "reading-reconcile"):
         sub = commands.add_parser(name)
         sub.add_argument("--run", required=True, type=Path)
+    reader = commands.add_parser("reading-submit", help="record source-reader results (repeatable --file)")
+    reader.add_argument("--run", required=True, type=Path)
+    reader.add_argument("--file", required=True, type=Path, action="append")
     args = parser.parse_args(argv)
     try:
         if args.command == "start":
@@ -1034,6 +1105,11 @@ def main(argv: list[str] | None = None) -> int:
             result.pop("files", None)
         elif args.command == "status":
             result = status(args.run)
+        elif args.command == "reading-submit":
+            loaded = [read_json(path) for path in args.file]
+            result = submit_reading(args.run, [r for item in loaded for r in (item.get("results") if "results" in item else [item])])
+        elif args.command == "reading-reconcile":
+            result = reconcile_reading(args.run)
         else:
             verify_manifest(args.run)
             result = {"verified": True}
