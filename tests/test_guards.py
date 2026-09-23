@@ -191,6 +191,18 @@ class ProcedureStageInvariantTests(unittest.TestCase):
         merged = pipeline.merge_payloads([{"procedures": all_items[:4]}, {"procedures": all_items[4:]}])
         self.assertTrue(pipeline.submit_stage(run.run_dir, "procedures", merged)["recorded"])
 
+    def test_finalize_reports_procedure_performance_diagnostics(self) -> None:
+        run = PackRun("api-refunds")
+        self.addCleanup(run.close)
+        run.through("procedures")
+        pipeline.finalize_run(run.run_dir)
+        metrics = json.loads((run.run_dir / "run-metrics.json").read_text(encoding="utf-8"))
+        for key in ("procedure_generation_seconds", "targeted_source_lookups", "procedures_generated",
+                    "average_procedure_generation_seconds", "procedures_requiring_additional_evidence"):
+            self.assertIsNotNone(metrics[key], key)
+        self.assertEqual(0, metrics["runtime_source_rereads"])
+        self.assertGreaterEqual(metrics["targeted_source_lookups"], metrics["distinct_evidence_sources_cited"])
+
     def test_navigation_evidence_does_not_alter_the_oracle(self) -> None:
         def navigate(pack):
             item = procedure(pack, "T1")

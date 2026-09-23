@@ -748,7 +748,8 @@ def finalize_run(run_dir: Path, formats: Any = None, baseline: dict[str, Any] | 
             outputs={"fingerprint": document["semantic_fingerprint"]})
     _bind(run_dir, "canonical", {"file": canonical_path.name, "sha256": file_digest(canonical_path)})
     metrics = validation.suite_metrics(document["index"], document["cases"], document["questions"]["questions"])
-    procedure_metrics = _result(run_dir, "procedures").get("metrics", {})
+    # Recomputed from the recorded procedures so metric additions never require resubmission.
+    procedure_metrics = procedure_stage.procedure_metrics(_result(run_dir, "procedures").get("procedures", {}))
     procedure_seconds = state.get("stage_seconds", {}).get("procedures")
     metrics.update({
         **procedure_metrics,
@@ -759,7 +760,6 @@ def finalize_run(run_dir: Path, formats: Any = None, baseline: dict[str, Any] | 
         "runtime_source_reads": len(source_state["records"]),
         "runtime_source_rereads": 0,
         "source_integrity_checks": state.get("integrity_checks", 0),
-        "targeted_source_lookups": None,
     })
     metrics.update({"stage_seconds": state.get("stage_seconds", {}), "stage_rejections": state.get("rejections", {}),
                     "authority_identifiers": len(source_state["authority_index"]),

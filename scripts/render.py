@@ -161,7 +161,8 @@ def _bullets(values: list[str], none: str) -> str:
 
 def _mermaid_label(value: Any, width: int = 60) -> str:
     text = re.sub(r"\s+", " ", str(value)).strip().replace("&", " and ")
-    text = re.sub(r'["`\\\[\]{}|<>]', " ", text)
+    text = re.sub(r'["`]', "", text)  # quoting marks vanish, so a quoted label keeps its punctuation
+    text = re.sub(r'[\\\[\]{}|<>]', " ", text)
     text = re.sub(r"[\x00-\x1f\x7f]", " ", text)
     words = re.sub(r"\s+", " ", text).strip().split() or ["-"]
     lines, current = [], []

@@ -294,6 +294,9 @@ def procedure_metrics(procedures: dict[str, dict[str, Any]]) -> dict[str, Any]:
             any(u["kind"] in PATH_UNKNOWNS for u in item["unknowns"]) for item in procedures.values()
         ),
         "distinct_evidence_sources_cited": len({ref.get("source") for item in procedures.values() for ref in item["evidence_refs"]}),
+        # Each distinct (source, section) pair is one targeted lookup shared by every procedure citing it.
+        "targeted_source_lookups": len({(ref.get("source"), ref.get("reference")) for item in procedures.values()
+                                        for ref in item["evidence_refs"]}),
         "repeated_step_template_ratio": round(repeated / len(actions), 3) if actions else 0.0,
     }
 
