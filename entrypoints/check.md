@@ -2,4 +2,4 @@
 
 Intent: read-only audit of an existing canonical run. Accept natural focus such as procedure, automation, coverage, outputs, or everything. Never silently redesign.
 
-This command is an optional alias; ordinary language reaches the same intent.
+This command is an optional alias; ordinary language reaches the same intent through the host's `resolved_intent`.

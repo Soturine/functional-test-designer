@@ -5,3 +5,4 @@ __pycache__/
 /diagnostics/
 *.local.*
 /ui-preview/
+/ftd-output/

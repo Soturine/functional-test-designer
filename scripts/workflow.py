@@ -1,33 +1,56 @@
 #!/usr/bin/env python3
-"""Shared intent dispatcher behind natural language and the optional ftd-* aliases.
+"""Exact-intent dispatcher behind the public ftd-* commands and natural language.
 
-ftd-gen starts the staged pipeline from selected sources; ftd-clarify ranks open
-Questions; ftd-check audits a published suite read-only; ftd-render re-renders from
-canonical state; ftd-mcp previews a Test Management export and writes nothing
-without explicit approval.
+Public commands: /ftd-gen, /ftd-chaos, /ftd-azure, /ftd-clarify, /ftd-check, /ftd-render.
+
+Natural language is understood by the host model, not here: the host resolves what the
+user means in context (a new generation vs. challenging an already-finalized suite vs.
+preparing Azure input) and hands off `resolved_intent`. This module only recognizes
+exact aliases, validates arguments deterministically and dispatches. It deliberately
+holds no phrase catalog — it never tries to enumerate human language.
+
+CLI (the explicit form of the three primary commands):
+
+  workflow.py gen   [--input-file PATH] [--output json,md,html] [--diagnostics]
+                    [--output-dir DIR] [--locale L] [--normalized FILE] [--run-id ID]
+  workflow.py chaos --run RUN [--input-file PATH] [--output json,md,html]
+                    [--chaos-id ID] [--normalized FILE] [--focus TEXT]
+  workflow.py azure --run RUN [--output json] [--chaos-id ID ...]
+
+`gen`/`chaos` with an instructions file (.md/.txt) are two-phase: without --normalized they print the
+normalization order (the file's text plus the handoff contract) for the host model;
+with --normalized they validate the host's request and start the run.
 """
 
 from __future__ import annotations
 
+import argparse
 import json
-import re
 import sys
+import time
 from copy import deepcopy
 from pathlib import Path
 from typing import Any, Iterable
 
 SCRIPT_DIR = Path(__file__).resolve().parent
+SKILL_ROOT = SCRIPT_DIR.parent
 if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
 import pipeline  # noqa: E402
 import challenge as challenge_stage  # noqa: E402
 import azure_export  # noqa: E402
-from integrations.azure_devops import build_preview, build_suite_mapping, write_fallback_export  # noqa: E402
+import instructions  # noqa: E402
+from common import read_json  # noqa: E402
 from procedures import audit_case  # noqa: E402
 
 
-INTENTS = ("ftd-gen", "ftd-clarify", "ftd-check", "ftd-render", "ftd-mcp", "ftd-challenge", "ftd-azure")
+INTENTS = ("ftd-gen", "ftd-chaos", "ftd-azure", "ftd-clarify", "ftd-check", "ftd-render")
+# Retired public names: they only explain where the behavior moved.
+RETIRED = {
+    "ftd-challenge": "ftd-challenge was renamed: use /ftd-chaos --run <run> [--input-file instructions.md]",
+    "ftd-mcp": "ftd-mcp was replaced: use /ftd-azure --run <run> --output json (local JSON; no live Azure)",
+}
 # Pre-v2.3 callers sent the whole semantic answer up front; that entry point is gone.
 LEGACY_REQUEST_FIELDS = {
     "source_items", "source_units", "opportunities", "risk_conditions", "use_case_flows",
@@ -36,67 +59,43 @@ LEGACY_REQUEST_FIELDS = {
 VALID_FOCI = {"everything", "procedure", "automation", "coverage", "outputs"}
 
 
-GENERATION_VERB = re.compile(
-    r"(?:generate|create|design|gere|gerar|crie|criar|genera|generar).*"
-    r"(?:test ?cases?|tcs|casos de (?:teste|prueba))"
-)
-# Ambiguous words like "physical device" or "real-world" also show up in ordinary
-# generation requests ("generate test cases for this physical device"); a clear
-# generation verb always wins over those. Challenge phrasing must unambiguously name
-# challenging an already-generated/finalized suite, not merely mention a domain.
-def normalize_intent(request: str) -> str:
-    text = " ".join(request.strip().casefold().split())
-    alias = (text.split(maxsplit=1)[0] if text else "").lstrip("/$")
-    if alias in INTENTS:
+class IntentUnresolved(ValueError):
+    """No exact alias and no host-resolved intent: the host model must decide."""
+
+
+def exact_alias(request_text: str) -> str | None:
+    """`/ftd-gen ...`, `$ftd-gen ...` or `ftd-gen ...` — only the leading token, exactly."""
+    token = request_text.strip().split(maxsplit=1)[0] if request_text.strip() else ""
+    alias = token.lstrip("/$").casefold()
+    if alias in RETIRED:
+        raise ValueError(RETIRED[alias])
+    return alias if alias in INTENTS else None
+
+
+def resolve_intent(request_text: str = "", resolved_intent: str | None = None) -> str:
+    """An exact alias always wins; otherwise the host's semantic decision is validated.
+    Nothing here interprets free text."""
+    alias = exact_alias(request_text)
+    if alias:
         return alias
-    if GENERATION_VERB.search(text):
-        return "ftd-gen"
-    # ftd-azure's phrases are specific enough (package/input/grouping language) that they
-    # never collide with ftd-mcp's own narrower, backward-compatible phrasing below.
-    signals = (
-        ("ftd-challenge", (
-            "challenge the finalized", "challenge the final", "challenge this finalized suite",
-            "challenge this final suite", "challenge the suite", "challenge this suite",
-            "post-suite challenge", "post suite challenge",
-            "desafie a suíte finalizada", "desafie a suíte final", "desafie a suíte já gerada",
-        )),
-        ("ftd-azure", ("azure export package", "azure devops package", "azure package",
-                       "prepare this run for azure", "prepare this finalized", "azure devops input",
-                       "test plans input", "grouped by requirement")),
-        ("ftd-mcp", ("azure devops", "test plans", "preview before writing",
-                    "prepare the last suite", "mcp preview")),
-        ("ftd-render", ("render", "renderize", "last run as", "última execução como")),
-        ("ftd-check", ("audit", "check", "audite", "verifique se", "executable by")),
-        ("ftd-clarify", ("ask me", "important questions", "pergunte", "ambiguous", "ambígu")),
-        ("ftd-gen", ("generate test cases", "generate tcs", "gere os test cases", "gere tcs", "gerar casos de teste")),
+    if resolved_intent:
+        intent = str(resolved_intent).strip().lstrip("/$").casefold()
+        if intent in RETIRED:
+            raise ValueError(RETIRED[intent])
+        if intent not in INTENTS:
+            raise ValueError(f"resolved_intent {resolved_intent!r} is not one of {list(INTENTS)}")
+        return intent
+    raise IntentUnresolved(
+        "no exact ftd-* alias in the request; the host model must resolve the intent semantically "
+        f"(from the request and the current run state) and pass resolved_intent, one of {list(INTENTS)}"
     )
-    for intent, phrases in signals:
-        if any(phrase in text for phrase in phrases):
-            return intent
-    raise ValueError("Could not determine a functional-test-designer intent from the request")
 
 
-FORMAT_WORDS = {"HTML": r"\bhtml\b", "JSON": r"\bjson\b", "MARKDOWN": r"\b(?:markdown|md)\b",
-                "OPERATIONAL": r"\boperational\b|\bcat[aá]logo operacional\b"}
-DIAGNOSTIC_WORDS = r"\bdiagnostics?\b|\bdiagn[oó]sticos?\b"
-
-
-def requested_formats(text: str) -> tuple[list[str] | None, bool]:
-    """Formats and the diagnostics option stated in a natural request, if any."""
-    lowered = text.casefold()
-    formats = [name for name, pattern in FORMAT_WORDS.items() if re.search(pattern, lowered)]
-    return (formats or None), bool(re.search(DIAGNOSTIC_WORDS, lowered))
-
-
-def dispatch_request(request_text: str, **request: Any) -> Any:
-    """Natural language and command aliases enter the exact same dispatcher."""
+def dispatch_request(request_text: str, resolved_intent: str | None = None, **request: Any) -> Any:
+    """Natural language and command aliases enter the exact same dispatcher. Formats come
+    from explicit arguments (`output`/`formats`), never from sniffing the free text."""
     request.setdefault("request_text", request_text)
-    formats, diagnostics = requested_formats(request_text)
-    if formats and "formats" not in request:
-        request["formats"] = formats
-    if diagnostics and "diagnostics" not in request and "diagnostic" not in request:
-        request["diagnostics"] = True
-    return dispatch(normalize_intent(request_text), **request)
+    return dispatch(resolve_intent(request_text, resolved_intent), **request)
 
 
 def selected_sources(request: dict[str, Any]) -> list[dict[str, Any]]:
@@ -133,7 +132,97 @@ def _run_dir(request: dict[str, Any]) -> Path:
     return Path(request["canonical_path"]).parent
 
 
+def _formats(request: dict[str, Any]) -> list[str] | None:
+    if request.get("output") is not None:
+        return instructions.parse_output(request["output"])
+    return request.get("formats")
+
+
+# --- /ftd-gen ---------------------------------------------------------------------------
+
+def generate(
+    *, input_file: str | Path | None = None, normalized: dict[str, Any] | None = None,
+    explicit: dict[str, Any] | None = None, workspace: Path | None = None, run_id: str | None = None,
+) -> dict[str, Any]:
+    """/ftd-gen from the instructions file (instructions.md/.txt). Without `normalized`, return the normalization
+    order for the host model. With it, validate, merge precedence (explicit > file >
+    defaults), start the canonical pipeline and persist normalized-request.json."""
+    workspace = Path(workspace or Path.cwd()).resolve()
+    explicit = dict(explicit or {})
+    path = instructions.resolve_input_file(input_file, workspace=workspace, skill_root=SKILL_ROOT)
+    document = instructions.load_input(path)
+    if normalized is None:
+        return instructions.normalization_order(document, explicit, command="gen")
+    errors = instructions.validate_request(normalized, document)
+    if errors:
+        raise instructions.InstructionsError("; ".join(errors))
+    effective = instructions.effective_request(normalized, explicit, default_output_dir=workspace / "ftd-output")
+    scope_root, sources, order = instructions.resolve_sources(normalized, path)
+    record = {
+        "schema_version": instructions.SCHEMA_VERSION, "command": "ftd-gen",
+        "input_file": {"name": path.name, "digest": document["digest"]},
+        "sources": sources, "source_order": order, "effective": effective,
+        "guidance": normalized.get("guidance", []), "seeds": instructions.seed_items(normalized, path.name),
+        "ambiguities": normalized.get("ambiguities", []),
+    }
+    result = pipeline.start_run(
+        workspace=scope_root, sources_selected=sources, artifact_root=Path(effective["output_dir"]),
+        run_id=run_id or time.strftime("ftd-%Y%m%d-%H%M%S"), locale=effective["locale"],
+        request_text=document["text"], transcriptions=normalized.get("transcriptions"),
+        formats=effective["formats"], diagnostics=effective["diagnostics"], source_order=order or None,
+        reading=effective["reading"], normalized_request=record,
+    )
+    return {**result, "normalized_request": str(Path(result["run_dir"]) / "normalized-request.json"),
+            "provenance": effective["provenance"]}
+
+
+# --- /ftd-chaos -------------------------------------------------------------------------
+
+def _next_chaos_id(run_dir: Path) -> str:
+    existing = {p.name for p in (run_dir / "challenges").iterdir()} if (run_dir / "challenges").is_dir() else set()
+    number = 1
+    while f"chaos-{number:03d}" in existing:
+        number += 1
+    return f"chaos-{number:03d}"
+
+
+def chaos(
+    run_dir: Path, *, input_file: str | Path | None = None, normalized: dict[str, Any] | None = None,
+    output: Any = None, chaos_id: str | None = None, focus: str = "", seeds: list[Path] | None = None,
+    workspace: Path | None = None,
+) -> dict[str, Any]:
+    """/ftd-chaos over a frozen run. Seeds come from an explicit instructions file
+    (normalized by the host) or, when none is given, from the parent run's own saved
+    normalized request. Seeds are inspiration only; the canonical suite is never touched."""
+    run_dir = Path(run_dir).resolve()
+    seed_items, seed_source = [], None
+    if input_file is not None:
+        path = instructions.resolve_input_file(input_file, workspace=Path(workspace or Path.cwd()), skill_root=SKILL_ROOT)
+        document = instructions.load_input(path)
+        if normalized is None:
+            return instructions.normalization_order(document, {"output": output, "focus": focus}, command="chaos")
+        errors = instructions.validate_request(normalized, document)
+        if errors:
+            raise instructions.InstructionsError("; ".join(errors))
+        seed_items = instructions.seed_items(normalized, path.name)
+        seed_source = {"path": path.name, "digest": document["digest"]}
+    elif (run_dir / "normalized-request.json").is_file():
+        saved = read_json(run_dir / "normalized-request.json")
+        seed_items = saved.get("seeds", [])
+        seed_source = saved.get("input_file")
+    formats = instructions.parse_output(output) or list(instructions.DEFAULT_OUTPUT)
+    return challenge_stage.start_challenge(
+        run_dir, chaos_id or _next_chaos_id(run_dir), seeds=seeds, focus=focus,
+        seed_items=seed_items, seed_source=seed_source, formats=formats,
+    )
+
+
+# --- dispatch ---------------------------------------------------------------------------
+
 def dispatch(intent: str, **request: Any) -> Any:
+    intent = str(intent).lstrip("/$").casefold()
+    if intent in RETIRED:
+        raise ValueError(RETIRED[intent])
     if intent not in INTENTS:
         raise ValueError(f"Unknown workflow intent: {intent}")
     if intent == "ftd-gen":
@@ -143,17 +232,27 @@ def dispatch(intent: str, **request: Any) -> Any:
                 "v2.3 no longer accepts a pre-authored semantic request (" + ", ".join(legacy)
                 + "); start the pipeline from selected sources and submit stage outputs"
             )
+        if "input_file" in request or "normalized" in request:
+            return generate(
+                input_file=request.get("input_file"), normalized=request.get("normalized"),
+                explicit={"output": request.get("output"), "diagnostics": request.get("diagnostics"),
+                          "locale": request.get("locale"), "output_dir": request.get("output_dir"),
+                          **{f"reading_{k}": v for k, v in (request.get("reading") or {}).items()}},
+                workspace=request.get("workspace"), run_id=request.get("run_id"),
+            )
         missing = [key for key in ("workspace", "artifact_root", "run_id") if key not in request]
         if missing or not (request.get("sources") or request.get("selectors")):
-            raise ValueError("ftd-gen requires selected sources: " + ", ".join(missing or ["sources"]))
+            raise ValueError("ftd-gen requires an instructions file (input_file) or selected sources: "
+                             + ", ".join(missing or ["sources"]))
         return pipeline.start_run(
             workspace=request["workspace"], sources_selected=selected_sources(request),
             artifact_root=request["artifact_root"], run_id=request["run_id"],
             locale=request.get("locale"), request_text=request.get("request_text", ""),
             transcriptions=request.get("transcriptions"), id_pattern=request.get("id_pattern"),
-            formats=request.get("formats"),
+            formats=_formats(request),
             diagnostics=bool(request.get("diagnostics", request.get("diagnostic", False))),
             source_order=request.get("source_order"), clarifications=request.get("clarifications"),
+            reading=request.get("reading"),
         )
     if intent == "ftd-clarify":
         questions = request.get("questions")
@@ -166,47 +265,18 @@ def dispatch(intent: str, **request: Any) -> Any:
             cases = _canonical(request)["cases"]
         return check_suite(cases, focus=request.get("focus", "everything"))
     if intent == "ftd-render":
-        return pipeline.render_run(_run_dir(request), request.get("formats"))
-    if intent == "ftd-challenge":
-        if not request.get("challenge_id"):
-            raise ValueError("ftd-challenge requires a challenge_id for this run")
-        return challenge_stage.start_challenge(
-            _run_dir(request), request["challenge_id"],
-            seeds=[Path(p) for p in request.get("seeds", []) or []], focus=request.get("focus", ""),
+        return pipeline.render_run(_run_dir(request), _formats(request))
+    if intent == "ftd-chaos":
+        return chaos(
+            _run_dir(request), input_file=request.get("input_file"), normalized=request.get("normalized"),
+            output=request.get("output"), chaos_id=request.get("chaos_id"), focus=request.get("focus", ""),
+            seeds=[Path(p) for p in request.get("seeds", []) or []], workspace=request.get("workspace"),
         )
-    if intent == "ftd-azure":
-        run_dir = _run_dir(request)
-        package = azure_export.build_export_package(
-            run_dir, challenge_ids=request.get("challenge_ids"),
-            requirement_mapping=request.get("requirement_mapping"),
-        )
-        if not request.get("project"):
-            return package
-        state = azure_export.load_integration_state(run_dir)
-        preview = azure_export.preview_export(
-            package, project=request["project"], plan=request["plan"], suite=request["suite"],
-            mapping={"test_cases": state.get("test_cases", {})},
-            include_needs_review=request.get("include_needs_review", True),
-        )
-        if not request.get("mcp_available", True):
-            preview["fallback_exports"] = [str(p) for p in write_fallback_export(request.get("artifact_root", run_dir), preview)]
-        return {"package": package, "preview": preview}
-    cases = request.get("cases")
-    if cases is None:
-        cases = _canonical(request)["cases"]
-    suite_mapping = None
-    if request.get("risk_suites") is not None or request.get("map_risk_suites"):
-        suite_mapping = build_suite_mapping(
-            cases, requirement_suite=request["suite"], risk_suites=request.get("risk_suites"),
-        )
-    preview = build_preview(
-        cases, request.get("mapping", {}), project=request["project"], plan=request["plan"],
-        suite=request["suite"], include_needs_review=request.get("include_needs_review", False),
-        external_versions=request.get("external_versions"), suite_mapping=suite_mapping,
+    return azure_export.convert_run(
+        _run_dir(request), chaos_ids=request.get("chaos_ids"), output=request.get("output", "json"),
+        requirement_mapping=request.get("requirement_mapping"),
+        target={key: request.get(key) for key in ("project", "plan", "suite")},
     )
-    if not request.get("mcp_available", False):
-        preview["fallback_exports"] = [str(path) for path in write_fallback_export(request["artifact_root"], preview)]
-    return preview
 
 
 def check_suite(cases: list[dict[str, Any]], *, focus: str = "everything") -> dict[str, Any]:
@@ -294,3 +364,65 @@ def privacy_safe_metrics(answers: list[dict[str, Any]]) -> dict[str, int]:
         "clarifications_applied": len(answers),
         "clarification_conflicts": sum(bool(item.get("conflict_requires_review")) for item in answers),
     }
+
+
+# --- CLI --------------------------------------------------------------------------------
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    commands = parser.add_subparsers(dest="command", required=True)
+    gen = commands.add_parser("gen", help="/ftd-gen: canonical suite from instructions.md/.txt")
+    gen.add_argument("--input-file")
+    gen.add_argument("--output", help="json,md,html (any case; default json,md,html)")
+    gen.add_argument("--diagnostics", action="store_true")
+    gen.add_argument("--output-dir")
+    gen.add_argument("--locale")
+    gen.add_argument("--normalized", type=Path, help="the host model's normalized request JSON")
+    gen.add_argument("--run-id")
+    gen.add_argument("--workspace", type=Path, help="current workspace (default: cwd)")
+    gen.add_argument("--reading-strategy", choices=instructions.STRATEGIES)
+    gen.add_argument("--reading-worker-model")
+    gen.add_argument("--reading-concurrency", type=int)
+    chaos_cmd = commands.add_parser("chaos", help="/ftd-chaos: post-suite pass over a finalized run")
+    chaos_cmd.add_argument("--run", required=True, type=Path)
+    chaos_cmd.add_argument("--input-file")
+    chaos_cmd.add_argument("--output", help="json,md,html (default json,md,html)")
+    chaos_cmd.add_argument("--chaos-id")
+    chaos_cmd.add_argument("--normalized", type=Path)
+    chaos_cmd.add_argument("--focus", default="")
+    chaos_cmd.add_argument("--workspace", type=Path)
+    azure = commands.add_parser("azure", help="/ftd-azure: local Azure DevOps input JSON")
+    azure.add_argument("--run", required=True, type=Path)
+    azure.add_argument("--output", default="json")
+    azure.add_argument("--chaos-id", action="append", default=None)
+    azure.add_argument("--canonical-only", action="store_true")
+    args = parser.parse_args(argv)
+    try:
+        if args.command == "gen":
+            result = generate(
+                input_file=args.input_file, normalized=read_json(args.normalized) if args.normalized else None,
+                explicit={"output": args.output, "diagnostics": args.diagnostics or None, "locale": args.locale,
+                          "output_dir": args.output_dir, "reading_strategy": args.reading_strategy,
+                          "reading_worker_model": args.reading_worker_model,
+                          "reading_concurrency": args.reading_concurrency},
+                workspace=args.workspace, run_id=args.run_id,
+            )
+        elif args.command == "chaos":
+            result = chaos(
+                args.run, input_file=args.input_file, normalized=read_json(args.normalized) if args.normalized else None,
+                output=args.output, chaos_id=args.chaos_id, focus=args.focus, workspace=args.workspace,
+            )
+        else:
+            result = azure_export.convert_run(
+                args.run, chaos_ids=[] if args.canonical_only else args.chaos_id, output=args.output,
+            )
+    except (ValueError, OSError) as exc:
+        errors = getattr(exc, "errors", None) or [str(exc)]
+        print(json.dumps({"errors": errors}, indent=2, ensure_ascii=False))
+        return 1
+    print(json.dumps(result, indent=2, ensure_ascii=False, default=str))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
