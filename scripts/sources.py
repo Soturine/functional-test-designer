@@ -261,6 +261,48 @@ def build_source_records(
     return records, texts
 
 
+# --- reading task plan (default multi-agent source ingestion) -----------------------
+
+READING_DISPOSITIONS = ("READ_AND_CATALOGED", "UNSUPPORTED", "FAILED_TO_READ", "EXCLUDED_WITH_REASON")
+
+
+def plan_reading_tasks(
+    records: list[dict[str, Any]], *, strategy: str | None = None, worker_model: str | None = None,
+    concurrency: int | None = None, prior_digests: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    """The deterministic half of default multi-agent source ingestion.
+
+    One logical reading/cataloging task per eligible source is the default; an
+    explicit user preference (sequential, a fixed worker count, one worker per file,
+    a named model) always overrides it. This function only plans the work and records
+    an honest disposition for every selected source — it never reads or reasons about
+    content itself; a host agent executes the tasks (see SKILL.md).
+    """
+    prior_digests = prior_digests or {}
+    strategy = strategy or "MULTI_AGENT_PER_SOURCE"
+    tasks = []
+    for record in records:
+        eligible = record["status"] in {"READ", "TRANSCRIBED"}
+        if eligible:
+            disposition = "READ_AND_CATALOGED"
+        elif record["status"] == "METADATA_ONLY":
+            disposition = "UNSUPPORTED"
+        elif record["status"] in {"NEEDS_TRANSCRIPTION", "FAILED"}:
+            disposition = "FAILED_TO_READ"
+        else:
+            disposition = "EXCLUDED_WITH_REASON"
+        tasks.append({
+            "path": record["path"], "role": record["role"], "disposition": disposition,
+            "reused_catalog": bool(eligible and prior_digests.get(record["path"]) == record["content_digest"]),
+        })
+    return {
+        "strategy": strategy, "worker_model": worker_model if strategy != "SEQUENTIAL" else None,
+        "concurrency": concurrency, "tasks": tasks,
+        "sources_selected": len(records), "sources_eligible": sum(t["disposition"] == "READ_AND_CATALOGED" for t in tasks),
+        "sources_reused": sum(t["reused_catalog"] for t in tasks),
+    }
+
+
 # --- authority identifiers ----------------------------------------------------------
 
 def identifier_kind(identifier: str) -> str:

@@ -172,18 +172,47 @@ def _result(run_dir: Path, stage: str) -> dict[str, Any]:
 
 # --- start: scope lock and semantic extraction ---------------------------------------
 
+def _prior_source_digests(artifact_root: Path, run_id: str) -> dict[str, str]:
+    """Path -> digest already catalogued by an earlier run sharing this artifact root.
+
+    This is the reuse half of default multi-agent source ingestion: an unchanged
+    source does not need a host agent to read and catalog it again. It only reuses
+    the deterministic facts this runtime itself persisted, never a semantic judgment.
+    """
+    runs_dir = Path(artifact_root).resolve() / ".ftd" / "runs"
+    digests: dict[str, str] = {}
+    if not runs_dir.is_dir():
+        return digests
+    for run_path in sorted(runs_dir.iterdir()):
+        if run_path.name == run_id or not (run_path / "sources.json").is_file():
+            continue
+        try:
+            prior = read_json(run_path / "sources.json")
+        except Exception:
+            continue
+        for record in prior.get("records", []):
+            digests.setdefault(record["path"], record["content_digest"])
+    return digests
+
+
 def start_run(
     *, workspace: Path, sources_selected: list[dict[str, Any]], artifact_root: Path, run_id: str,
     locale: str | None = None, request_text: str = "", transcriptions: dict[str, Any] | None = None,
     id_pattern: str | None = None, allow_source_root: bool = False, formats: Any = None,
     diagnostics: bool = False, source_order: list[list[str]] | None = None,
-    clarifications: list[dict[str, Any]] | None = None,
+    clarifications: list[dict[str, Any]] | None = None, reading: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Lock scope, read sources, index authority and issue the design work order.
 
     Requested formats, the diagnostics option, an explicit source order and prior
     clarifications are run properties: the work orders carry them to the model and
     finalize applies the formats unless it is given others.
+
+    `reading` states how the corpus should be read: {"strategy": "MULTI_AGENT_PER_SOURCE"
+    (default) | "SEQUENTIAL" | "MULTI_AGENT_BATCHED", "worker_model": "haiku" | ...,
+    "concurrency": int}. This runtime never spawns agents itself; it only plans the
+    work deterministically (one task per eligible source by default) and records what
+    was requested so the invoking agent can follow it. See sources.plan_reading_tasks.
     """
     began = now()
     requested = _normalize_formats(formats, diagnostics)
@@ -225,12 +254,36 @@ def start_run(
             name = re.sub(r"[^A-Za-z0-9_.-]+", "_", record["path"]) + ".txt"
             (text_dir / name).parent.mkdir(parents=True, exist_ok=True)
             (text_dir / name).write_text(texts[record["path"]], encoding="utf-8")
+    # Every eligible source's text is snapshotted once, run-scoped, so later stages and
+    # a post-suite Challenge can look up bounded evidence without rereading the corpus.
+    evidence_dir = run_dir / "evidence" / "text"
+    catalog = []
+    for record in records:
+        text = texts.get(record["path"])
+        entry = {"path": record["path"], "role": record["role"], "status": record["status"],
+                 "content_digest": record["content_digest"], "text_ref": None, "line_count": None}
+        if text is not None:
+            name = re.sub(r"[^A-Za-z0-9_.-]+", "_", record["path"]) + ".txt"
+            evidence_dir.mkdir(parents=True, exist_ok=True)
+            (evidence_dir / name).write_text(text, encoding="utf-8")
+            entry.update({"text_ref": f"text/{name}", "line_count": len(text.splitlines())})
+        catalog.append(entry)
+    write_json(run_dir / "evidence" / "source-catalog.json", {"sources": catalog})
+    reading = dict(reading or {})
+    reading_plan = sources.plan_reading_tasks(
+        records, strategy=reading.get("strategy"), worker_model=reading.get("worker_model"),
+        concurrency=reading.get("concurrency"), prior_digests=_prior_source_digests(root, run_id),
+    )
+    write_json(run_dir / "reading-task-plan.json", reading_plan)
     run = {
         "run_id": run_id, "generator": GENERATOR, "workspace": str(workspace),
         "artifact_root": str(root), "created_at": began, "request_text": request_text,
         "id_pattern": id_pattern, "formats": requested,
         "source_order": [list(map(str, group)) for group in source_order or []],
-        "clarifications": [dict(item) for item in clarifications or []], **locale_info,
+        "clarifications": [dict(item) for item in clarifications or []],
+        "reading": {"strategy": reading_plan["strategy"], "worker_model": reading_plan["worker_model"],
+                    "concurrency": reading_plan["concurrency"]},
+        **locale_info,
     }
     write_json(run_dir / "run.json", run)
     write_json(run_dir / "sources.json", {
@@ -246,7 +299,9 @@ def start_run(
                 rejections={}, stage_seconds={}, stage_started_at=now())
     order = _work_order(run_dir)
     return {"run_dir": str(run_dir), "resumed": False, "work_order": str(order), **locale_info,
-            "authority_identifiers": len(authority_index), "test_assets": len(test_assets)}
+            "authority_identifiers": len(authority_index), "test_assets": len(test_assets),
+            "reading_task_plan": str(run_dir / "reading-task-plan.json"), "reading": run["reading"],
+            "sources_reused": reading_plan["sources_reused"]}
 
 
 # --- model stages ------------------------------------------------------------------------
@@ -937,6 +992,10 @@ def main(argv: list[str] | None = None) -> int:
     start.add_argument("--formats", help="HTML,JSON,MARKDOWN,DIAGNOSTICS,OPERATIONAL (default HTML,JSON,MARKDOWN)")
     start.add_argument("--diagnostics", action="store_true")
     start.add_argument("--order", action="append", default=[], help="comma-separated selectors read as one ordered group (repeatable)")
+    start.add_argument("--reading-strategy", choices=("MULTI_AGENT_PER_SOURCE", "MULTI_AGENT_BATCHED", "SEQUENTIAL"),
+                       help="default MULTI_AGENT_PER_SOURCE; SEQUENTIAL disables the default multi-agent reading plan")
+    start.add_argument("--reading-model", help="preferred lightweight worker model, e.g. haiku")
+    start.add_argument("--reading-concurrency", type=int, help="bounded concurrent reading tasks")
     submit = commands.add_parser("submit", help="submit one model stage payload")
     submit.add_argument("--run", required=True, type=Path)
     submit.add_argument("--stage", required=True, choices=sorted(MODEL_STAGES))
@@ -962,6 +1021,8 @@ def main(argv: list[str] | None = None) -> int:
                 request_text=args.request, transcriptions=dict(_parse_mapping(args.transcription, "--transcription")),
                 id_pattern=args.id_pattern, formats=args.formats, diagnostics=args.diagnostics,
                 source_order=[group.split(",") for group in args.order],
+                reading={"strategy": args.reading_strategy, "worker_model": args.reading_model,
+                        "concurrency": args.reading_concurrency},
             )
         elif args.command == "submit":
             result = submit_stage(args.run, args.stage, merge_payloads([read_json(path) for path in args.file]))
