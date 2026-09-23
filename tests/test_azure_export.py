@@ -1,7 +1,8 @@
-"""ftd-azure: canonical + Challenge projection into a normalized Azure export package."""
+"""ftd-azure: canonical + chaos projection into local, requirement-grouped Azure input JSON."""
 
 from __future__ import annotations
 
+import json
 import sys
 import unittest
 from pathlib import Path
@@ -36,16 +37,16 @@ class CanonicalOnlyExportTests(unittest.TestCase):
         run = PackRun("saas-accounts")
         self.addCleanup(run.close)
         run.finalize()
-        package = az.build_export_package(run.run_dir, challenge_ids=[])
+        package = az.build_export_package(run.run_dir, chaos_ids=[])
         self.assertEqual(12, package["diagnostics"]["canonical_test_cases"])
-        self.assertEqual(0, package["diagnostics"]["challenge_test_cases"])
+        self.assertEqual(0, package["diagnostics"]["chaos_test_cases"])
         self.assertTrue(all(c["export_key"].startswith("canonical:") for c in package["test_cases"]))
 
     def test_no_external_requirement_id_is_invented_without_a_mapping(self) -> None:
         run = PackRun("saas-accounts")
         self.addCleanup(run.close)
         run.finalize()
-        package = az.build_export_package(run.run_dir, challenge_ids=[])
+        package = az.build_export_package(run.run_dir, chaos_ids=[])
         self.assertTrue(all(r["external_id"] is None for r in package["requirements"]))
 
     def test_supplied_requirement_mapping_is_used(self) -> None:
@@ -53,20 +54,20 @@ class CanonicalOnlyExportTests(unittest.TestCase):
         self.addCleanup(run.close)
         run.finalize()
         identifier = ch.pipeline.read_canonical(run.run_dir / "canonical-suite.json")["index"]["requirements"][0]["source_identifier"]
-        package = az.build_export_package(run.run_dir, challenge_ids=[], requirement_mapping={identifier: {"external_id": "1234"}})
+        package = az.build_export_package(run.run_dir, chaos_ids=[], requirement_mapping={identifier: {"external_id": "1234"}})
         mapped = next(r for r in package["requirements"] if r["identifier"] == identifier)
         self.assertEqual("1234", mapped["external_id"])
 
 
-class ChallengeIncludedExportTests(unittest.TestCase):
+class ChaosIncludedExportTests(unittest.TestCase):
     def test_canonical_plus_one_finalized_challenge_run_works(self) -> None:
         run = PackRun("saas-accounts")
         self.addCleanup(run.close)
         run.finalize()
         _finalized_challenge(run, "field-pass")
         package = az.build_export_package(run.run_dir)
-        self.assertEqual(1, package["diagnostics"]["challenge_test_cases"])
-        self.assertEqual(1, len(package["challenge_runs"]))
+        self.assertEqual(1, package["diagnostics"]["chaos_test_cases"])
+        self.assertEqual(1, len(package["chaos_runs"]))
 
     def test_canonical_plus_multiple_finalized_challenge_runs_works(self) -> None:
         run = PackRun("saas-accounts")
@@ -75,8 +76,8 @@ class ChallengeIncludedExportTests(unittest.TestCase):
         _finalized_challenge(run, "field-pass")
         _finalized_challenge(run, "night-shift")
         package = az.build_export_package(run.run_dir)
-        self.assertEqual(2, package["diagnostics"]["challenge_test_cases"])
-        self.assertEqual({"field-pass", "night-shift"}, {c["challenge_run_id"] for c in package["challenge_runs"]}.union())
+        self.assertEqual(2, package["diagnostics"]["chaos_test_cases"])
+        self.assertEqual({"field-pass", "night-shift"}, {c["chaos_run_id"] for c in package["chaos_runs"]})
 
     def test_unfinished_challenge_run_is_excluded_by_default(self) -> None:
         run = PackRun("saas-accounts")
@@ -84,7 +85,7 @@ class ChallengeIncludedExportTests(unittest.TestCase):
         run.finalize()
         ch.start_challenge(run.run_dir, "in-progress", seeds=[])  # never submitted/finalized
         package = az.build_export_package(run.run_dir)
-        self.assertEqual(0, package["diagnostics"]["challenge_test_cases"])
+        self.assertEqual(0, package["diagnostics"]["chaos_test_cases"])
 
     def test_explicitly_requesting_an_unfinished_challenge_run_is_rejected(self) -> None:
         run = PackRun("saas-accounts")
@@ -92,7 +93,7 @@ class ChallengeIncludedExportTests(unittest.TestCase):
         run.finalize()
         ch.start_challenge(run.run_dir, "in-progress", seeds=[])
         with self.assertRaises(ValueError):
-            az.build_export_package(run.run_dir, challenge_ids=["in-progress"])
+            az.build_export_package(run.run_dir, chaos_ids=["in-progress"])
 
 
 class StableExportKeyTests(unittest.TestCase):
@@ -102,9 +103,9 @@ class StableExportKeyTests(unittest.TestCase):
         run.finalize()
         _finalized_challenge(run, "field-pass")
         package = az.build_export_package(run.run_dir)
-        challenge_case = next(c for c in package["test_cases"] if c["source_kind"] == "CHALLENGE")
+        challenge_case = next(c for c in package["test_cases"] if c["source_kind"] == "CHAOS")
         self.assertEqual("CH-001", challenge_case["local_id"])  # local identity, unchanged
-        self.assertEqual("challenge:field-pass:CH-001", challenge_case["export_key"])  # scoped Azure key
+        self.assertEqual("chaos:field-pass:CH-001", challenge_case["export_key"])  # scoped Azure key
 
     def test_two_challenge_runs_each_minting_ch_001_do_not_collide(self) -> None:
         run = PackRun("saas-accounts")
@@ -113,10 +114,10 @@ class StableExportKeyTests(unittest.TestCase):
         _finalized_challenge(run, "field-pass")
         _finalized_challenge(run, "night-shift")
         package = az.build_export_package(run.run_dir)
-        keys = [c["export_key"] for c in package["test_cases"] if c["source_kind"] == "CHALLENGE"]
+        keys = [c["export_key"] for c in package["test_cases"] if c["source_kind"] == "CHAOS"]
         self.assertEqual(len(keys), len(set(keys)))
-        self.assertIn("challenge:field-pass:CH-001", keys)
-        self.assertIn("challenge:night-shift:CH-001", keys)
+        self.assertIn("chaos:field-pass:CH-001", keys)
+        self.assertIn("chaos:night-shift:CH-001", keys)
 
 
 class RequirementGroupingTests(unittest.TestCase):
@@ -124,7 +125,7 @@ class RequirementGroupingTests(unittest.TestCase):
         run = PackRun("saas-accounts")
         self.addCleanup(run.close)
         run.finalize()
-        package = az.build_export_package(run.run_dir, challenge_ids=[])
+        package = az.build_export_package(run.run_dir, chaos_ids=[])
         fr01 = next(r for r in package["requirements"] if r["identifier"] == "FR-01")
         self.assertTrue(all(ref.startswith("canonical:") for ref in fr01["test_case_refs"]))
         self.assertTrue(fr01["test_case_refs"])
@@ -136,8 +137,8 @@ class RequirementGroupingTests(unittest.TestCase):
         _finalized_challenge(run, "field-pass", related_source_identifiers=["FR-01"])
         package = az.build_export_package(run.run_dir)
         fr01 = next(r for r in package["requirements"] if r["identifier"] == "FR-01")
-        self.assertIn("challenge:field-pass:CH-001", fr01["test_case_refs"])
-        entry = next(c for c in package["test_cases"] if c["export_key"] == "challenge:field-pass:CH-001")
+        self.assertIn("chaos:field-pass:CH-001", fr01["test_case_refs"])
+        entry = next(c for c in package["test_cases"] if c["export_key"] == "chaos:field-pass:CH-001")
         self.assertEqual("DIRECT", entry["trace_origin"])
 
     def test_ch_with_only_related_tc_inherits_placement_without_normative_authority(self) -> None:
@@ -148,9 +149,9 @@ class RequirementGroupingTests(unittest.TestCase):
         related_tc = canonical["cases"][0]["id"]
         _finalized_challenge(run, "field-pass", related_test_cases=[related_tc])
         package = az.build_export_package(run.run_dir)
-        entry = next(c for c in package["test_cases"] if c["export_key"] == "challenge:field-pass:CH-001")
+        entry = next(c for c in package["test_cases"] if c["export_key"] == "chaos:field-pass:CH-001")
         self.assertEqual("INHERITED_FROM_RELATED_TC", entry["trace_origin"])
-        placed = [r["identifier"] for r in package["requirements"] if "challenge:field-pass:CH-001" in r["test_case_refs"]]
+        placed = [r["identifier"] for r in package["requirements"] if "chaos:field-pass:CH-001" in r["test_case_refs"]]
         self.assertTrue(placed)
 
     def test_unassociated_ch_goes_to_the_unassigned_group(self) -> None:
@@ -160,14 +161,14 @@ class RequirementGroupingTests(unittest.TestCase):
         _finalized_challenge(run, "field-pass")
         package = az.build_export_package(run.run_dir)
         unassigned = next(r for r in package["requirements"] if r["identifier"] is None)
-        self.assertEqual(az.UNASSIGNED, unassigned["title"])
-        self.assertIn("challenge:field-pass:CH-001", unassigned["test_case_refs"])
+        self.assertEqual(az.UNASSIGNED, unassigned["suite_name"])
+        self.assertIn("chaos:field-pass:CH-001", unassigned["test_case_refs"])
 
     def test_a_tc_relevant_to_several_requirements_is_one_work_item_with_several_placements(self) -> None:
         run = PackRun("saas-accounts")
         self.addCleanup(run.close)
         run.finalize()
-        package = az.build_export_package(run.run_dir, challenge_ids=[])
+        package = az.build_export_package(run.run_dir, chaos_ids=[])
         multi = [c for c in package["test_cases"] if len(c["requirement_refs"]) > 1]
         self.assertTrue(multi, "fixture should contain at least one multi-requirement Test Case")
         key = multi[0]["export_key"]
@@ -181,7 +182,7 @@ class PreviewAndPublishTests(unittest.TestCase):
         run = PackRun("saas-accounts")
         self.addCleanup(run.close)
         run.finalize()
-        package = az.build_export_package(run.run_dir, challenge_ids=[])
+        package = az.build_export_package(run.run_dir, chaos_ids=[])
         preview = az.preview_export(package, project="P", plan="L", suite="S")
         self.assertEqual({"target", "create", "update", "unchanged", "skipped", "conflicts", "suite_mapping"}, set(preview))
         self.assertGreater(len(preview["create"]), 0)
@@ -190,7 +191,7 @@ class PreviewAndPublishTests(unittest.TestCase):
         run = PackRun("saas-accounts")
         self.addCleanup(run.close)
         run.finalize()
-        package = az.build_export_package(run.run_dir, challenge_ids=[])
+        package = az.build_export_package(run.run_dir, chaos_ids=[])
         first = az.preview_export(package, project="P", plan="L", suite="S")
         key = first["create"][0]["local_id"]
         mapping = {"test_cases": {key: {"external_id": "999", "content_hash": first["create"][0]["content_hash"],
@@ -204,7 +205,7 @@ class PreviewAndPublishTests(unittest.TestCase):
         self.addCleanup(run.close)
         run.finalize()
         from integrations.azure_devops import apply_preview
-        package = az.build_export_package(run.run_dir, challenge_ids=[])
+        package = az.build_export_package(run.run_dir, chaos_ids=[])
         preview = az.preview_export(package, project="P", plan="L", suite="S")
         results = apply_preview(preview, transport=None, approved=False)
         self.assertEqual([], results)
@@ -213,7 +214,7 @@ class PreviewAndPublishTests(unittest.TestCase):
         run = PackRun("saas-accounts")
         self.addCleanup(run.close)
         run.finalize()
-        package = az.build_export_package(run.run_dir, challenge_ids=[])
+        package = az.build_export_package(run.run_dir, chaos_ids=[])
         preview = az.preview_export(package, project="P", plan="L", suite="S")
         import json
         blob = json.dumps(package) + json.dumps(preview)
@@ -242,16 +243,93 @@ class SingleOwnerBoundaryTests(unittest.TestCase):
         self.assertIs(az.load_integration_state, azure_devops.load_integration_state)
 
 
-class McpCompatibilityTests(unittest.TestCase):
-    def test_ftd_mcp_natural_phrase_still_routes_to_ftd_mcp(self) -> None:
-        sys.path.insert(0, str(ROOT / "scripts"))
-        import workflow
-        self.assertEqual("ftd-mcp", workflow.normalize_intent("Prepare the last suite for Azure DevOps Test Plans"))
+class RequirementSuiteNameTests(unittest.TestCase):
+    def test_groups_are_named_identifier_dash_official_title(self) -> None:
+        run = PackRun("saas-accounts")
+        self.addCleanup(run.close)
+        run.finalize()
+        package = az.build_export_package(run.run_dir, chaos_ids=[])
+        for group in package["requirements"]:
+            if group["identifier"] and group["title"]:
+                self.assertEqual(f"{group['identifier']} — {group['title']}", group["suite_name"])
+        preview = az.preview_export(package, project="P", plan="L", suite="S")
+        names = set(preview["suite_mapping"]["suite_members"])
+        self.assertEqual({g["suite_name"] for g in package["requirements"]}, names)
 
-    def test_ftd_azure_natural_phrase_routes_to_ftd_azure(self) -> None:
-        sys.path.insert(0, str(ROOT / "scripts"))
+    def test_any_identifier_scheme_is_accepted(self) -> None:
+        self.assertEqual("REQ.7 — Export audit", az.suite_name("REQ.7", "Export audit"))
+        self.assertEqual("X-1", az.suite_name("X-1", None))
+        self.assertEqual(az.UNASSIGNED, az.suite_name(None, None))
+
+
+class LegacyKeyMigrationTests(unittest.TestCase):
+    def test_challenge_keys_migrate_to_chaos_keys_without_losing_external_ids(self) -> None:
+        state = {"test_cases": {"challenge:field-pass:CH-001": {"external_id": "77"},
+                                "canonical:TC-001": {"external_id": "12"}}}
+        migrated = az.migrate_integration_state(state)
+        self.assertEqual({"chaos:field-pass:CH-001", "canonical:TC-001"}, set(migrated["test_cases"]))
+        self.assertEqual("77", migrated["test_cases"]["chaos:field-pass:CH-001"]["external_id"])
+        self.assertEqual("chaos:a:CH-9", az.migrate_export_key("challenge:a:CH-9"))
+
+    def test_migrated_state_yields_unchanged_instead_of_a_duplicate_create(self) -> None:
+        run = PackRun("saas-accounts")
+        self.addCleanup(run.close)
+        run.finalize()
+        _finalized_challenge(run, "field-pass")
+        first = az.convert_run(run.run_dir)
+        preview = json.loads(Path(first["preview"]).read_text(encoding="utf-8"))
+        created = next(c for c in preview["create"] if c["local_id"] == "chaos:field-pass:CH-001")
+        from integrations.azure_devops import persist_integration_state
+        persist_integration_state(run.run_dir, {"test_cases": {"challenge:field-pass:CH-001": {
+            "external_id": "77", "content_hash": created["content_hash"], "last_synchronized_version": "1"}}})
+        second = json.loads(Path(az.convert_run(run.run_dir)["preview"]).read_text(encoding="utf-8"))
+        self.assertIn("chaos:field-pass:CH-001", {c["local_id"] for c in second["unchanged"]})
+
+
+class LocalConversionTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.run = PackRun("saas-accounts")
+        self.addCleanup(self.run.close)
+        self.run.finalize()
+
+    def test_convert_writes_local_package_and_preview_under_output_azure(self) -> None:
+        result = az.convert_run(self.run.run_dir, output="JSON")
+        destination = self.run.artifacts / "output" / "azure"
+        self.assertEqual((destination / "azure-export-package.json").resolve(), Path(result["package"]).resolve())
+        self.assertTrue((destination / "azure-preview.json").is_file())
+        self.assertEqual(0, result["live_azure_calls"])
+        preview = json.loads((destination / "azure-preview.json").read_text(encoding="utf-8"))
+        self.assertEqual("LOCAL_PREVIEW_ONLY", preview["operation"])
+
+    def test_output_is_deterministic(self) -> None:
+        _finalized_challenge(self.run, "field-pass")
+        az.convert_run(self.run.run_dir)
+        path = self.run.artifacts / "output" / "azure" / "azure-export-package.json"
+        first = path.read_bytes()
+        az.convert_run(self.run.run_dir)
+        self.assertEqual(first, path.read_bytes())
+
+    def test_only_json_output_is_accepted(self) -> None:
+        with self.assertRaises(ValueError):
+            az.convert_run(self.run.run_dir, output="json,html")
+
+    def test_no_live_transport_is_invoked(self) -> None:
+        from unittest import mock
+        from integrations import azure_devops
+        with mock.patch.object(azure_devops, "apply_preview", side_effect=AssertionError("live call")):
+            az.convert_run(self.run.run_dir)
+
+    def test_chaos_id_selection_and_canonical_only(self) -> None:
+        _finalized_challenge(self.run, "field-pass")
+        _finalized_challenge(self.run, "night-shift")
+        self.assertEqual(["field-pass", "night-shift"], az.convert_run(self.run.run_dir)["chaos_runs"])
+        self.assertEqual(["night-shift"], az.convert_run(self.run.run_dir, chaos_ids=["night-shift"])["chaos_runs"])
+        self.assertEqual([], az.convert_run(self.run.run_dir, chaos_ids=[])["chaos_runs"])
+
+    def test_workflow_alias_dispatches_the_same_conversion(self) -> None:
         import workflow
-        self.assertEqual("ftd-azure", workflow.normalize_intent("Prepare this finalized FTD run for Azure DevOps."))
+        result = workflow.dispatch_request("/ftd-azure --output json", run_dir=str(self.run.run_dir), output="json")
+        self.assertEqual(12, result["canonical_test_cases"])
 
 
 if __name__ == "__main__":

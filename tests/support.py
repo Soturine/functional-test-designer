@@ -43,7 +43,7 @@ class PackRun:
             workspace=self.workspace,
             sources_selected=[{"path": path, "role": item["role"]} for path, item in self.pack["sources"].items()],
             artifact_root=self.artifacts, run_id=self.pack["name"], locale=self.pack.get("locale"),
-            request_text=self.pack.get("request", ""),
+            request_text=self.pack.get("request", ""), reading={"strategy": "SEQUENTIAL"},
         )
         self.run_dir = Path(result["run_dir"])
         return result

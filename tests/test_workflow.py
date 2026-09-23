@@ -1,4 +1,4 @@
-"""Public workflow compatibility: natural language and every alias reach the same core."""
+"""Public command surface: exact aliases, host-resolved intent and one shared core."""
 
 from __future__ import annotations
 
@@ -11,7 +11,9 @@ from support import PackRun
 
 import pipeline
 import workflow
-from workflow import dispatch, dispatch_request, normalize_intent
+from workflow import dispatch, dispatch_request, resolve_intent
+
+ROOT = Path(__file__).resolve().parents[1]
 
 
 def minimal_pdf(path: Path, lines: list[str]) -> None:
@@ -39,20 +41,54 @@ def minimal_pdf(path: Path, lines: list[str]) -> None:
     path.write_bytes(body)
 
 
-class AliasTests(unittest.TestCase):
-    def test_every_alias_and_its_natural_form_reach_the_same_intent(self) -> None:
-        cases = {
-            "ftd-gen": ["/ftd-gen docs", "$ftd-gen", "Generate test cases from these files",
-                        "Gere os casos de teste destas fontes", "Use this PDF and generate the Test Cases"],
-            "ftd-clarify": ["/ftd-clarify", "Ask me the important questions", "Pergunte o que estiver ambíguo"],
-            "ftd-check": ["/ftd-check", "Audit whether the suite is executable by a tester", "Verifique se os TCs estão prontos"],
-            "ftd-render": ["/ftd-render", "Render the last run as HTML", "Renderize a última execução como Markdown"],
-            "ftd-mcp": ["/ftd-mcp", "Prepare the last suite for Azure DevOps Test Plans"],
-        }
-        for intent, phrases in cases.items():
-            for phrase in phrases:
-                with self.subTest(phrase=phrase):
-                    self.assertEqual(intent, normalize_intent(phrase))
+class CommandSurfaceTests(unittest.TestCase):
+    PUBLIC = ("ftd-gen", "ftd-chaos", "ftd-azure", "ftd-clarify", "ftd-check", "ftd-render")
+
+    def test_exact_aliases_resolve_deterministically(self) -> None:
+        for intent in self.PUBLIC:
+            for form in (f"/{intent}", f"${intent}", f"{intent} --run x", f"/{intent.upper()} --output json"):
+                with self.subTest(form=form):
+                    self.assertEqual(intent, resolve_intent(form))
+
+    def test_public_intents_are_exactly_the_six_commands(self) -> None:
+        self.assertEqual(self.PUBLIC, workflow.INTENTS)
+
+    def test_retired_names_only_emit_a_migration_message(self) -> None:
+        for old, new in (("ftd-challenge", "/ftd-chaos"), ("ftd-mcp", "/ftd-azure")):
+            with self.subTest(old=old):
+                with self.assertRaisesRegex(ValueError, new):
+                    resolve_intent(f"/{old} --run x")
+                with self.assertRaisesRegex(ValueError, new):
+                    resolve_intent("anything", resolved_intent=old)
+                with self.assertRaisesRegex(ValueError, new):
+                    dispatch(old)
+
+    def test_retired_adapters_are_removed(self) -> None:
+        for folder in (".claude/commands", ".cursor/commands"):
+            names = {path.stem for path in (ROOT / folder).glob("*.md")}
+            self.assertEqual(set(self.PUBLIC), names, folder)
+        entrypoints = {path.stem for path in (ROOT / "entrypoints").glob("*.md")}
+        self.assertEqual({"gen", "chaos", "azure", "clarify", "check", "render"}, entrypoints)
+
+    def test_host_resolved_intent_is_handed_off_without_a_phrase_catalog(self) -> None:
+        # The host model decides meaning in context; the dispatcher only validates it.
+        self.assertEqual("ftd-chaos", resolve_intent("agora tente quebrar essa suíte", resolved_intent="ftd-chaos"))
+        self.assertEqual("ftd-azure", resolve_intent("converta para o input do Test Plans", resolved_intent="ftd-azure"))
+        # The same words mean something else in another state; only the host can tell.
+        self.assertEqual("ftd-gen", resolve_intent("do the real tests for this device", resolved_intent="ftd-gen"))
+        with self.assertRaises(workflow.IntentUnresolved):
+            resolve_intent("Generate test cases from these files")
+        with self.assertRaises(ValueError):
+            resolve_intent("x", resolved_intent="ftd-everything")
+
+    def test_an_exact_alias_wins_over_a_conflicting_host_intent(self) -> None:
+        self.assertEqual("ftd-render", resolve_intent("/ftd-render", resolved_intent="ftd-gen"))
+
+    def test_dispatcher_holds_no_language_dictionary(self) -> None:
+        source = (ROOT / "scripts" / "workflow.py").read_text(encoding="utf-8")
+        for fragment in ("signals", "GENERATION_VERB", "FORMAT_WORDS", "gere os", "prepare the last suite",
+                         "challenge the suite"):
+            self.assertNotIn(fragment, source)
 
 
 class NaturalGenerationTests(unittest.TestCase):
@@ -84,6 +120,7 @@ class NaturalGenerationTests(unittest.TestCase):
     def test_the_documented_natural_request_still_works(self) -> None:
         result = dispatch_request(
             "Use this PDF, docs/user, apps and config, generate the Test Cases, save HTML/JSON/Markdown and enable diagnostics.",
+            resolved_intent="ftd-gen", output="html,json,md", diagnostics=True,
             workspace=self.workspace, artifact_root=self.root / "artifacts", run_id="natural", sources=self.sources,
         )
         run = json.loads((Path(result["run_dir"]) / "run.json").read_text(encoding="utf-8"))
@@ -99,7 +136,8 @@ class NaturalGenerationTests(unittest.TestCase):
         self.assertEqual(["HTML", "JSON", "MARKDOWN", "DIAGNOSTICS"], order["requested_formats"])
 
     def test_alias_and_natural_language_start_identical_runs(self) -> None:
-        natural = dispatch_request("Generate test cases from these sources", workspace=self.workspace,
+        natural = dispatch_request("Generate test cases from these sources", resolved_intent="ftd-gen",
+                                   workspace=self.workspace,
                                    artifact_root=self.root / "a", run_id="r", sources=self.sources)
         alias = dispatch_request("/ftd-gen", workspace=self.workspace, artifact_root=self.root / "b", run_id="r",
                                  sources=self.sources)
@@ -132,7 +170,8 @@ class DownstreamAliasTests(unittest.TestCase):
         self.run = PackRun("saas-accounts")
         self.addCleanup(self.run.close)
         started = dispatch_request(
-            "Generate test cases, only JSON with diagnostics", workspace=self.run.workspace,
+            "Generate test cases, only JSON with diagnostics", resolved_intent="ftd-gen", output="JSON",
+            diagnostics=True, reading={"strategy": "SEQUENTIAL"}, workspace=self.run.workspace,
             artifact_root=self.run.artifacts, run_id="compat",
             sources=[{"path": path, "role": item["role"]} for path, item in self.run.pack["sources"].items()],
         )
@@ -146,21 +185,24 @@ class DownstreamAliasTests(unittest.TestCase):
         self.assertTrue((self.run.artifacts / "diagnostics" / "run-metrics.json").is_file())
         self.assertFalse((self.run.artifacts / "output" / "report.html").exists())
 
-    def test_render_check_clarify_and_mcp_work_from_the_run(self) -> None:
+    def test_render_check_clarify_chaos_and_azure_work_from_the_run(self) -> None:
         canonical = str(self.run_dir / "canonical-suite.json")
-        rendered = dispatch_request("Render the last run as HTML", canonical_path=canonical, formats=["HTML"])
+        rendered = dispatch_request("Render the last run as HTML", resolved_intent="ftd-render",
+                                    canonical_path=canonical, output="html")
         self.assertEqual(0, rendered["source_reads_during_render"])
         self.assertTrue((self.run.artifacts / "output" / "report.html").is_file())
         pipeline.verify_manifest(self.run_dir)
         checked = dispatch_request("/ftd-check", run_dir=self.run_dir, focus="procedure")
         self.assertFalse(checked["suite_mutated"])
-        questions = dispatch_request("Ask me the important questions", run_dir=self.run_dir)
+        questions = dispatch_request("Ask me the important questions", resolved_intent="ftd-clarify", run_dir=self.run_dir)
         self.assertLessEqual(len(questions), 5)
         self.assertTrue(questions)
-        preview = dispatch_request("/ftd-mcp", run_dir=self.run_dir, project="P", plan="Plan", suite="Suite",
-                                   artifact_root=self.run.artifacts)
-        self.assertNotIn("delete", preview)
-        self.assertTrue(preview["fallback_exports"])
+        started = dispatch_request("now try to break this suite", resolved_intent="ftd-chaos", run_dir=self.run_dir)
+        self.assertTrue(Path(started["work_order"]).is_file())
+        self.assertIn("chaos-001", started["challenge_dir"])
+        azure = dispatch_request("/ftd-azure", run_dir=self.run_dir, output="json")
+        self.assertEqual(0, azure["live_azure_calls"])
+        self.assertTrue(Path(azure["package"]).is_file())
 
 
 if __name__ == "__main__":

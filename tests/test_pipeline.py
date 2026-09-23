@@ -205,13 +205,13 @@ class GeneralityTests(unittest.TestCase):
 
 class WorkflowTests(unittest.TestCase):
     def test_natural_language_and_alias_reach_the_same_pipeline(self) -> None:
-        self.assertEqual("ftd-gen", workflow.normalize_intent("Gere os test cases destas fontes"))
-        self.assertEqual("ftd-gen", workflow.normalize_intent("/ftd-gen docs"))
-        self.assertEqual("ftd-render", workflow.normalize_intent("Render the last run as HTML"))
+        self.assertEqual("ftd-gen", workflow.resolve_intent("Gere os test cases destas fontes", resolved_intent="ftd-gen"))
+        self.assertEqual("ftd-gen", workflow.resolve_intent("/ftd-gen docs"))
         run = PackRun("saas-accounts")
         self.addCleanup(run.close)
         started = workflow.dispatch_request(
-            "Generate test cases from these files", workspace=run.workspace, artifact_root=run.artifacts,
+            "Generate test cases from these files", resolved_intent="ftd-gen",
+            workspace=run.workspace, artifact_root=run.artifacts,
             run_id="nl", sources=[{"path": "docs", "role": "FUNCTIONAL_AUTHORITY"}],
         )
         self.assertEqual("en", started["output_locale"])

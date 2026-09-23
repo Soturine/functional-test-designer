@@ -112,5 +112,88 @@ class ProcedureStageTests(unittest.TestCase):
         self.assertEqual(1, index["gap_metrics"]["blocked_normative_tests"])
 
 
+class UbiquitousProcedureTests(unittest.TestCase):
+    """One canonical procedure serves a novice human and an automation agent alike:
+    each step says who does which atomic action to which target (where, with which
+    semantic data) and what becomes observable, without tool-specific syntax."""
+
+    VAGUE_ACTIONS = (
+        "Access the system.", "Perform the operation.", "Validate it.", "Check if it worked.",
+        "Continue the flow.", "Do everything required.",
+    )
+
+    def reach_procedures(self, mutate=None):
+        run = PackRun("saas-accounts", mutate)
+        self.addCleanup(run.close)
+        run.through("expansion")
+        return run
+
+    def test_vague_whole_steps_are_rejected(self) -> None:
+        for vague in self.VAGUE_ACTIONS:
+            with self.subTest(action=vague):
+                def blur(pack, vague=vague):
+                    procedure(pack, "T1")["steps"][0]["action"] = vague
+                run = self.reach_procedures(blur)
+                with self.assertRaisesRegex(StageError, "action is abstract; say who does which atomic action"):
+                    run.submit("procedures")
+
+    def test_an_unobservable_expected_result_is_rejected(self) -> None:
+        def blur(pack):
+            procedure(pack, "T1")["steps"][0]["expected_result"] = "It works."
+        run = self.reach_procedures(blur)
+        with self.assertRaisesRegex(StageError, "expected result is not observable"):
+            run.submit("procedures")
+
+    def test_concrete_steps_that_share_a_verb_are_not_flagged(self) -> None:
+        from procedures import ABSTRACT_ACTION
+        for concrete in ("Open the member management page of ACCOUNT_A.", "Validate the invitation for EMAIL_NEW.",
+                         "Access the audit log of ACCOUNT_A as USER_OWNER_A."):
+            self.assertIsNone(ABSTRACT_ACTION.search(concrete), concrete)
+
+    def test_a_missing_selector_stays_an_unknown_instead_of_being_invented(self) -> None:
+        def unknown_selector(pack):
+            procedure(pack, "T1")["unknowns"] = [{"kind": "MISSING_SELECTOR",
+                                                  "detail": "the evidence names no locator for the invite form"}]
+        run = self.reach_procedures(unknown_selector)
+        run.submit("procedures")
+        pipeline_result = run.submit  # noqa: F841 - procedures accepted; finalize to read the case
+        import pipeline
+        pipeline.finalize_run(run.run_dir, ["JSON"])
+        case = run.output("test-cases/TC-001.json")
+        self.assertEqual("READY", case["status"])  # a human can still run it
+        self.assertEqual("NEEDS_SELECTOR", case["automation_readiness"])  # automation gap is explicit
+
+    def test_the_same_canonical_case_translates_to_ui_or_api_automation_without_changing_its_oracle(self) -> None:
+        run = PackRun("saas-accounts")
+        self.addCleanup(run.close)
+        run.finalize(("JSON",))
+        case = run.output("test-cases/TC-001.json")
+
+        def translate(case, adapter):
+            # The documented mapping: preconditions -> setup, test data -> fixtures,
+            # action -> adapter operation, expected result -> assertion.
+            return {"setup": list(case["preconditions"]),
+                    "fixtures": {row["name"]: row["description"] for row in case["test_data"]},
+                    "operations": [f"{adapter}:{step['action']}" for step in case["steps"]],
+                    "assertions": [step["expected_result"] for step in case["steps"]]}
+
+        ui, api = translate(case, "ui"), translate(case, "api")
+        self.assertEqual(ui["assertions"], api["assertions"])
+        self.assertEqual(ui["fixtures"], api["fixtures"])
+        self.assertTrue(all(ui["assertions"]))
+        self.assertTrue(all(re.fullmatch(r"[A-Z][A-Z0-9_]*", name) for name in ui["fixtures"]))
+
+    def test_canonical_cases_carry_no_tool_specific_syntax(self) -> None:
+        run = PackRun("saas-accounts")
+        self.addCleanup(run.close)
+        run.finalize(("JSON",))
+        index = run.output("test-cases.json")
+        tool_syntax = re.compile(r"page\.(?:click|fill|goto)|cy\.get|\[data-testid|getByRole|locator\(|#[a-z][\w-]*\b\s*\{")
+        for entry in index["test_cases"]:
+            case = run.output(f"test-cases/{entry['id']}.json")
+            text = " ".join([*case["preconditions"], *(s["action"] + " " + (s["expected_result"] or "") for s in case["steps"])])
+            self.assertIsNone(tool_syntax.search(text), entry["id"])
+
+
 if __name__ == "__main__":
     unittest.main()
