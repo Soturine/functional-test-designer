@@ -11,10 +11,18 @@ v2.3 publishes schema `2.2` with additive optional fields. Schema `1.2` suites r
 |   |-- test-cases/TC-XXX.json
 |   |-- test-cases-md/TC-XXX.md (Mermaid flow last, identical to the HTML flow)
 |   `-- operational-scenarios.md (only with OPERATIONAL)
+|   |-- chaos/<chaos-id>/      (/ftd-chaos) chaos-cases.json, seed-dispositions.json,
+|   |                          chaos-plan.md, chaos-plan.html (per requested format)
+|   `-- azure/                 (/ftd-azure) azure-export-package.json, azure-preview.json
 |-- diagnostics/               (only with DIAGNOSTICS)
-`-- .ftd/runs/<run-id>/        private: run.json, sources.json, authority-text/, stages/,
-                               run-manifest.json, run-state.json, work-order.json,
-                               canonical-suite.json, run-metrics.json
+`-- .ftd/
+    |-- runs/<run-id>/         private: run.json, normalized-request.json, sources.json,
+    |                          authority-text/, evidence/, reading/ (task-plan, results/,
+    |                          source-catalog, reconciliation), stages/, run-manifest.json,
+    |                          run-state.json, work-order.json, canonical-suite.json,
+    |                          run-metrics.json, challenges/<chaos-id>/ (internal chaos state)
+    |-- catalog-cache/         validated reader catalogs, keyed by source key + digest + role
+    `-- text-cache/            extracted source text, keyed by content digest
 ```
 
 ## Index (`test-cases.json`)

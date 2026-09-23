@@ -77,6 +77,25 @@ Complete worked payloads for six domains live in `benchmarks/domains/*.json` (`s
 - E2E: `dimension: "E2E"` candidates. A `MATERIALIZED` journey's test has `stages: [{"name", "test", "trigger", "observation"}]` over at least two distinct atomic tests; each stage's observation must match the composed test's expected result. Every `USE_CASE` identifier needs an E2E candidate with `use_case`; `ALREADY_COVERED` journeys list at least two atomic tests and a reason.
 - Every discovered test asset (listed in the work order) needs exactly one disposition.
 
+## reading (before design)
+
+When `start` plans reader tasks (`next_stage: reading`), every `PLANNED` source needs one reader result. Submit results with `pipeline.py reading-submit --run <run> --file <result.json>` (repeatable; one result or `{"results": [...]}` per file).
+
+```json
+{"source_key": "<from reading_tasks>", "path": "docs/spec.md", "content_digest": "<from reading_tasks>",
+ "status": "CATALOGED", "reader": {"role": "LIGHTWEIGHT_SOURCE_READER", "model": "<the model that actually ran>"},
+ "catalog": {"headings": [], "identifiers": [{"identifier": "REQ-1", "title": "..."}], "actors": [], "entities": [],
+             "states": [], "operations": [], "integrations": [], "config_facts": [], "candidate_rules": [], "flows": [],
+             "test_assets": [], "excerpts": [{"line_start": 10, "line_end": 14, "text": "..."}],
+             "references": [{"target": "other/selected/path"}], "ambiguities": []}}
+```
+
+- Reader failures are `"status": "FAILED"` with an `error`. A source is never silently omitted.
+- The digest must match. The role is fixed. Excerpt lines must exist in the snapshot.
+- Any of `claims`, `tests`, `test_cases`, `oracles`, `findings`, `questions`, `requirements`, `coverage`, `dispositions`, `authority`, `role_override` or `completeness` is rejected: those decisions belong to the main model.
+- A submission is all-or-nothing.
+- `pipeline.py reading-reconcile --run <run>` then consolidates everything. It preserves conflicting statements with no vote and moves the run to `design`.
+
 ## procedures
 
 ```json
@@ -98,6 +117,7 @@ Complete worked payloads for six domains live in `benchmarks/domains/*.json` (`s
 
 - One procedure per Test Case. The `oracle_step` (default last) must observe the designed `expected` (containment ≥ 0.4). A `MISSING_ORACLE` unknown allows an empty expected result and must link the Question that asks for it.
 - Derived fields: `status` READY / NEEDS_REVIEW / BLOCKED_EXTERNAL_DEPENDENCY / EXPLORATORY, `automation_readiness` READY / NEEDS_FIXTURE / NEEDS_SELECTOR / NEEDS_ENVIRONMENT / NEEDS_POLICY / BLOCKED_EXTERNAL_DEPENDENCY / NOT_APPLICABLE, `automation_candidate = suitability in {HIGH, MEDIUM}`. A blocking Question linked to the test also prevents READY.
+- Steps follow the one-procedure-for-humans-and-automation contract in [method.md](method.md): who, where, what, target, data and expected when the evidence supports them. A whole step as vague as "access the system", "perform the operation", "validate it", "check if it worked", "continue the flow" or "do everything required", or an expected result like "it works", is rejected.
 - Grounding: each procedure cites `evidence_refs` inside the selected scope, or declares `MISSING_EXECUTION_SURFACE` / `UNKNOWN_SETUP_PATH`. A generic authentication step is rejected unless the test is about authentication. Procedures run on frozen identities: identity, oracle and composition fields are rejected.
 - Diagnostics: `procedures_generated`, `procedures_with_evidence_refs`, `procedures_requiring_additional_evidence`, `targeted_source_lookups`, `procedure_generation_seconds`, `average_procedure_generation_seconds`, `runtime_source_rereads` (always 0: sources are read once at start and only digest-checked later), `repeated_step_template_ratio` (a warning above 0.5).
 - Rejected: generic preconditions, placeholders (`<...>`, `TBD`), abstract actions ("execute the described flow"), unobservable results ("works as expected"), hidden variants ("valid and invalid", "repeat for each"), a one-step case without reason or that compresses several actions.

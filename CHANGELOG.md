@@ -24,6 +24,43 @@ Corrective/additive round on top of the above, still targeting 2.4.0:
 - Added default multi-agent source reading/cataloging for the first canonical generation of a new or invalidated corpus: `sources.plan_reading_tasks` plans one lightweight reading/cataloging task per eligible selected source (`<run>/reading-task-plan.json`), with bounded concurrency, honoring an explicit `--reading-strategy`/`--reading-model`/`--reading-concurrency` override (including a `SEQUENTIAL` opt-out). The runtime only plans the work and records honest per-source dispositions; a host agent (preferring Haiku workers on Claude) executes it and always remains the sole owner of semantic synthesis. An unchanged source (by digest) already catalogued under the same artifact root is marked reusable.
 - Added `ftd-azure` and `scripts/azure_export.py`: a canonical-plus-Challenge, requirement-by-requirement Azure DevOps packaging workflow, consuming only a run's own validated JSON state. `azure_export.py` owns FTD-side aggregation only (run/Challenge selection, scoped export keys, requirement↔case relationships); every Azure-specific concern (payload mapping, Suite placement, create/update/unchanged/conflict diffing, external ids, content hashes, integration state, transport/publish) stays owned by `integrations/azure_devops.py`, extended with a generic `build_group_suite_mapping`. A Challenge case keeps its local `CH-*` identity forever; only its scoped export key (`challenge:<challenge_id>:CH-nnn`) identifies it to Azure, preventing collisions across Challenge runs. `ftd-mcp` is unchanged and stays backward compatible.
 
+Final rework round, still targeting 2.4.0 (unified commands):
+
+- **Public commands** are now `/ftd-gen`, `/ftd-chaos`, `/ftd-azure`, `/ftd-clarify`, `/ftd-check` and `/ftd-render`.
+  - `ftd-challenge` was renamed to `ftd-chaos`, and `ftd-mcp` was replaced by `ftd-azure`. Both old names only raise a migration message.
+  - Their entrypoints and `.claude`/`.cursor` adapters were removed.
+- **Semantic routing.** The host model resolves intent from the request and the run state and hands off `resolved_intent`. `scripts/workflow.py` only recognizes exact aliases, validates and dispatches.
+  - The phrase tables, the generation-verb regex and free-text format sniffing are gone.
+  - Formats come only from explicit `--output` tokens: `json`, `md`/`markdown` and `html`, case-insensitive.
+- **Instructions file.** `/ftd-gen --input-file <path>/instructions.md --output json,md,html` is the primary interface.
+  - The runtime file is `instructions.md` or `instructions.txt`, read as written. `instructions.html` is accepted only as a converted form of the same content.
+  - Resolution: explicit file > explicit directory > `<workspace>/docs/` > the skill's `docs/`. There is no recursive search, and two instructions files in one directory are ambiguous.
+  - The file is guidance, source intent and seeds, never authority. Its headings are free-form, and none is hardcoded.
+  - The host normalizes it semantically. `scripts/instructions.py` validates that handoff, applies precedence per setting (explicit > file > defaults, with provenance) and persists `<run>/normalized-request.json`.
+  - Seeds and guidance reach every model work order as `user_guidance`.
+  - A generic template ships as `docs/instructions.md`.
+- **Multi-agent ingestion is now real.** `scripts/reading.py` replaces `reading-task-plan.json` and `sources.plan_reading_tasks`.
+  - `start` plans one `LIGHTWEIGHT_SOURCE_READER` task per eligible source (`<run>/reading/task-plan.json`).
+  - The host runs the readers and submits validated factual catalogs (`pipeline.py reading-submit`). Main-model decisions are rejected, and so are digest or role drift and phantom excerpt lines. Submission is all-or-nothing.
+  - `reading-reconcile` refuses while a source lacks a result. It preserves conflicts without voting, writes `reading/source-catalog.json` and `reconciliation.json`, and binds the reconciliation into the `TEST_DESIGN` manifest record. Design is refused before it.
+  - The states are honest: `CATALOGED` requires a reader result.
+  - Validated catalogs are reused across runs by collision-safe source key + digest + role + contract version, with no reader rerun. Only changed sources are invalidated.
+  - Extracted text is cached by digest, and evidence and authority snapshots use the same source key.
+  - `SEQUENTIAL` is the no-subagent opt-out.
+- **Ubiquitous procedures.** One procedure serves a novice tester and an automation agent: who, where, what, target, data and expected, when the evidence supports them.
+  - Vague whole steps are rejected: "access the system", "perform the operation", "validate it", "check if it worked", "continue the flow", "do everything required". So are "it works"-style expected results.
+  - Nothing is invented.
+  - The automation translation mapping is documented in `references/method.md`.
+- **`/ftd-chaos`** keeps every former Challenge invariant: parent digest, `CH-*`, item-level seeds, real lookups, the one-way state machine and the Manual/Physical/Field plan. It adds:
+  - seeds from the instructions file (`instructions.md#seed-NNN`), or from the parent run's saved request;
+  - default ids `chaos-NNN`;
+  - requested-format outputs under `output/chaos/<id>/`, including a self-contained HTML plan.
+- **`/ftd-azure`** is local only.
+  - It writes `output/azure/azure-export-package.json` and `azure-preview.json`, with requirement groups titled `identifier — official title` and an `Unassigned` group.
+  - Keys are `canonical:TC-001` and `chaos:<id>:CH-001`, with deterministic migration of `challenge:` keys in integration state.
+  - It selects chaos runs with `--chaos-id` or `--canonical-only`.
+  - No Azure call is ever made. `azure_devops.py` remains the single Azure owner.
+
 ## 2.3.0
 
 Simplification, quality recovery and model-first design.

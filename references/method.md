@@ -48,6 +48,51 @@ Write steps the way a good product manual does, for the person who uses the scre
 - **Cite the path.** `evidence_refs` names the source and section each procedure relies on. Evidence is looked up once per section and shared by the family batch, never reread per Test Case.
 - **The oracle step observes the designed expected result.** Navigation evidence can add steps; it never changes what the test asserts.
 
+### One procedure for humans and automation agents
+
+There is one canonical procedure, not a human version and a separate AI version. It must work for:
+
+- a tester who has never seen the product;
+- an agent that later turns the same Test Case into Playwright, TestSprite, API, Postman, k6 or JMeter automation.
+
+When the evidence supports it, every step communicates:
+
+- **WHO:** the actor, role, session or execution context.
+- **WHERE:** the execution surface or subsystem.
+- **WHAT:** one atomic action.
+- **TARGET:** the resource, entity, device or object acted on.
+- **DATA:** the semantic fixture or value.
+- **EXPECTED:** the immediate observable result.
+
+This is not a sentence template. Write natural language in the run's locale, for example: *"As USER_ROLE_A, on the order entry surface the evidence documents, select ITEM_A and submit the order for ACCOUNT_A."* → *"The order appears in the documented pending state."*
+
+Whole steps that name no actor, target or observable are rejected. Examples: "access the system", "perform the operation", "validate it", "check if it worked", "continue the flow", "do everything required". When the evidence genuinely cannot resolve the concrete action, keep the known intent and declare `MISSING_EXECUTION_SURFACE` / `UNKNOWN_SETUP_PATH`.
+
+Never invent any of these unless the selected evidence shows them:
+
+- CSS selectors, test ids, button labels, screen names;
+- routes, URLs, API endpoints;
+- credentials, database columns, device commands;
+- messages, timeouts, performance thresholds.
+
+A missing locator is a `MISSING_SELECTOR` unknown: the case stays executable by a human, and automation readiness shows the gap. Use portable semantic fixtures (`OPERATOR_A`, `USER_WITHOUT_PERMISSION`, `ENTITY_ACTIVE_A`, `DEVICE_A`, `ACCOUNT_B`) and describe their properties in `test_data`.
+
+The canonical Test Case stays tool-agnostic and maps naturally to any automation tool:
+
+| Canonical field | Automation concept |
+| --- | --- |
+| Preconditions | setup / beforeEach / fixtures |
+| Test data | fixtures / factories / payloads |
+| Step action | UI, API or device operation |
+| Step expected result | assertion |
+| Postconditions | final-state verification |
+| Cleanup | teardown |
+| `evidence_refs` | grounding and context for the translator |
+| `automation.layer` | likely adapter type |
+| Unknowns / blockers | automation gap |
+
+No Playwright selectors, TestSprite syntax or load-tool scripts belong in a canonical Test Case. A load or performance idea without a normative threshold becomes an exploratory characterization scenario plus a Question asking for the acceptance threshold.
+
 ## Scenario Families and merge candidates
 
 Families organize tests by business area (`family` on each test). They never change a test's identity. Merge candidates are advisory manual-execution groupings computed by the runtime from shared actor/state/trigger or a shared `event`; canonical atomic tests never change.

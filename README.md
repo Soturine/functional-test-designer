@@ -15,21 +15,25 @@ A skill não conhece nenhum domínio. O mesmo método produz "pallet errado na p
 
 ## Uso
 
-A interface principal é linguagem natural:
+Escreva um `docs/instructions.md` (ou `.txt`) no seu projeto e rode:
 
 ```text
-Use este PDF, docs/user, apps e config, gere os Test Cases,
-salve HTML/JSON/Markdown e habilite diagnostics.
+/ftd-gen --input-file ./docs/instructions.md --output json,md,html
 ```
+
+Depois, se quiser:
 
 ```text
-"Pergunte o que ainda está ambíguo e pode mudar o desenho dos testes."
-"Audite se os TCs podem ser executados por alguém que não conhece o produto."
-"Renderize a última execução somente em HTML."
-"Prepare a suíte para Azure DevOps e mostre o preview antes de qualquer escrita."
+/ftd-chaos --run <run> --input-file ./docs/instructions.md --output json,md,html
+/ftd-azure --run <run> --output json
 ```
 
-Os atalhos `ftd-gen`, `ftd-clarify`, `ftd-check`, `ftd-render` e `ftd-mcp` continuam funcionando e passam pelo mesmo core (`scripts/workflow.py`). É possível selecionar vários arquivos e diretórios, informar uma ordem de leitura ("primeiro os requisitos, depois o código"), escolher formatos, habilitar diagnostics, reaproveitar clarificações anteriores e informar o destino exato dos artefatos.
+- `--output` aceita `json`, `md`/`markdown` e `html`, sem diferenciar maiúsculas e minúsculas. O padrão é `json,md,html`. Também há `--diagnostics`, `--output-dir` e `--locale`.
+- O arquivo de instruções diz o que ler, em que ordem e com que foco. As seções são livres: renomeie, remova ou crie as que quiser. O modelo as interpreta semanticamente, como orientação e sementes, nunca como autoridade. Veja o modelo em `docs/instructions.md`.
+- O que você passa na linha de comando ou diz na conversa vale mais que o arquivo, e o arquivo vale mais que os padrões da skill.
+- Pedidos em linguagem natural continuam funcionando: "gere os casos absurdos", "prepare isso para o Azure". O modelo entende a intenção no contexto; o Python só valida o alias exato e despacha.
+- `/ftd-clarify`, `/ftd-check` e `/ftd-render` continuam disponíveis.
+- `ftd-challenge` virou `/ftd-chaos`, e `ftd-mcp` virou `/ftd-azure`. Os nomes antigos só mostram uma mensagem de migração.
 
 ## Como funciona
 
@@ -45,7 +49,7 @@ finalize    (runtime)  validação (8 gates) → estado canônico → HTML / JSO
 
 Cada estágio do modelo é um JSON enviado ao runtime. Um estágio inválido é rejeitado com todos os problemas de uma vez e nada é gravado. Depois de cada estágio o runtime escreve um `work-order.json` dizendo o que o próximo precisa contabilizar.
 
-Para um corpus novo ou não cacheado, `start` planeja por padrão uma tarefa de leitura/catalogação por fonte elegível (`reading-task-plan.json`), pensada para agentes leves em paralelo (Haiku, quando o host oferece), com concorrência limitada. O usuário pode pedir explicitamente sequencial, um número fixo de workers ou outro modelo (`--reading-strategy`, `--reading-model`, `--reading-concurrency`); o agente principal continua sendo o único a decidir domain model, claims, oracles e tudo posterior. Fontes com o mesmo digest em execuções anteriores sob a mesma raiz de artefatos são marcadas reaproveitáveis.
+Por padrão, antes do design, cada fonte elegível é lida por um agente leve próprio: Haiku no Claude, com concorrência limitada. Cada leitor devolve só um catálogo factual, que o runtime valida e reconcilia; conflitos são preservados, sem votação. O modelo principal faz toda a síntese semântica. Catálogos de fontes que não mudaram são reaproveitados entre execuções, e uma fonte alterada invalida só a própria entrada. O usuário pode pedir leitura sequencial, sem subagentes, ou um número fixo de workers. O `/ftd-gen` orquestra tudo isso. Por baixo, os passos são:
 
 ```bash
 python scripts/pipeline.py start --workspace <raiz> \
@@ -103,29 +107,24 @@ python scripts/pipeline.py verify --run <run>
 
 O JSON é a fonte de verdade, e Markdown e HTML são projeções do estado canônico. Renderizar não relê fontes nem refaz o test design. O schema público continua 2.2, com campos opcionais novos, e suítes 1.2 continuam validando e renderizando.
 
-## Desafio pós-suíte (opcional)
+## `/ftd-chaos` (opcional, pós-suíte)
 
-Depois de `finalize`, `ftd-challenge` faz uma última passada adversarial/operacional/física sobre a suíte já congelada, sem nunca reescrevê-la:
+Depois de `finalize`, `/ftd-chaos` faz a passada de cenários reais, adversos, físicos, de campo e "absurdos" sobre a suíte congelada, sem nunca reescrevê-la.
 
-```bash
-python scripts/challenge.py start --run <run> --challenge-id campo-1 --seed qa-ideas.md --focus "erro de operador e dispositivos físicos"
-python scripts/challenge.py submit --run <run> --challenge-id campo-1 --file challenge.json
-python scripts/challenge.py finalize --run <run> --challenge-id campo-1
-```
+- As ideias do arquivo de instruções viram sementes item a item (`instructions.md#seed-001`), sempre inspiração e nunca autoridade. O modelo vai além delas usando o contexto já salvo da execução.
+- Buscas de evidência são pontuais (`challenge.py lookup`), sem reler o projeto.
+- Os casos novos usam `CH-*`, nunca `TC-*`, e seguem `STARTED → SUBMITTED → FINALIZED`.
+- A saída fica em `output/chaos/<id>/`: `chaos-cases.json`, `chaos-plan.md` e `chaos-plan.html`, com o Manual/Physical/Field Test Plan.
 
-Cada arquivo de seed é inspiração, nunca autoridade, e é dividido em itens endereçáveis (`qa-ideas.md#seed-001`, um por bullet); cada item recebe uma disposição honesta, e o modelo pode (e deve) ir além deles usando os atores, regras e evidências que a suíte já estabeleceu. Para fundamentar um passo em evidência real, `challenge.py lookup` busca um trecho delimitado no snapshot de evidências já gravado da execução (nunca relendo o projeto); só uma busca real conta em `runtime_targeted_lookups`. Os novos casos usam o namespace `CH-*`, nunca `TC-*`, seguem o estado `STARTED → SUBMITTED → FINALIZED` (sem reescrita: um erro se corrige com um novo `challenge-id`) e nunca tocam `canonical-suite.json`. `finalize` produz o Manual/Physical/Field Test Plan (`challenge-plan.md`), que reúne os novos `CH-*` com os TCs canônicos manuais/físicos/bloqueados por referência.
+## `/ftd-azure` (JSON local para Azure DevOps)
 
-## Exportação para Azure DevOps (`ftd-azure`)
+`/ftd-azure --run <run> --output json` converte a suíte canônica e as execuções de chaos finalizadas em JSON local, organizado requisito a requisito.
 
-`ftd-azure` projeta os TCs canônicos de uma execução finalizada, mais as execuções de desafio já finalizadas, em um pacote organizado requisito a requisito:
-
-```bash
-python scripts/azure_export.py prepare --run <run>
-python scripts/azure_export.py preview --run <run> --project P --plan L --suite S
-python scripts/azure_export.py publish --run <run> --approved
-```
-
-`scripts/azure_export.py` só agrega estado da FTD (execução + desafios finalizados, chaves de exportação, relação requisito↔caso); `scripts/integrations/azure_devops.py` continua sendo o único dono do mapeamento, da colocação em Suites, do diff create/update/unchanged/conflict e da publicação. Um caso `CH-017` nunca vira `TC-244`: só a chave de exportação (`challenge:<id>:CH-017`) o identifica como Test Case no Azure, e chaves distintas por execução evitam colisão entre desafios que reutilizem `CH-001`. `ftd-mcp` (só canônico, uma suíte) continua funcionando sem mudanças.
+- Cada grupo tem o título `RF001 — Título oficial`, e há um grupo `Unassigned` no fim.
+- A saída fica em `output/azure/`: `azure-export-package.json` e `azure-preview.json`.
+- As chaves são `canonical:TC-001` e `chaos:<id>:CH-001`. Um TC ligado a vários requisitos é um único work item com várias posições, nunca um clone.
+- O comando nunca se conecta ao Azure DevOps.
+- `scripts/azure_export.py` só agrega o estado da FTD. `scripts/integrations/azure_devops.py` continua sendo o único dono do mapeamento, das Suites, do diff e do transporte.
 
 ## Validar e testar
 
@@ -141,20 +140,23 @@ python -m unittest discover -s tests
 
 ```text
 SKILL.md                    workflow da skill
+docs/instructions.md        modelo genérico do arquivo de instruções
 references/                 method, stage-contracts, test-design, validation, workflow, output-contract
 schemas/                    JSON Schema Draft 2020-12
 scripts/common.py           utilidades, idioma, similaridade
 scripts/sources.py          escopo, papéis, leitura, identificadores oficiais, ativos de teste
+scripts/instructions.py     arquivo de instruções: resolução, texto, pedido normalizado, precedência
+scripts/reading.py          leitores leves por fonte: plano, catálogos, reconciliação, reuso
 scripts/design.py           validação do estágio design e baseline
 scripts/expansion.py        validação da segunda passada e do desafio dos testes existentes
 scripts/procedures.py       validação dos procedimentos, readiness e métricas
 scripts/validation.py       gates, gap metrics e validator público
 scripts/pipeline.py         runtime: start, submit, finalize, render, verify
 scripts/render.py           Markdown, HTML offline e catálogo de expansão
-scripts/workflow.py         intents em linguagem natural e aliases ftd-*
+scripts/workflow.py         comandos ftd-* (alias exato + resolved_intent do host) e CLI gen/chaos/azure
 scripts/benchmark.py        packs, comparação com baseline, reconciliação
-scripts/challenge.py        desafio pós-suíte opcional (CH-*), sem tocar a suíte canônica
-scripts/azure_export.py     agregação FTD (execução + desafios) para exportação ao Azure
+scripts/challenge.py        internos do /ftd-chaos (CH-*), sem tocar a suíte canônica
+scripts/azure_export.py     /ftd-azure: agregação FTD (canônico + chaos) em JSON local
 scripts/integrations/       único dono do mapeamento, Suites, diff e publicação no Azure DevOps
 benchmarks/domains/         packs A–F: SaaS, logística, ERP, IoT, aeronáutica, API
 examples/                   exemplo sintético (schema 1.2)
@@ -163,7 +165,7 @@ tests/                      testes de regressão
 
 ## Limites atuais
 
-A skill não executa testes em navegador, não cria Shared Steps reais, não faz indexação global/RAG do repositório e não escreve em Test Management sem preview e aprovação explícita.
+A skill não executa testes em navegador, não cria Shared Steps reais, não faz indexação global/RAG do repositório e não publica no Azure DevOps (o `/ftd-azure` só gera JSON local).
 
 Veja `CHANGELOG.md`, `MIGRATION-v2.3.0.md` e `SIMPLIFICATION_REPORT.md`.
 

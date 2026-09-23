@@ -1,6 +1,6 @@
 ---
 name: functional-test-designer
-description: Designs traceable, executable functional Test Cases from only user-selected sources for any domain. Use for atomic normative coverage, a mandatory second QA pass (negative, operator error, concurrency, recovery, security, E2E), existing-test challenge, executable procedures, readiness and automation classification, offline HTML/Markdown/JSON, an optional post-suite real-world challenge over a finalized run, and preview-first Test Management export.
+description: Designs traceable, executable functional Test Cases from only user-selected sources for any domain. Use for atomic normative coverage, a mandatory second QA pass (negative, operator error, concurrency, recovery, security, E2E), existing-test challenge, executable procedures, readiness and automation classification, offline HTML/Markdown/JSON, an optional post-suite /ftd-chaos pass over a finalized run, and local Azure DevOps Test Plans input JSON (/ftd-azure).
 ---
 
 # Functional Test Designer
@@ -16,6 +16,24 @@ This works for any project: logistics, ERP, SaaS, APIs, IoT, industrial, aerospa
 - Never invent an oracle, route, label, field, message, credential, id format or state. Unknowns become Questions or procedure unknowns.
 - Write every human-readable text in the run's `output_locale` (explicit request > authority language > request language). Keep code symbols, endpoints, constants, enums, fields, ids and filenames verbatim.
 - The artifact root must be an explicit user destination, never the skill root or the source root.
+
+## Commands
+
+```text
+/ftd-gen   --input-file "<path>/instructions.md" --output json,md,html [--diagnostics] [--output-dir <dir>] [--locale <tag>]
+/ftd-chaos --run "<run>" [--input-file "<path>/instructions.md"] [--output json,md,html]
+/ftd-azure --run "<run>" --output json [--chaos-id <id> ...]
+/ftd-clarify · /ftd-check · /ftd-render
+```
+
+- **Routing.** Natural language is first-class, and **you** resolve its meaning in context. For example, "do the real tests" means `ftd-gen` for new sources but `ftd-chaos` for an already-finalized suite. Hand off `resolved_intent`; `scripts/workflow.py` only validates exact aliases and dispatches, and holds no phrase list. `ftd-challenge` and `ftd-mcp` are retired and only print migration messages.
+- **The instructions file** is `instructions.md` or `instructions.txt`; `instructions.html` is accepted only as a converted form of the same content.
+  - It resolves as explicit path > `<workspace>/docs/` > the skill's `docs/`.
+  - It is guidance, source-selection intent and seeds, never authority, and its headings are free-form.
+  - Run `scripts/workflow.py gen --input-file ...` to get its text and the handoff contract. Interpret it **semantically** into a normalized request: sources with roles and order, output, reading preferences, guidance and seeds. Then rerun with `--normalized <file>`, which persists `<run>/normalized-request.json`.
+  - Explicit command options and what the user says now win over the file; the file wins over defaults. Seeds provoke reasoning and never limit it.
+  - If a source's authority role is materially ambiguous, ask one concise question instead of promoting evidence.
+- **Orchestration.** `/ftd-gen` then drives the pipeline below end to end. Do not ask the user to run stages by hand. Details: [workflow.md](references/workflow.md).
 
 ## The pipeline
 
@@ -41,13 +59,24 @@ python scripts/pipeline.py finalize --run <run> --formats HTML,JSON,MARKDOWN
 
 After each command read the new `work-order.json`: it lists what the next stage must account for (authority identifiers with official titles, frozen tests, dimensions, checklists, discovered test assets, Test Cases needing procedures). A rejected stage returns every problem at once and records nothing; fix and resubmit. Exact payload fields: [stage-contracts.md](references/stage-contracts.md). Method detail: [method.md](references/method.md). Techniques: [test-design.md](references/test-design.md).
 
-The user's request stays natural ("Use this PDF, `docs/user`, `apps` and `config`, generate the Test Cases, save HTML/JSON/Markdown and enable diagnostics"): you assign each selection a role and pass the requested formats (`--formats`), `--diagnostics`, explicit source order (`--order`, one group per flag) and prior clarifications; finalize applies the requested formats by default.
+With or without an instructions file, you assign each selection a role and pass the requested formats, `--diagnostics`, the explicit source order (`--order`, one group per flag) and any prior clarifications. Finalize applies the requested formats by default.
 
 Unreadable authority (a scanned PDF) needs `--transcription <source>=<text file>`; unusual identifier conventions can use `--id-pattern`.
 
 ## Design stage — normative baseline
 
-- Read the selected corpus. For a new or invalidated corpus of non-trivial size, the default is to spawn one lightweight reading/cataloging task per eligible selected source (`reading-task-plan.json`, written at `start`) rather than reading everything yourself sequentially — prefer Haiku workers when this host supports them. Workers only read and catalog (facts, excerpts, candidate identifiers, ambiguities); you alone own the semantic synthesis: decomposing requirements into claims, deciding oracles, writing `domain_model` (actors, entities, states, operations, invariants, permissions, integrations, events, dependencies, observables, failure surfaces) and everything downstream. Bounded concurrency, not an unbounded burst. Honor an explicit user preference (a fixed worker count, one worker per file, a named model, or "read sequentially") over this default, and read sequentially yourself whenever sub-agents aren't available or the user opts out — coverage and correctness never depend on which path was used.
+- **Reading comes first** (`next_stage: reading`). Read sources in parallel by default; decide semantics centrally.
+  - Spawn one lightweight reader sub-agent per `PLANNED` task in the work order (`reading_tasks`). Prefer Haiku on Claude, and treat `concurrency` as an upper bound, not a burst.
+  - Each reader returns only a factual catalog in the `reader_result_contract` shape and reports the model that actually ran. If it fails, it returns `FAILED` with an error.
+  - Submit every result with `pipeline.py reading-submit`, then run `pipeline.py reading-reconcile`. Design is refused until reconciliation.
+  - Honor explicit user preferences: a worker count, a model, or "sequential" / "no subagents". For no subagents, restart with `--reading-strategy SEQUENTIAL` and read the sources yourself.
+  - Never claim a model or mode you did not use.
+  - Unchanged sources reuse cached catalogs (`REUSED`) with no reader at all.
+- **You alone own the semantic synthesis**, working from the reconciled catalog, the evidence snapshots and `authority-text/`:
+  - decomposing requirements into claims and deciding oracles;
+  - judging the conflicts listed in the reconciliation;
+  - writing `domain_model`: actors, entities, states, operations, invariants, permissions, integrations, events, dependencies, observables and failure surfaces;
+  - everything downstream.
 - One requirement per authority identifier. Keep `source_identifier` and `source_title` exactly as the authority states them; the runtime rejects altered titles and invented identifiers.
 - Decompose **requirements and business rules alike** into atomic claims. Transversal rules (uniqueness, audit, role matrices, state machines, deduplication, idempotency, history/KPIs, isolation, lifecycle) get their own claims; do not let requirement bullets overshadow them.
 - One independently diagnosable failure domain → one atomic Acceptance test. Status change, balance update, audit record and alert triggered by one action are four tests. One audit record's fields may stay one test when they form an indivisible contract — say so in `indivisible_contract`.
@@ -70,25 +99,39 @@ The baseline is frozen; expansion only adds. Evaluate every dimension: `NEGATIVE
 ## Procedures stage — executable Test Cases
 
 - Preconditions state the real starting context (never `Preconditions for: <title>`). Test data uses deterministic semantic fixtures (`ROLE_A`, `ENTITY_ACTIVE_A`, `ACCOUNT_B`) with clear properties; real values only when evidence gives them.
-- Every step is one action with an observable expected result. One step only when one action completes the failure domain (`single_step_reason`); never compress a multi-action flow.
+- Write **one procedure for both a novice human and an automation agent**. When the evidence supports it, each step says who acts, where, which single action, on which target, with which semantic data, and what becomes observable.
+  - Whole steps such as "access the system", "perform the operation", "validate it", "check if it worked", "continue the flow" or "do everything required" are rejected.
+  - Never invent selectors, test ids, labels, screens, routes, URLs, endpoints, credentials, DB columns, device commands, messages or timeouts. A missing one stays an unknown.
+  - The canonical Test Case stays tool-agnostic. Preconditions → setup, test data → fixtures, action → operation, expected → assertion; see [method.md](references/method.md).
+- Every step is one action with an observable expected result. Use one step only when one action completes the failure domain (`single_step_reason`); never compress a multi-action flow.
 - READY never needs fabricated literal data. Record only real unknowns: material ones (`MISSING_ORACLE`, `AMBIGUOUS_POLICY`, `UNRESOLVED_PERMISSION`, `MISSING_EXECUTION_SURFACE`, `UNKNOWN_SETUP_PATH`, `EXTERNAL_DEPENDENCY_UNAVAILABLE`) make it NEEDS_REVIEW or BLOCKED; automation-only ones (`MISSING_FIXTURE`, `MISSING_SELECTOR`, `MISSING_ENVIRONMENT`) only affect automation readiness.
 - Procedures come after the suite is frozen: they never add, delete, merge, retitle or re-oracle a test. The oracle step observes the designed expected result.
 - Ground each procedure in the selected evidence: `evidence_refs` (source + section) or an honest path unknown (`MISSING_EXECUTION_SURFACE`, `UNKNOWN_SETUP_PATH`). Use visible labels, one imperative action per step, setup in preconditions, and no generic "log in" step unless authentication is what is tested. Work family batch by family batch from the work order's `evidence_index` and excerpts; do not reread the corpus per Test Case.
 - Classify `automation.suitability` (`HIGH/MEDIUM/LOW/MANUAL_ONLY`) and `automation.layer` (`UI/API/SERVICE/INTEGRATION/HARDWARE/MIXED`) independently of readiness.
 
-## Other intents
+## Helper intents
 
-Natural language is primary; `ftd-gen`, `ftd-clarify`, `ftd-check`, `ftd-render`, `ftd-mcp`, `ftd-challenge`, `ftd-azure` are optional aliases through `scripts/workflow.py`. Clarify at most five high-impact Questions per round. `ftd-check` audits a published suite read-only. `ftd-render` re-renders a validated run from canonical state (`python scripts/pipeline.py render --run <run>`). `ftd-mcp` previews a canonical-only Azure DevOps export and writes nothing without explicit approval; `ftd-azure` is the richer canonical-plus-Challenge, requirement-grouped packaging workflow, sharing the same Azure adapter (`scripts/integrations/azure_devops.py` is the single owner of Azure mapping, Suite placement, diffing, idempotency and transport — `scripts/azure_export.py` only aggregates FTD run state). A clear generation request ("generate test cases for this physical device") always routes to `ftd-gen`, even when it names a device or environment that also appears in Challenge vocabulary. See [workflow.md](references/workflow.md).
+Clarify at most five high-impact Questions per round (`ftd-clarify`). `ftd-check` audits a published suite read-only. `ftd-render` re-renders a validated run from canonical state (`python scripts/pipeline.py render --run <run>`). See [workflow.md](references/workflow.md).
 
-## Post-suite challenge (optional)
+## /ftd-chaos — post-suite pass (optional)
 
-Generate the canonical suite first. Challenge it second. `ftd-challenge` runs only after `finalize`, reasons freely over the frozen suite, and can never rewrite it.
+Generate the canonical suite first; run `/ftd-chaos` second. It is the real-world, adverse, field, physical and absurd-scenario pass over the frozen suite: operator mistakes, devices and manual work, recovery, external dependencies, load ideas and unexpected sequences, as far as this project's evidence supports. It never rewrites the suite. The public entry point is `scripts/workflow.py chaos --run <run> [--input-file ...]`; the internals stay in `scripts/challenge.py` under `<run>/challenges/<id>/`.
 
-- Reuse the parent run's own persisted context (domain model, canonical cases, findings, Questions, authority excerpts, evidence index) instead of rereading sources. To ground a step in evidence beyond those excerpts, request a real bounded lookup (`scripts/challenge.py lookup --source <path> --query "..."` or `--lines A-B`) — only an actual lookup call counts toward `runtime_targeted_lookups`, never merely citing an `evidence_ref`.
-- Zero, one or several informal Markdown seed files are inspiration, never authority. Each seed file is split into addressable items (`file.md#seed-001`, one per bullet or paragraph); disposition every item honestly (`MATERIALIZED`, `ALREADY_COVERED` with a real `covered_by`, `MERGED`, `QUESTIONED`, `NOT_APPLICABLE`) and go beyond them using the project's own actors, rules, states and evidence.
-- New cases get their own `CH-*` id, never `TC-*`. Ground actionable steps exactly like procedures: `evidence_refs` (validated against the selected scope and any given line range) or an honest `MISSING_EXECUTION_SURFACE`/`UNKNOWN_SETUP_PATH`, real preconditions, observable results. `execution_tags` recognizes six core tags but accepts any well-formed project-specific one too. A physical, manual or otherwise non-automatable case stays in the plan; it is never dropped for being hard to automate. Each challenge run is append-only (`STARTED → SUBMITTED → FINALIZED`); a mistake is corrected with a new `challenge_id`, never by resubmitting or refinalizing one already advanced.
-- The parent's canonical digest is checked at every step; a changed parent stops the challenge rather than silently rewriting it. A finding that looks normative becomes an advisory `canonical_gap_candidate`, reviewed by a human and resolved only through a new canonical generation, never a silent patch.
-- `finalize` produces `challenges/<id>/challenge-cases.json`, `seed-dispositions.json` and the Manual/Physical/Field Test Plan (`challenge-plan.md`), plus an optional local, read-only Azure DevOps preview. See [workflow.md](references/workflow.md).
+- **Context.** Reuse the parent run's persisted context (domain model, canonical cases, Findings, Questions, authority excerpts, evidence index) instead of rereading sources. For more evidence, run a real bounded lookup (`scripts/challenge.py lookup --source <path> --query "..."` or `--lines A-B`). Only an actual lookup counts toward `runtime_targeted_lookups`.
+- **Seeds** come from the instructions file (items `instructions.md#seed-NNN`), from the parent's saved `normalized-request.json`, or from Markdown seed files. They are inspiration, never authority. Disposition every item honestly: `MATERIALIZED`, `ALREADY_COVERED` with a real `covered_by`, `MERGED`, `QUESTIONED` or `NOT_APPLICABLE`. Then go beyond the seeds.
+- **Case rules.** New cases get `CH-*` ids, never `TC-*`, and are grounded like procedures, under the same ubiquitous-procedure rules. A physical, manual or non-automatable case stays in the plan. `STARTED → SUBMITTED → FINALIZED` is one-way; a mistake is corrected with a new chaos id.
+- **Immutability.** The parent's canonical digest is checked at every step. A normative-looking discovery becomes an advisory `canonical_gap_candidate`, never a patch.
+- **Outputs.** `finalize` writes the Manual/Physical/Field Test Plan and publishes `output/chaos/<id>/` (`chaos-cases.json`, `seed-dispositions.json`, `chaos-plan.md`, `chaos-plan.html`) in the requested formats.
+
+## /ftd-azure — local Azure DevOps input
+
+`/ftd-azure --run <run> --output json` converts validated FTD state into local JSON under `output/azure/`: the canonical suite plus all finalized chaos runs, or only those picked with `--chaos-id`.
+
+- `azure-export-package.json` is grouped requirement by requirement, titled `identifier — official title`, with `Unassigned` last.
+- `azure-preview.json` holds the create/update/unchanged diff and the Suite placements.
+- Keys are `canonical:TC-001` and `chaos:<id>:CH-001`; older `challenge:` keys are migrated. A multi-requirement case is one work item with several placements.
+- `scripts/azure_export.py` aggregates; `scripts/integrations/azure_devops.py` alone owns Azure mapping, Suites, diffing, idempotency and transport.
+- It never contacts Azure DevOps. Live publication needs a future, explicit user request.
 
 ## Completion
 
