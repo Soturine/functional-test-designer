@@ -1,9 +1,17 @@
 # ftd-azure
 
-Intent: project a finalized run's canonical Test Cases, plus zero/selected/all of its finalized Challenge runs, into a normalized Azure DevOps Test Plans package organized requirement by requirement. Consumes only a run's own validated JSON state (`canonical-suite.json` and finalized `challenge-cases.json`); it never rereads project sources or globs arbitrary repository JSON, and an unfinished Challenge run is not included unless explicitly (and then rejected, not silently skipped).
+```text
+/ftd-azure --run "<run>" --output json [--chaos-id <id> ...] [--canonical-only]
+```
 
-`scripts/azure_export.py prepare --run <run> [--challenge-id <id> ...]` writes `azure-export-package.json`; `preview --project P --plan L --suite S` writes a local, read-only `azure-preview.json` (create/update/unchanged/skipped/conflicts, including Challenge cases); `publish --approved` is the only path that can write remotely, and reuses `integrations/azure_devops.py` — the single owner of Azure mapping, Suite placement, diffing, idempotency and transport — rather than a second Azure client.
+Intent: convert a finalized run's validated FTD state into **local** Azure DevOps Test Plans input JSON, organized requirement by requirement.
 
-A Challenge case keeps its local `CH-017` identity forever; only its Azure export key (`challenge:<challenge_id>:CH-017`) identifies it as a Test Case work item, so two Challenge runs that each mint `CH-001` never collide remotely. A Test Case relevant to several requirements gets several Suite placements, never a cloned work item.
+- **Input:** it consumes only the run's `canonical-suite.json` plus finalized `/ftd-chaos` runs. The default is all finalized chaos runs; `--chaos-id` selects specific ones and `--canonical-only` excludes them. It never rereads project sources or globs repository JSON. An unfinished chaos run that is named explicitly is rejected.
+- **Command:** `scripts/workflow.py azure --run <run> --output json`, which is the same as `scripts/azure_export.py --run <run>`. It writes to `<artifact_root>/output/azure/`:
+  - `azure-export-package.json`: requirement groups titled `identifier — official title`, plus an `Unassigned` group, and one record per case;
+  - `azure-preview.json`: create/update/unchanged/skipped/conflicts and the Suite placements, diffed against local integration state.
+- **Export keys:** `canonical:TC-001` and `chaos:<chaos-id>:CH-001`. Earlier `challenge:<id>:CH-001` keys are migrated deterministically. A case relevant to several requirements is one work item with several Suite placements, never a clone.
+- **Ownership:** `azure_export.py` owns FTD aggregation. `integrations/azure_devops.py` remains the single owner of Azure mapping, Suite placement, diffing, idempotency and transport.
+- **Local only:** the command never authenticates, never reads tokens and never calls Azure. Live publication would need a future, explicit user request.
 
-This command is an optional alias; `ftd-mcp` (canonical-only, single-suite preview) remains valid and unchanged. Natural language reaches the same dispatcher.
+`ftd-mcp` was replaced by this command and only prints a migration message.
