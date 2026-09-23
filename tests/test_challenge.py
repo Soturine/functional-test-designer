@@ -1,4 +1,5 @@
-"""Post-suite challenge: canonical immutability, seed semantics and grounding."""
+"""Post-suite challenge: canonical immutability, item-level seed semantics, real
+targeted lookup, evidence validation, state machine, grounding and the manual plan."""
 
 from __future__ import annotations
 
@@ -59,6 +60,18 @@ class PostSuiteRequirementTests(unittest.TestCase):
         self.assertTrue((run.run_dir / "challenges" / "pass-2").is_dir())
 
 
+class WorkOrderContextTests(unittest.TestCase):
+    def test_work_order_reuses_the_parent_domain_model_and_authority_excerpts(self) -> None:
+        run = PackRun("saas-accounts")
+        self.addCleanup(run.close)
+        run.finalize()
+        start = ch.start_challenge(run.run_dir, "run", seeds=[])
+        work_order = ch.read_json(Path(start["work_order"]))
+        self.assertTrue(work_order["domain_model"].get("actors"))
+        self.assertTrue(work_order["authority_excerpts"])
+        self.assertTrue(work_order["canonical_cases"])
+
+
 class CanonicalImmutabilityTests(unittest.TestCase):
     def test_challenge_never_mutates_the_parent_canonical_or_manifest(self) -> None:
         run = PackRun("iot-line-monitoring")
@@ -94,6 +107,8 @@ class CanonicalImmutabilityTests(unittest.TestCase):
             ch.submit_challenge(run.run_dir, "run", bad)
         self.assertEqual(canonical_before, file_digest(run.run_dir / "canonical-suite.json"))
         self.assertFalse((Path(start["challenge_dir"]) / "challenge-result.json").is_file())
+        lineage = ch.read_json(Path(start["challenge_dir"]) / "challenge-run.json")
+        self.assertEqual("STARTED", lineage["status"])
 
     def test_challenge_cases_use_a_separate_id_namespace_from_canonical_tests(self) -> None:
         run = PackRun("saas-accounts")
@@ -108,7 +123,37 @@ class CanonicalImmutabilityTests(unittest.TestCase):
         self.assertTrue(all(case["id"].startswith("CH-") for case in stored))
 
 
-class SeedSemanticsTests(unittest.TestCase):
+class StateMachineTests(unittest.TestCase):
+    def test_second_submit_to_the_same_challenge_run_is_rejected(self) -> None:
+        run = PackRun("saas-accounts")
+        self.addCleanup(run.close)
+        run.finalize()
+        ch.start_challenge(run.run_dir, "run", seeds=[])
+        payload = {"cases": [_case()], "seed_dispositions": []}
+        ch.submit_challenge(run.run_dir, "run", payload)
+        with self.assertRaises(ch.ChallengeError):
+            ch.submit_challenge(run.run_dir, "run", payload)
+
+    def test_finalize_before_submit_is_rejected(self) -> None:
+        run = PackRun("saas-accounts")
+        self.addCleanup(run.close)
+        run.finalize()
+        ch.start_challenge(run.run_dir, "run", seeds=[])
+        with self.assertRaises(ch.ChallengeError):
+            ch.finalize_challenge(run.run_dir, "run")
+
+    def test_second_finalize_does_not_rewrite_the_finalized_output(self) -> None:
+        run = PackRun("saas-accounts")
+        self.addCleanup(run.close)
+        run.finalize()
+        ch.start_challenge(run.run_dir, "run", seeds=[])
+        ch.submit_challenge(run.run_dir, "run", {"cases": [_case()], "seed_dispositions": []})
+        ch.finalize_challenge(run.run_dir, "run")
+        with self.assertRaises(ch.ChallengeError):
+            ch.finalize_challenge(run.run_dir, "run")
+
+
+class SeedItemSemanticsTests(unittest.TestCase):
     def test_zero_seed_files_is_a_valid_challenge(self) -> None:
         run = PackRun("saas-accounts")
         self.addCleanup(run.close)
@@ -116,18 +161,21 @@ class SeedSemanticsTests(unittest.TestCase):
         start = ch.start_challenge(run.run_dir, "run", seeds=[])
         self.assertEqual(0, start["seeds_received"])
 
-    def test_multiple_informal_seed_files_are_accepted_and_preserved_verbatim(self) -> None:
+    def test_each_bullet_becomes_its_own_addressable_seed_item(self) -> None:
         run = PackRun("saas-accounts")
         self.addCleanup(run.close)
         run.finalize()
-        seed_a = _write_seed("- what if two admins act at once?\n")
-        seed_b = _write_seed("- try revoking access mid-flight\n")
-        start = ch.start_challenge(run.run_dir, "run", seeds=[seed_a, seed_b])
-        self.assertEqual(2, start["seeds_received"])
+        seed = _write_seed(
+            "# QA notes\n\n- disconnect the device mid-operation\n"
+            "- two operators confirm at once\n- retry after the response is lost\n"
+        )
+        start = ch.start_challenge(run.run_dir, "run", seeds=[seed])
+        self.assertEqual(3, start["seed_items_received"])
         work_order = ch.read_json(Path(start["work_order"]))
-        self.assertEqual({s["path"] for s in work_order["seeds"]}, {seed_a.name, seed_b.name})
+        anchors = [item["anchor"] for item in work_order["seeds"][0]["items"]]
+        self.assertEqual(["qa-ideas.md#seed-001", "qa-ideas.md#seed-002", "qa-ideas.md#seed-003"], anchors)
 
-    def test_a_seed_is_never_promoted_to_normative_authority(self) -> None:
+    def test_a_seed_item_is_never_promoted_to_normative_authority(self) -> None:
         """An unsupported rule from a seed becomes an honest disposition, never an Acceptance claim."""
         run = PackRun("saas-accounts")
         self.addCleanup(run.close)
@@ -136,35 +184,62 @@ class SeedSemanticsTests(unittest.TestCase):
         ch.start_challenge(run.run_dir, "run", seeds=[seed])
         payload = {
             "cases": [_case(
-                discovery="HUMAN_SEEDED", inspired_by=[f"{seed.name}#lockout"],
+                discovery="HUMAN_SEEDED", inspired_by=["qa-ideas.md#seed-001"],
                 execution_tags=["EXPLORATORY"],
                 unknowns=[{"kind": "MISSING_ORACLE", "detail": "no authority source defines a lockout threshold"}],
             )],
-            "seed_dispositions": [{"seed": seed.name, "disposition": "QUESTIONED",
+            "seed_dispositions": [{"seed_ref": "qa-ideas.md#seed-001", "disposition": "QUESTIONED",
                                     "summary": "no authority for a lockout threshold", "cases": ["H1"]}],
         }
         result = ch.submit_challenge(run.run_dir, "run", payload)
         self.assertEqual(1, result["seed_items_questioned"])
-        # Nothing about this seed idea touched the canonical suite.
         self.assertNotIn("basis", payload["cases"][0])
 
-    def test_every_seed_file_needs_a_disposition_or_the_submit_is_rejected(self) -> None:
+    def test_every_seed_item_needs_a_disposition_or_the_submit_is_rejected(self) -> None:
         run = PackRun("saas-accounts")
         self.addCleanup(run.close)
         run.finalize()
-        seed = _write_seed("- an idea that silently disappears\n")
+        seed = _write_seed("- an idea that silently disappears\n- a second idea, dispositioned\n")
         ch.start_challenge(run.run_dir, "run", seeds=[seed])
-        payload = {"cases": [], "seed_dispositions": []}
+        payload = {"cases": [], "seed_dispositions": [
+            {"seed_ref": "qa-ideas.md#seed-002", "disposition": "NOT_APPLICABLE", "cases": []},
+        ]}
         with self.assertRaises(StageError) as caught:
             ch.submit_challenge(run.run_dir, "run", payload)
-        self.assertIn("seed_disposition", str(caught.exception))
+        self.assertIn("seed-001", str(caught.exception))
 
-    def test_inspired_by_must_name_a_seed_actually_passed_to_this_run(self) -> None:
+    def test_already_covered_requires_a_real_covering_test_case(self) -> None:
+        run = PackRun("saas-accounts")
+        self.addCleanup(run.close)
+        run.finalize()
+        seed = _write_seed("- what if the invite is sent twice?\n")
+        ch.start_challenge(run.run_dir, "run", seeds=[seed])
+        payload = {"cases": [], "seed_dispositions": [
+            {"seed_ref": "qa-ideas.md#seed-001", "disposition": "ALREADY_COVERED", "cases": []},
+        ]}
+        with self.assertRaises(StageError):
+            ch.submit_challenge(run.run_dir, "run", payload)
+
+    def test_already_covered_resolves_to_a_real_canonical_test_case(self) -> None:
+        run = PackRun("saas-accounts")
+        self.addCleanup(run.close)
+        run.finalize()
+        seed = _write_seed("- what if the invite is sent twice?\n")
+        start = ch.start_challenge(run.run_dir, "run", seeds=[seed])
+        work_order = ch.read_json(Path(start["work_order"]))
+        existing_tc = work_order["canonical_cases"][0]["id"]
+        payload = {"cases": [], "seed_dispositions": [
+            {"seed_ref": "qa-ideas.md#seed-001", "disposition": "ALREADY_COVERED", "covered_by": [existing_tc], "cases": []},
+        ]}
+        result = ch.submit_challenge(run.run_dir, "run", payload)
+        self.assertEqual(1, result["seed_items_already_covered"])
+
+    def test_inspired_by_must_name_a_seed_item_actually_passed_to_this_run(self) -> None:
         run = PackRun("saas-accounts")
         self.addCleanup(run.close)
         run.finalize()
         ch.start_challenge(run.run_dir, "run", seeds=[])
-        payload = {"cases": [_case(discovery="HUMAN_SEEDED", inspired_by=["nonexistent.md#idea"])],
+        payload = {"cases": [_case(discovery="HUMAN_SEEDED", inspired_by=["nonexistent.md#seed-001"])],
                    "seed_dispositions": []}
         with self.assertRaises(StageError):
             ch.submit_challenge(run.run_dir, "run", payload)
@@ -177,18 +252,109 @@ class SeedSemanticsTests(unittest.TestCase):
         ch.start_challenge(run.run_dir, "run", seeds=[seed])
         payload = {
             "cases": [
-                _case(key="H1", discovery="HUMAN_SEEDED", inspired_by=[f"{seed.name}#concurrent"]),
+                _case(key="H1", discovery="HUMAN_SEEDED", inspired_by=["qa-ideas.md#seed-001"]),
                 _case(key="M1", title="A device left connected past its session timeout",
                       discovery="MODEL_DERIVED", execution_tags=["PHYSICAL_DEVICE"]),
             ],
-            "seed_dispositions": [{"seed": seed.name, "disposition": "MATERIALIZED", "cases": ["H1"]}],
+            "seed_dispositions": [{"seed_ref": "qa-ideas.md#seed-001", "disposition": "MATERIALIZED", "cases": ["H1"]}],
         }
         result = ch.submit_challenge(run.run_dir, "run", payload)
         self.assertEqual(1, result["model_derived_cases"])
         self.assertEqual(2, result["challenge_cases_generated"])
 
+    def test_final_seed_disposition_references_resolve_to_assigned_ch_ids(self) -> None:
+        run = PackRun("saas-accounts")
+        self.addCleanup(run.close)
+        run.finalize()
+        seed = _write_seed("- what if two admins act at once?\n")
+        ch.start_challenge(run.run_dir, "run", seeds=[seed])
+        payload = {"cases": [_case(discovery="HUMAN_SEEDED", inspired_by=["qa-ideas.md#seed-001"])],
+                   "seed_dispositions": [{"seed_ref": "qa-ideas.md#seed-001", "disposition": "MATERIALIZED", "cases": ["H1"]}]}
+        ch.submit_challenge(run.run_dir, "run", payload)
+        result = ch.read_json(ch._challenge_dir(run.run_dir, "run") / "challenge-result.json")
+        self.assertEqual(["CH-001"], result["seed_dispositions"][0]["cases"])
+        self.assertNotIn("H1", str(result["seed_dispositions"]))
 
-class ProvenanceAndGroundingTests(unittest.TestCase):
+
+class TargetedLookupTests(unittest.TestCase):
+    def test_a_real_lookup_increments_the_lookup_metric(self) -> None:
+        run = PackRun("saas-accounts")
+        self.addCleanup(run.close)
+        run.finalize()
+        ch.start_challenge(run.run_dir, "run", seeds=[])
+        source = next(iter(run.pack["sources"]))
+        looked_up = ch.lookup_evidence(run.run_dir, "run", source, query="invite")
+        self.assertTrue(looked_up["excerpt"])
+        payload = {"cases": [_case(
+            preconditions=["A record exists."],
+            steps=[{"action": "Do the grounded action.", "expected_result": "It is observed."}],
+            evidence_refs=[{"source": source, "reference": looked_up["locator"]}],
+        )], "seed_dispositions": []}
+        result = ch.submit_challenge(run.run_dir, "run", payload)
+        self.assertEqual(1, result["runtime_targeted_lookups"])
+        self.assertEqual(0, result["runtime_full_source_rereads"])
+        self.assertEqual("NOT_OBSERVABLE", result["model_source_rereads"])
+
+    def test_submitting_an_evidence_ref_alone_does_not_fake_a_lookup(self) -> None:
+        run = PackRun("saas-accounts")
+        self.addCleanup(run.close)
+        run.finalize()
+        ch.start_challenge(run.run_dir, "run", seeds=[])
+        source = next(iter(run.pack["sources"]))
+        payload = {"cases": [_case(
+            preconditions=["A record exists."],
+            steps=[{"action": "Do the grounded action.", "expected_result": "It is observed."}],
+            evidence_refs=[{"source": source, "reference": "cited without ever calling lookup"}],
+        )], "seed_dispositions": []}
+        result = ch.submit_challenge(run.run_dir, "run", payload)
+        self.assertEqual(0, result["runtime_targeted_lookups"])
+
+    def test_lookup_rejects_a_source_outside_the_selected_scope(self) -> None:
+        run = PackRun("saas-accounts")
+        self.addCleanup(run.close)
+        run.finalize()
+        ch.start_challenge(run.run_dir, "run", seeds=[])
+        with self.assertRaises(ch.ChallengeError):
+            ch.lookup_evidence(run.run_dir, "run", "outside/scope.py", query="x")
+
+    def test_lookup_rejects_an_out_of_range_line_selection(self) -> None:
+        run = PackRun("saas-accounts")
+        self.addCleanup(run.close)
+        run.finalize()
+        ch.start_challenge(run.run_dir, "run", seeds=[])
+        source = next(iter(run.pack["sources"]))
+        with self.assertRaises(ch.ChallengeError):
+            ch.lookup_evidence(run.run_dir, "run", source, line_start=9999, line_end=10000)
+
+
+class EvidenceReferenceValidationTests(unittest.TestCase):
+    def test_evidence_ref_with_unknown_source_is_rejected(self) -> None:
+        run = PackRun("saas-accounts")
+        self.addCleanup(run.close)
+        run.finalize()
+        ch.start_challenge(run.run_dir, "run", seeds=[])
+        payload = {"cases": [_case(
+            preconditions=["A record exists."],
+            steps=[{"action": "Do it.", "expected_result": "Observed."}],
+            evidence_refs=[{"source": "not/a/selected/source.py", "reference": "n/a"}],
+        )], "seed_dispositions": []}
+        with self.assertRaises(StageError):
+            ch.submit_challenge(run.run_dir, "run", payload)
+
+    def test_evidence_ref_with_an_invalid_line_range_is_rejected(self) -> None:
+        run = PackRun("saas-accounts")
+        self.addCleanup(run.close)
+        run.finalize()
+        ch.start_challenge(run.run_dir, "run", seeds=[])
+        source = next(iter(run.pack["sources"]))
+        payload = {"cases": [_case(
+            preconditions=["A record exists."],
+            steps=[{"action": "Do it.", "expected_result": "Observed."}],
+            evidence_refs=[{"source": source, "reference": "bad range", "line_start": 9999, "line_end": 10000}],
+        )], "seed_dispositions": []}
+        with self.assertRaises(StageError):
+            ch.submit_challenge(run.run_dir, "run", payload)
+
     def test_related_test_case_must_exist_in_the_parent_canonical_suite(self) -> None:
         run = PackRun("saas-accounts")
         self.addCleanup(run.close)
@@ -226,6 +392,52 @@ class ProvenanceAndGroundingTests(unittest.TestCase):
         self.assertEqual(1, result["challenge_cases_generated"])
 
 
+class ExecutionTagsAndReadinessTests(unittest.TestCase):
+    def test_a_project_specific_tag_beyond_the_core_set_is_accepted(self) -> None:
+        run = PackRun("saas-accounts")
+        self.addCleanup(run.close)
+        run.finalize()
+        ch.start_challenge(run.run_dir, "run", seeds=[])
+        payload = {"cases": [_case(execution_tags=["NIGHT_SHIFT_ONLY"])], "seed_dispositions": []}
+        result = ch.submit_challenge(run.run_dir, "run", payload)
+        self.assertEqual(1, result["challenge_cases_generated"])
+
+    def test_a_malformed_tag_is_rejected(self) -> None:
+        run = PackRun("saas-accounts")
+        self.addCleanup(run.close)
+        run.finalize()
+        ch.start_challenge(run.run_dir, "run", seeds=[])
+        payload = {"cases": [_case(execution_tags=["not upper snake"])], "seed_dispositions": []}
+        with self.assertRaises(StageError):
+            ch.submit_challenge(run.run_dir, "run", payload)
+
+    def test_exploratory_tag_keeps_exploratory_status_even_without_unknowns(self) -> None:
+        run = PackRun("saas-accounts")
+        self.addCleanup(run.close)
+        run.finalize()
+        ch.start_challenge(run.run_dir, "run", seeds=[])
+        ch.submit_challenge(run.run_dir, "run", {"cases": [_case(execution_tags=["EXPLORATORY"])], "seed_dispositions": []})
+        result = ch.finalize_challenge(run.run_dir, "run")
+        cases = ch.read_json(Path(result["challenge_dir"]) / "challenge-cases.json")["cases"]
+        self.assertEqual("EXPLORATORY", cases[0]["status"])
+
+    def test_a_grounded_case_without_unknowns_is_ready(self) -> None:
+        run = PackRun("saas-accounts")
+        self.addCleanup(run.close)
+        run.finalize()
+        ch.start_challenge(run.run_dir, "run", seeds=[])
+        source = next(iter(run.pack["sources"]))
+        payload = {"cases": [_case(
+            preconditions=["A record exists."],
+            steps=[{"action": "Do the grounded action.", "expected_result": "It is observed."}],
+            evidence_refs=[{"source": source, "reference": "n/a"}],
+        )], "seed_dispositions": []}
+        ch.submit_challenge(run.run_dir, "run", payload)
+        result = ch.finalize_challenge(run.run_dir, "run")
+        cases = ch.read_json(Path(result["challenge_dir"]) / "challenge-cases.json")["cases"]
+        self.assertEqual("READY", cases[0]["status"])
+
+
 class ManualPlanAndCanonicalGapTests(unittest.TestCase):
     def test_non_automatable_cases_are_preserved_in_the_plan_not_deleted(self) -> None:
         run = PackRun("saas-accounts")
@@ -234,12 +446,27 @@ class ManualPlanAndCanonicalGapTests(unittest.TestCase):
         ch.start_challenge(run.run_dir, "run", seeds=[])
         payload = {"cases": [_case(
             execution_tags=["PHYSICAL_DEVICE", "CHAOS_RECOVERY"], automation_suitability="MANUAL_ONLY",
+            required_resources=["a spare reader device"], environment_requirements=["lab network"],
         )], "seed_dispositions": []}
         ch.submit_challenge(run.run_dir, "run", payload)
         result = ch.finalize_challenge(run.run_dir, "run")
         plan = (Path(result["challenge_dir"]) / "challenge-plan.md").read_text(encoding="utf-8")
         self.assertIn("CH-001", plan)
+        self.assertIn("spare reader device", plan)
         self.assertIn("Chaos / recovery", plan)
+
+    def test_canonical_hardware_or_mixed_layer_case_appears_regardless_of_suitability(self) -> None:
+        run = PackRun("saas-accounts")
+        self.addCleanup(run.close)
+        run.finalize()
+        canonical = ch.pipeline.read_canonical(run.run_dir / "canonical-suite.json")
+        # None of this pack's canonical suitability values are LOW/MANUAL_ONLY by default,
+        # so a HARDWARE/MIXED layer case would otherwise vanish from the plan; force one.
+        canonical["cases"][0]["automation_layer"] = "HARDWARE"
+        canonical["cases"][0]["automation_suitability"] = "HIGH"
+        ch.start_challenge(run.run_dir, "run", seeds=[])
+        plan = ch.render_manual_plan(canonical, [])
+        self.assertIn(canonical["cases"][0]["id"], plan.split("Physical device tests")[1].split("##")[0])
 
     def test_potential_canonical_gap_is_advisory_and_never_mutates_the_parent(self) -> None:
         run = PackRun("saas-accounts")
@@ -261,22 +488,7 @@ class ManualPlanAndCanonicalGapTests(unittest.TestCase):
         self.assertEqual(canonical_before, file_digest(run.run_dir / "canonical-suite.json"))
 
 
-class DiagnosticsTests(unittest.TestCase):
-    def test_targeted_lookup_and_full_reread_are_reported_honestly(self) -> None:
-        run = PackRun("saas-accounts")
-        self.addCleanup(run.close)
-        run.finalize()
-        ch.start_challenge(run.run_dir, "run", seeds=[])
-        source = next(iter(run.pack["sources"]))
-        payload = {"cases": [_case(
-            preconditions=["A record exists."],
-            steps=[{"action": "Do the grounded action.", "expected_result": "It is observed."}],
-            evidence_refs=[{"source": source, "reference": "section"}],
-        )], "seed_dispositions": []}
-        result = ch.submit_challenge(run.run_dir, "run", payload)
-        self.assertEqual(1, result["targeted_source_lookups"])
-        self.assertEqual(0, result["full_source_rereads"])
-
+class VerifyTests(unittest.TestCase):
     def test_verify_reports_the_parent_digest_and_resolves_references(self) -> None:
         run = PackRun("saas-accounts")
         self.addCleanup(run.close)

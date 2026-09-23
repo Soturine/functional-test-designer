@@ -9,6 +9,10 @@ the model is expected to go beyond them using the actors, rules, states, finding
 evidence the parent run already established. This module is the same kind of thin
 deterministic shell as the rest of the pipeline: it owns identity, grounding checks
 and canonical immutability, never the scenario reasoning itself.
+
+State machine per challenge run: STARTED -> SUBMITTED -> FINALIZED. Each transition is
+one-way; a mistake is corrected by starting a new challenge_id, never by rewriting one
+already advanced.
 """
 
 from __future__ import annotations
@@ -22,11 +26,12 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
-from common import StageError, file_digest, jaccard, normalize_identifier, now, read_json, similarity, write_json
+from common import StageError, file_digest, normalize_identifier, now, read_json, write_json
 from design import check_locale, unknown_keys
 from procedures import (
     ABSTRACT_ACTION, ABSTRACT_OBSERVATION, AUTH_ONLY, GENERIC_PRECONDITION, PLACEHOLDER,
-    SUITABILITY, compressed_action, hidden_subtest,
+    SUITABILITY, MATERIAL_UNKNOWNS, AUTOMATION_UNKNOWNS, PATH_UNKNOWNS,
+    compressed_action, hidden_subtest,
 )
 import pipeline
 
@@ -37,9 +42,12 @@ class ChallengeError(ValueError):
 
 DISCOVERIES = ("HUMAN_SEEDED", "MODEL_DERIVED", "HUMAN_AND_MODEL")
 SEED_DISPOSITIONS = ("MATERIALIZED", "ALREADY_COVERED", "MERGED", "QUESTIONED", "NOT_APPLICABLE")
-EXECUTION_TAGS = (
+# Recognized for rendering/grouping in the Manual/Physical/Field plan; not a closed
+# ontology — a well-formed project-specific tag beyond this set is accepted too.
+CORE_EXECUTION_TAGS = (
     "AUTOMATABLE", "MANUAL", "PHYSICAL_DEVICE", "EXTERNAL_ENVIRONMENT", "EXPLORATORY", "CHAOS_RECOVERY",
 )
+TAG_FORMAT = re.compile(r"^[A-Z][A-Z0-9_]*$")
 CASE_FIELDS = {
     "key", "title", "discovery", "inspired_by", "related_test_cases", "related_source_identifiers",
     "related_findings", "related_questions", "rationale", "execution_tags", "automation_suitability",
@@ -47,9 +55,7 @@ CASE_FIELDS = {
     "postconditions", "evidence_refs", "unknowns", "canonical_gap_candidate", "notes",
 }
 PAYLOAD_KEYS = {"cases", "seed_dispositions"}
-# Same material/automation-only unknown vocabulary as procedures.py; challenge cases are
-# graded on the same honesty standard, not a looser one.
-from procedures import MATERIAL_UNKNOWNS, AUTOMATION_UNKNOWNS, PATH_UNKNOWNS  # noqa: E402
+BULLET = re.compile(r"^\s*[-*]\s+(.*\S)\s*$")
 
 
 def _text(value: Any) -> str:
@@ -83,9 +89,15 @@ def _require_frozen(run_dir: Path) -> dict[str, Any]:
     return state
 
 
+def _lineage(challenge_dir: Path) -> dict[str, Any]:
+    if not challenge_dir.is_dir():
+        raise ChallengeError(f"challenge {challenge_dir.name!r} was not started; run start first")
+    return read_json(challenge_dir / "challenge-run.json")
+
+
 def _require_parent_unchanged(challenge_dir: Path, run_dir: Path) -> str:
     """Contract 1: canonical immutability. Every challenge action re-checks this."""
-    lineage = read_json(challenge_dir / "challenge-run.json")
+    lineage = _lineage(challenge_dir)
     current = _canonical_digest(run_dir)
     if current != lineage["parent_canonical_digest"]:
         raise ChallengeError(
@@ -95,7 +107,42 @@ def _require_parent_unchanged(challenge_dir: Path, run_dir: Path) -> str:
     return current
 
 
+# --- seed item segmentation (structural, not semantic) ---------------------------------
+
+def segment_seed(name: str, content: str) -> list[dict[str, Any]]:
+    """Split a seed file into addressable items: one per top-level bullet, else one per
+    non-empty paragraph. This is a structural split, the same kind design.py already
+    does for bullet/sentence counting — it never interprets what an idea means."""
+    items: list[dict[str, Any]] = []
+    lines = content.splitlines()
+    bullets = [(number, BULLET.match(line)) for number, line in enumerate(lines, 1)]
+    bullets = [(number, match.group(1)) for number, match in bullets if match]
+    if bullets:
+        for text_number, (line_number, text) in enumerate(bullets, 1):
+            items.append({"anchor": f"{name}#seed-{text_number:03d}", "text": text, "line": line_number})
+        return items
+    paragraph, start_line = [], 1
+    for number, line in enumerate(lines + [""], 1):
+        if line.strip():
+            if not paragraph:
+                start_line = number
+            paragraph.append(line.strip())
+        elif paragraph:
+            items.append({"text": " ".join(paragraph), "line": start_line})
+            paragraph = []
+    for text_number, item in enumerate(items, 1):
+        item["anchor"] = f"{name}#seed-{text_number:03d}"
+    return items
+
+
 # --- start ---------------------------------------------------------------------------
+
+def _domain_model_summary(run_dir: Path) -> dict[str, Any]:
+    design_result = run_dir / "stages" / "design.result.json"
+    if not design_result.is_file():
+        return {}
+    return read_json(design_result).get("domain_model", {})
+
 
 def start_challenge(
     run_dir: Path, challenge_id: str, *, seeds: list[Path] | None = None, focus: str = "",
@@ -112,8 +159,9 @@ def start_challenge(
         if not seed_path.is_file():
             raise ChallengeError(f"seed file not found: {seed_path}")
         content = seed_path.read_text(encoding="utf-8")
+        items = segment_seed(seed_path.name, content)
         seed_files.append({
-            "path": seed_path.name, "digest": file_digest(seed_path), "content": content,
+            "path": seed_path.name, "digest": file_digest(seed_path), "content": content, "items": items,
         })
     sources_state = read_json(run_dir / "sources.json")
     evidence_index = [
@@ -125,6 +173,7 @@ def start_challenge(
         "status": case["status"], "primary_type": case.get("primary_type"),
         "automation_suitability": case.get("automation_suitability"),
         "automation_readiness": case.get("automation_readiness"),
+        "automation_layer": case.get("automation_layer"),
         "source_identifiers": case.get("source_identifiers", []),
         "failure_domain": case.get("failure_domain"),
     } for case in canonical["cases"]]
@@ -134,25 +183,34 @@ def start_challenge(
         "parent_canonical_digest": file_digest(run_dir / "canonical-suite.json"),
         "output_locale": canonical["index"].get("output_locale"),
         "focus": focus,
-        "seeds": seed_files,
+        "seeds": [{"path": s["path"], "content": s["content"], "items": s["items"]} for s in seed_files],
+        "domain_model": _domain_model_summary(run_dir),
         "canonical_cases": cases_index,
         "requirements": [
             {"id": r["id"], "source_identifier": r["source_identifier"], "title": r.get("source_title")}
             for r in canonical["index"]["requirements"]
         ],
+        "authority_excerpts": [
+            {"identifier": e["identifier"], "title": e.get("title"), "excerpt": e.get("excerpt")}
+            for e in sources_state["authority_index"]
+        ],
         "findings": [{"id": f["id"], "statement": f["statement"]} for f in canonical["index"]["findings"]],
         "questions": [{"id": q["id"], "question": q["question"]} for q in canonical["questions"]["questions"]],
         "evidence_index": evidence_index,
         "instructions": (
-            "Read the frozen canonical suite, findings and questions above; read the seed files if any "
-            "(inspiration, never authority — do not promote an unsupported seed rule to a normative test). "
-            "Analyze every meaningful seed idea and disposition it (seed_dispositions), then go beyond the "
-            "seeds using the project's own actors, rules, states, integrations, devices and evidence: "
-            "operator mistakes, physical/digital mismatches, interruption and recovery, concurrency, "
-            "long-running operation, manual-after-automatic sequences, and anything else this project's "
-            "own evidence supports. A CH case is not a canonical Test Case: it may be exploratory, physical, "
-            "manual, or blocked, and it must say so honestly rather than invent a screen, device or oracle. "
-            "Submit `python scripts/challenge.py submit --run <run> --challenge-id "
+            "Read the frozen canonical suite, domain model, findings and questions above; read the seed "
+            "files if any (inspiration, never authority — do not promote an unsupported seed rule to a "
+            "normative test). Each seed item already has a stable anchor (e.g. qa-notes.md#seed-001); "
+            "disposition every meaningful item honestly in seed_dispositions, then go beyond the seeds "
+            "using the project's own actors, rules, states, integrations, devices and evidence: operator "
+            "mistakes, physical/digital mismatches, interruption and recovery, concurrency, long-running "
+            "operation, manual-after-automatic sequences, and anything else this project's own evidence "
+            "supports. A CH case is not a canonical Test Case: it may be exploratory, physical, manual, or "
+            "blocked, and it must say so honestly rather than invent a screen, device or oracle. To ground "
+            "a step in real evidence beyond the excerpts above, request a bounded lookup first: "
+            "`python scripts/challenge.py lookup --run <run> --challenge-id "
+            f"{challenge_id} --source <selected path> --query \"...\"` (or --lines A-B), then cite it in "
+            "evidence_refs. Submit `python scripts/challenge.py submit --run <run> --challenge-id "
             f"{challenge_id} --file <payload.json>`, then `finalize`."
         ),
     }
@@ -162,10 +220,56 @@ def start_challenge(
         "challenge_run_id": challenge_id, "parent_run_id": work_order["parent_run_id"],
         "parent_canonical_digest": work_order["parent_canonical_digest"],
         "seed_refs": [{"path": s["path"], "digest": s["digest"]} for s in seed_files],
+        "seed_items": [item["anchor"] for s in seed_files for item in s["items"]],
         "focus": focus, "created_at": now(), "status": "STARTED",
     })
     return {"challenge_dir": str(challenge_dir), "work_order": str(challenge_dir / "work-order.json"),
-            "seeds_received": len(seed_files), "canonical_cases": len(cases_index)}
+            "seeds_received": len(seed_files),
+            "seed_items_received": sum(len(s["items"]) for s in seed_files),
+            "canonical_cases": len(cases_index)}
+
+
+# --- targeted evidence lookup -----------------------------------------------------------
+
+def lookup_evidence(
+    run_dir: Path, challenge_id: str, source: str, *, query: str | None = None,
+    line_start: int | None = None, line_end: int | None = None,
+) -> dict[str, Any]:
+    """A real, bounded, scope-checked read from the run's own persisted evidence
+    snapshot — never the original corpus. Every call is recorded; the recorded count,
+    not the presence of an evidence_ref, is what `targeted_source_lookups` reports."""
+    run_dir = Path(run_dir).resolve()
+    challenge_dir = _challenge_dir(run_dir, challenge_id)
+    _require_parent_unchanged(challenge_dir, run_dir)
+    catalog = read_json(run_dir / "evidence" / "source-catalog.json")["sources"]
+    entry = next((item for item in catalog if item["path"] == source), None)
+    if entry is None:
+        raise ChallengeError(f"{source!r} is outside the selected scope of this run")
+    if not entry["text_ref"]:
+        raise ChallengeError(f"{source!r} has no readable text ({entry['status']}); it cannot be looked up")
+    text = (run_dir / "evidence" / entry["text_ref"]).read_text(encoding="utf-8")
+    lines = text.splitlines()
+    if line_start is not None:
+        line_end = line_end or line_start
+        if not (1 <= line_start <= line_end <= len(lines)):
+            raise ChallengeError(f"{source}:{line_start}-{line_end} is not a valid line range ({len(lines)} lines)")
+        excerpt = "\n".join(lines[line_start - 1:line_end])
+        locator = f"lines {line_start}-{line_end}"
+    elif query:
+        match = next((i for i, line in enumerate(lines) if query.casefold() in line.casefold()), None)
+        if match is None:
+            raise ChallengeError(f"{query!r} was not found in {source}")
+        window = lines[max(0, match - 2):match + 3]
+        excerpt = "\n".join(window)
+        locator = f"near {query!r} (line {match + 1})"
+    else:
+        raise ChallengeError("lookup requires a query or a line range")
+    record = {"source": source, "locator": locator, "at": now(), "source_digest": entry["content_digest"]}
+    lookups_path = challenge_dir / "lookups.json"
+    lookups = read_json(lookups_path)["lookups"] if lookups_path.is_file() else []
+    lookups.append(record)
+    write_json(lookups_path, {"lookups": lookups})
+    return {"source": source, "locator": locator, "excerpt": excerpt}
 
 
 # --- submit ----------------------------------------------------------------------------
@@ -192,6 +296,27 @@ def _validate_steps(steps: list[dict[str, Any]], label: str, locale: str, errors
     return normalized
 
 
+def _validate_evidence_refs(
+    evidence_refs: list[dict[str, Any]], label: str, known_sources: set[str],
+    source_lines: dict[str, int], errors: list[str],
+) -> None:
+    """The same fundamental scope/provenance checks `sources.check_source_refs` applies
+    to any FTD evidence reference: a known selected source, a real locator, and a valid
+    line range if one is given — checked against the source's real length."""
+    for ref in evidence_refs:
+        source = str(ref.get("source", ""))
+        if source not in known_sources:
+            errors.append(f"{label} evidence_refs source {source!r} is outside the selected scope")
+            continue
+        if not _text(ref.get("reference")):
+            errors.append(f"{label} evidence_refs for {source} has no locator")
+        start, end = ref.get("line_start"), ref.get("line_end", ref.get("line_start"))
+        if start is not None:
+            total = source_lines.get(source, 0)
+            if not (isinstance(start, int) and isinstance(end, int) and 1 <= start <= end <= total):
+                errors.append(f"{label} evidence_refs {source}:{start}-{end} is not a valid line range ({total} lines)")
+
+
 def validate_challenge_payload(payload: dict[str, Any], context: dict[str, Any]) -> dict[str, Any]:
     errors = unknown_keys(payload, PAYLOAD_KEYS, "challenge")
     locale = context["locale"]
@@ -199,16 +324,19 @@ def validate_challenge_payload(payload: dict[str, Any], context: dict[str, Any])
     known_identifiers = set(context["identifiers"])
     known_finding_ids = set(context["finding_ids"])
     known_question_ids = set(context["question_ids"])
-    seed_paths = set(context["seed_paths"])
-    seed_hits: set[str] = set()
+    known_sources = set(context["known_sources"])
+    seed_items = set(context["seed_items"])
     cases: list[dict[str, Any]] = []
     seen_keys: set[str] = set()
+    key_to_id: dict[str, str] = {}
     for index, item in enumerate(payload.get("cases", []) or [], 1):
         key = _text(item.get("key")) or f"<case {index}>"
         label = f"challenge case {key}"
         if key in seen_keys:
             errors.append(f"{label} key is supplied twice")
         seen_keys.add(key)
+        assigned_id = f"CH-{index:03d}"
+        key_to_id[key] = assigned_id
         extra = sorted(set(item) - CASE_FIELDS)
         if extra:
             errors.append(f"{label} contains runtime-owned or unknown fields {extra}")
@@ -223,11 +351,8 @@ def validate_challenge_payload(payload: dict[str, Any], context: dict[str, Any])
         if discovery in {"HUMAN_SEEDED", "HUMAN_AND_MODEL"} and not inspired_by:
             errors.append(f"{label} discovery {discovery} requires inspired_by")
         for ref in inspired_by:
-            seed_name = ref.split("#", 1)[0]
-            if seed_name not in seed_paths:
-                errors.append(f"{label} inspired_by {ref!r} does not name a seed file passed to this challenge run")
-            else:
-                seed_hits.add(seed_name)
+            if ref not in seed_items:
+                errors.append(f"{label} inspired_by {ref!r} does not name a seed item passed to this challenge run")
         related_tests = [_text(v) for v in item.get("related_test_cases", []) or [] if _text(v)]
         for ref in related_tests:
             if ref not in known_case_ids:
@@ -244,9 +369,9 @@ def validate_challenge_payload(payload: dict[str, Any], context: dict[str, Any])
         tags = [_text(v) for v in item.get("execution_tags", []) or [] if _text(v)]
         if not tags:
             errors.append(f"{label} requires at least one execution_tags")
-        unsupported = sorted(set(tags) - set(EXECUTION_TAGS))
-        if unsupported:
-            errors.append(f"{label} execution_tags {unsupported} are not supported")
+        malformed = sorted(tag for tag in tags if not TAG_FORMAT.match(tag))
+        if malformed:
+            errors.append(f"{label} execution_tags {malformed} must be UPPER_SNAKE_CASE words")
         suitability = _text(item.get("automation_suitability"))
         if suitability and suitability not in SUITABILITY:
             errors.append(f"{label} automation_suitability must be one of {SUITABILITY}")
@@ -281,6 +406,7 @@ def validate_challenge_payload(payload: dict[str, Any], context: dict[str, Any])
                 errors.append(f"{label} unknown {kind} links unknown Question {question}")
             unknowns.append({"kind": kind, "detail": _text(unknown.get("detail")), "question": question})
         evidence_refs = [dict(ref) for ref in item.get("evidence_refs", []) or [] if isinstance(ref, dict)]
+        _validate_evidence_refs(evidence_refs, label, known_sources, context["source_lines"], errors)
         steps = item.get("steps", []) or []
         normalized_steps = []
         if steps:
@@ -306,31 +432,45 @@ def validate_challenge_payload(payload: dict[str, Any], context: dict[str, Any])
             "canonical_gap_candidate": gap if isinstance(gap, dict) else None,
             "notes": [_text(v) for v in item.get("notes", []) or [] if _text(v)],
         })
+    known_result_ids = known_case_ids | set(key_to_id.values())
     dispositions = []
-    disposition_hits: set[str] = set()
     for item in payload.get("seed_dispositions", []) or []:
-        seed = _text(item.get("seed"))
+        seed_ref = _text(item.get("seed_ref") or item.get("seed"))
         disposition = _text(item.get("disposition"))
-        if seed not in seed_paths:
-            errors.append(f"seed_dispositions references unknown seed file {seed!r}")
-        else:
-            disposition_hits.add(seed)
+        if seed_ref not in seed_items:
+            errors.append(f"seed_dispositions references unknown seed item {seed_ref!r}")
         if disposition not in SEED_DISPOSITIONS:
-            errors.append(f"seed_dispositions for {seed!r} must use one of {SEED_DISPOSITIONS}")
+            errors.append(f"seed_dispositions for {seed_ref!r} must use one of {SEED_DISPOSITIONS}")
+        raw_cases = [_text(v) for v in item.get("cases", []) or [] if _text(v)]
+        resolved_cases = []
+        for ref in raw_cases:
+            resolved = key_to_id.get(ref, ref)
+            if resolved not in known_result_ids:
+                errors.append(f"seed_dispositions {seed_ref!r} cases references unknown case {ref!r}")
+            resolved_cases.append(resolved)
+        covered_by = [_text(v) for v in item.get("covered_by", []) or [] if _text(v)]
+        if disposition == "ALREADY_COVERED" and not covered_by:
+            errors.append(f"seed_dispositions {seed_ref!r} disposition ALREADY_COVERED requires covered_by")
+        for ref in covered_by:
+            resolved = key_to_id.get(ref, ref)
+            if resolved not in known_result_ids:
+                errors.append(f"seed_dispositions {seed_ref!r} covered_by references unknown Test Case {ref!r}")
         dispositions.append({
-            "seed": seed, "disposition": disposition, "summary": _text(item.get("summary")),
-            "cases": [_text(v) for v in item.get("cases", []) or [] if _text(v)],
+            "seed_ref": seed_ref, "disposition": disposition, "summary": _text(item.get("summary")),
+            "cases": resolved_cases, "covered_by": [key_to_id.get(v, v) for v in covered_by],
         })
-    missing_disposition = sorted(seed_paths - disposition_hits)
+    dispositioned = {d["seed_ref"] for d in dispositions}
+    missing_disposition = sorted(seed_items - dispositioned)
     if missing_disposition:
-        errors.append(f"every seed file needs at least one seed_disposition entry; missing: {missing_disposition}")
+        errors.append(f"every seed item needs a seed_dispositions entry; missing: {missing_disposition}")
     if errors:
         raise StageError("challenge", errors)
-    targeted_source_lookups = len({(ref.get("source"), ref.get("reference")) for case in cases for ref in case["evidence_refs"]})
+    for case in cases:
+        case["id"] = key_to_id[case["key"]]
     return {
         "cases": cases, "seed_dispositions": dispositions,
         "diagnostics": {
-            "seed_items_received": len(seed_paths),
+            "seed_items_received": len(seed_items),
             "challenge_cases_generated": len(cases),
             "model_derived_cases": sum(c["discovery"] == "MODEL_DERIVED" for c in cases),
             "human_seeded_cases": sum(c["discovery"] in {"HUMAN_SEEDED", "HUMAN_AND_MODEL"} for c in cases),
@@ -340,7 +480,6 @@ def validate_challenge_payload(payload: dict[str, Any], context: dict[str, Any])
             "seed_items_questioned": sum(d["disposition"] == "QUESTIONED" for d in dispositions),
             "seed_items_not_applicable": sum(d["disposition"] == "NOT_APPLICABLE" for d in dispositions),
             "canonical_gap_candidates": sum(c["canonical_gap_candidate"] is not None for c in cases),
-            "targeted_source_lookups": targeted_source_lookups, "full_source_rereads": 0,
         },
     }
 
@@ -348,11 +487,13 @@ def validate_challenge_payload(payload: dict[str, Any], context: dict[str, Any])
 def submit_challenge(run_dir: Path, challenge_id: str, payload: dict[str, Any]) -> dict[str, Any]:
     run_dir = Path(run_dir).resolve()
     challenge_dir = _challenge_dir(run_dir, challenge_id)
-    if not challenge_dir.is_dir():
-        raise ChallengeError(f"challenge {challenge_id!r} was not started; run start first")
+    lineage = _lineage(challenge_dir)
+    if lineage["status"] != "STARTED":
+        raise ChallengeError(f"challenge {challenge_id!r} is {lineage['status']}; a submitted run cannot be resubmitted")
     _require_parent_unchanged(challenge_dir, run_dir)
     canonical = pipeline.read_canonical(run_dir / "canonical-suite.json")
-    lineage = read_json(challenge_dir / "challenge-run.json")
+    sources_state = read_json(run_dir / "sources.json")
+    evidence_catalog = read_json(run_dir / "evidence" / "source-catalog.json")["sources"]
     context = {
         "locale": canonical["index"].get("output_locale") or "en",
         "case_ids": {case["id"] for case in canonical["cases"]},
@@ -360,11 +501,18 @@ def submit_challenge(run_dir: Path, challenge_id: str, payload: dict[str, Any]) 
         | {normalize_identifier(r["source_identifier"]) for r in canonical["index"]["requirements"]},
         "finding_ids": {f["id"] for f in canonical["index"]["findings"]},
         "question_ids": {q["id"] for q in canonical["questions"]["questions"]},
-        "seed_paths": {ref["path"] for ref in lineage["seed_refs"]},
+        "known_sources": {record["path"] for record in sources_state["records"]},
+        "source_lines": {e["path"]: e["line_count"] for e in evidence_catalog if e["line_count"]},
+        "seed_items": set(lineage["seed_items"]),
     }
     result = validate_challenge_payload(payload, context)
-    for index, case in enumerate(result["cases"], 1):
-        case["id"] = f"CH-{index:03d}"
+    lookups_path = challenge_dir / "lookups.json"
+    lookups = read_json(lookups_path)["lookups"] if lookups_path.is_file() else []
+    result["diagnostics"].update({
+        "runtime_targeted_lookups": len({(item["source"], item["locator"]) for item in lookups}),
+        "runtime_full_source_rereads": 0,  # the corpus is never reopened; only the run's own evidence snapshot is read
+        "model_source_rereads": "NOT_OBSERVABLE",  # the runtime cannot see what the invoking agent read outside this API
+    })
     write_json(challenge_dir / "challenge-payload.json", payload)
     write_json(challenge_dir / "challenge-result.json", result)
     lineage.update({"status": "SUBMITTED", "submitted_at": now(), "diagnostics": result["diagnostics"]})
@@ -383,8 +531,6 @@ def _plan_bucket(tags: list[str], status: str) -> str:
         return "chaos_recovery"
     if "EXPLORATORY" in tags or status == "EXPLORATORY":
         return "exploratory"
-    if "MANUAL" in tags:
-        return "manual_operational"
     return "manual_operational"
 
 
@@ -398,24 +544,74 @@ PLAN_SECTIONS = (
 )
 
 
+def classify_challenge_case(case: dict[str, Any]) -> dict[str, str]:
+    """Case nature (exploratory/etc.) and readiness are related but distinct, the same
+    way procedures.classify keeps them distinct for canonical Test Cases."""
+    tags = case["execution_tags"]
+    unknowns = case["unknowns"]
+    if "EXPLORATORY" in tags:
+        return {"status": "EXPLORATORY"}
+    if any(u["kind"] == "EXTERNAL_DEPENDENCY_UNAVAILABLE" for u in unknowns):
+        return {"status": "BLOCKED_EXTERNAL_DEPENDENCY"}
+    if any(u["kind"] in MATERIAL_UNKNOWNS for u in unknowns):
+        return {"status": "NEEDS_REVIEW"}
+    if not case["steps"] and case["canonical_gap_candidate"]:
+        return {"status": "PROPOSED"}
+    return {"status": "READY"}
+
+
+def _canonical_plan_line(case: dict[str, Any]) -> str:
+    parts = [f"- **{case['id']}** — {case['title']}",
+             f"origin: canonical | status: `{case['status']}`",
+             f"automation: {case.get('automation_suitability') or 'n/a'}/{case.get('automation_layer') or 'n/a'}"]
+    if case.get("source_identifiers"):
+        parts.append("requirements: " + ", ".join(case["source_identifiers"]))
+    return " — ".join(parts)
+
+
+def _ch_plan_line(case: dict[str, Any]) -> str:
+    lines = [f"- **{case['id']}** — {case['title']}  ", f"  origin: challenge | status: `{case['status']}` | tags: `{'/'.join(case['execution_tags'])}`"]
+    if case.get("rationale"):
+        lines.append(f"  why: {case['rationale']}")
+    if case.get("related_test_cases"):
+        lines.append(f"  related canonical tests: {', '.join(case['related_test_cases'])}")
+    if case.get("related_source_identifiers"):
+        lines.append(f"  related requirements: {', '.join(case['related_source_identifiers'])}")
+    if case.get("required_resources"):
+        lines.append(f"  required resources: {', '.join(case['required_resources'])}")
+    if case.get("environment_requirements"):
+        lines.append(f"  environment: {', '.join(case['environment_requirements'])}")
+    if case.get("preconditions"):
+        lines.append(f"  preconditions: {'; '.join(case['preconditions'])}")
+    for step in case.get("steps", []):
+        lines.append(f"  step {step['step']}: {step['action']} → {step.get('expected_result') or '(unresolved)'}")
+    if case.get("evidence_refs"):
+        cites = ", ".join(f"{ref.get('source')} ({ref.get('reference')})" for ref in case["evidence_refs"])
+        lines.append(f"  evidence to collect: {cites}")
+    for unknown in case.get("unknowns", []):
+        blocker = f"  blocker: {unknown['kind']} — {unknown['detail']}"
+        if unknown.get("question"):
+            blocker += f" (see {unknown['question']})"
+        lines.append(blocker)
+    return "\n".join(lines)
+
+
 def render_manual_plan(canonical: dict[str, Any], ch_cases: list[dict[str, Any]]) -> str:
     buckets: dict[str, list[str]] = {key: [] for key, _ in PLAN_SECTIONS}
     for case in canonical["cases"]:
-        if case.get("automation_suitability") in {"LOW", "MANUAL_ONLY"} or case["status"] in {
-            "BLOCKED_EXTERNAL_DEPENDENCY", "EXPLORATORY", "NEEDS_REVIEW",
-        }:
-            bucket = "blocked" if case["status"] == "BLOCKED_EXTERNAL_DEPENDENCY" else (
-                "exploratory" if case["status"] == "EXPLORATORY" else "manual_operational"
+        manual_like = case.get("automation_suitability") in {"LOW", "MANUAL_ONLY"}
+        hardware_like = case.get("automation_layer") in {"HARDWARE", "MIXED"}
+        blocked_like = case["status"] in {"BLOCKED_EXTERNAL_DEPENDENCY", "EXPLORATORY", "NEEDS_REVIEW"}
+        if manual_like or hardware_like or blocked_like:
+            bucket = "physical_device" if hardware_like else (
+                "blocked" if case["status"] == "BLOCKED_EXTERNAL_DEPENDENCY" else (
+                    "exploratory" if case["status"] == "EXPLORATORY" else "manual_operational"
+                )
             )
-            buckets[bucket].append(
-                f"- **{case['id']}** — {case['title']} (`{case['status']}`, canonical, {case.get('automation_layer') or 'n/a'})"
-            )
+            buckets[bucket].append(_canonical_plan_line(case))
     for case in ch_cases:
         bucket = _plan_bucket(case["execution_tags"], case.get("status", ""))
-        line = f"- **{case['id']}** — {case['title']} (`{'/'.join(case['execution_tags'])}`)"
-        if case.get("related_test_cases"):
-            line += f" — related: {', '.join(case['related_test_cases'])}"
-        buckets[bucket].append(line)
+        buckets[bucket].append(_ch_plan_line(case))
     lines = ["# Manual / Physical / Field Test Plan", ""]
     for key, heading in PLAN_SECTIONS:
         lines.append(f"## {heading}")
@@ -442,40 +638,39 @@ def finalize_challenge(
 ) -> dict[str, Any]:
     run_dir = Path(run_dir).resolve()
     challenge_dir = _challenge_dir(run_dir, challenge_id)
-    if not challenge_dir.is_dir():
-        raise ChallengeError(f"challenge {challenge_id!r} was not started")
-    _require_parent_unchanged(challenge_dir, run_dir)
-    result_path = challenge_dir / "challenge-result.json"
-    if not result_path.is_file():
+    lineage = _lineage(challenge_dir)
+    if lineage["status"] == "STARTED":
         raise ChallengeError(f"challenge {challenge_id!r} was not submitted yet")
-    result = read_json(result_path)
+    if lineage["status"] == "FINALIZED":
+        raise ChallengeError(f"challenge {challenge_id!r} is already finalized; start a new challenge_id to redo it")
+    _require_parent_unchanged(challenge_dir, run_dir)
+    result = read_json(challenge_dir / "challenge-result.json")
     canonical = pipeline.read_canonical(run_dir / "canonical-suite.json")
     for case in result["cases"]:
-        case.setdefault("status", "READY" if not case["unknowns"] else "NEEDS_REVIEW")
+        case.update(classify_challenge_case(case))
     write_json(challenge_dir / "challenge-cases.json", {"cases": result["cases"]})
     write_json(challenge_dir / "seed-dispositions.json", {"seed_dispositions": result["seed_dispositions"]})
     plan = render_manual_plan(canonical, result["cases"])
     (challenge_dir / "challenge-plan.md").write_text(plan, encoding="utf-8")
     files = ["challenge-cases.json", "seed-dispositions.json", "challenge-plan.md"]
+    # Marked FINALIZED before the (optional) Azure package build, which reads this
+    # challenge run's own finalized state back from disk like any other consumer would.
+    lineage.update({"status": "FINALIZED", "finalized_at": now(), "outputs": files})
+    write_json(challenge_dir / "challenge-run.json", lineage)
     if azure:
-        from integrations.azure_devops import build_preview
-        azure_cases = [{
-            "id": case["id"], "title": case["title"], "priority": case["priority"],
-            "preconditions": case["preconditions"],
-            "steps": [{"action": s["action"], "expected_result": s["expected_result"]} for s in case["steps"]],
-            "tags": case["execution_tags"],
-            "requirement_refs": case["related_source_identifiers"], "coverage_point_refs": [],
-            "status": case["status"], "automation_suitability": case.get("automation_suitability"),
-            "automation_readiness": None,
-        } for case in result["cases"]]
-        preview = build_preview(
-            azure_cases, azure.get("mapping", {}), project=azure["project"], plan=azure["plan"],
-            suite=azure["suite"], include_needs_review=azure.get("include_needs_review", True),
+        import azure_export
+        # Reuses the shared canonical+Challenge packaging path, scoped to just this
+        # challenge run, so a CH case is previewed with its stable challenge:<id>:CH-nnn
+        # export key and never collides with another challenge run's own CH-001.
+        package = azure_export.build_export_package(run_dir, challenge_ids=[challenge_id])
+        state = azure_export.load_integration_state(run_dir)
+        preview = azure_export.preview_export(
+            package, project=azure["project"], plan=azure["plan"], suite=azure["suite"],
+            mapping={"test_cases": state.get("test_cases", {})},
         )
         write_json(challenge_dir / "azure-devops-preview.json", preview)
         files.append("azure-devops-preview.json")
-    lineage = read_json(challenge_dir / "challenge-run.json")
-    lineage.update({"status": "FINALIZED", "finalized_at": now(), "outputs": files})
+    lineage.update({"outputs": files})  # picks up azure-devops-preview.json when it was produced above
     write_json(challenge_dir / "challenge-run.json", lineage)
     return {"challenge_dir": str(challenge_dir), "files": files, "cases": len(result["cases"])}
 
@@ -484,7 +679,10 @@ def verify_challenge(run_dir: Path, challenge_id: str) -> dict[str, Any]:
     run_dir = Path(run_dir).resolve()
     challenge_dir = _challenge_dir(run_dir, challenge_id)
     digest = _require_parent_unchanged(challenge_dir, run_dir)
-    result = read_json(challenge_dir / "challenge-result.json")
+    result_path = challenge_dir / "challenge-result.json"
+    if not result_path.is_file():
+        return {"verified": True, "parent_canonical_digest": digest, "cases": 0, "status": _lineage(challenge_dir)["status"]}
+    result = read_json(result_path)
     canonical = pipeline.read_canonical(run_dir / "canonical-suite.json")
     known_case_ids = {case["id"] for case in canonical["cases"]}
     for case in result["cases"]:
@@ -509,6 +707,13 @@ def main(argv: list[str] | None = None) -> int:
     start.add_argument("--seed", action="append", default=[], help="path to a Markdown seed file (repeatable)")
     start.add_argument("--focus", default="")
 
+    lookup = sub.add_parser("lookup")
+    lookup.add_argument("--run", required=True)
+    lookup.add_argument("--challenge-id", required=True)
+    lookup.add_argument("--source", required=True)
+    lookup.add_argument("--query")
+    lookup.add_argument("--lines", help="A-B line range")
+
     submit = sub.add_parser("submit")
     submit.add_argument("--run", required=True)
     submit.add_argument("--challenge-id", required=True)
@@ -529,6 +734,13 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if args.command == "start":
             result = start_challenge(args.run, args.challenge_id, seeds=[Path(p) for p in args.seed], focus=args.focus)
+        elif args.command == "lookup":
+            line_start = line_end = None
+            if args.lines:
+                start_text, _, end_text = args.lines.partition("-")
+                line_start, line_end = int(start_text), int(end_text or start_text)
+            result = lookup_evidence(args.run, args.challenge_id, args.source, query=args.query,
+                                     line_start=line_start, line_end=line_end)
         elif args.command == "submit":
             result = submit_challenge(args.run, args.challenge_id, read_json(args.file))
         elif args.command == "finalize":
