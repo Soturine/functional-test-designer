@@ -21,7 +21,8 @@ Complete worked payloads for six domains live in `benchmarks/domains/*.json` (`s
              "actor": "", "state": "", "trigger": "", "expected": "the oracle", "failure_domain": "",
              "primary_type": "FUNCTIONAL", "priority": "HIGH", "priority_reason": "",
              "indivisible_contract": "required when claims has more than one", "event": "optional business event",
-             "questions": ["Q key"], "findings": ["F key"]}],
+             "related_identifiers": ["RN-02"], "questions": ["Q key"], "findings": ["F key"]}],
+  "structure_reviews": [{"identifier": "RF-03", "reason": "why several listed items are one obligation"}],
   "dispositions": [{"identifier": "RN-09", "disposition": "QUESTION_REQUIRED | NOT_TESTABLE_WITH_REASON | SUPERSEDED_BY_AUTHORITY",
                     "reason": "", "question": "Q key", "superseded_by": "RN-10"}],
   "questions": [{"key": "Q1", "question": "", "reason": "", "requirements": ["RF-01"], "tests": ["T1"],
@@ -35,6 +36,8 @@ Complete worked payloads for six domains live in `benchmarks/domains/*.json` (`s
 - `domain_model.actors`, `entities`, `operations` must be non-empty; values come from the sources.
 - The requirement's `source_identifier` is added to each of its claims' `identifiers`; add other identifiers a claim satisfies (a business rule exercised by a requirement's claim).
 - An identifier is `COVERED_BY_ATOMIC_TC` / `COVERED_BY_MULTIPLE_ATOMIC_TCS` when Acceptance tests exercise its claims; `BLOCKED_EXTERNAL_DEPENDENCY` is derived when all of those tests are blocked by an unavailable dependency. Explicit dispositions are only for identifiers that no test exercises.
+- `related_identifiers` keeps every authoritative relationship visible: the test's `requirement_refs`/`source_identifiers` are its claims' identifiers plus these (each must exist in authority). The HTML card shows them as chips.
+- Over-compression guard: the runtime counts each identifier's structural items (bullets, substantive sentences). An identifier with two or more items and a single claim needs a `structure_reviews` reason (≥ 5 words), or more claims.
 - Rejected: compound claim text without `indivisible_contract`, tests over several claims without it, `NOT_TESTABLE` because implementation is missing, altered titles, identifiers absent from authority, text in another language than the run locale.
 - Question `impact`: `EXECUTION_DETAIL, TEST_DATA, ACTOR_PERMISSION, EXPECTED_RESULT, ENVIRONMENT, SCOPE, IMPLEMENTATION_LOCATION, REQUIREMENT_AMBIGUITY`.
 - `primary_type`: `FUNCTIONAL, NEGATIVE, BOUNDARY, SECURITY, AUTHORIZATION, PERFORMANCE, RESILIENCE, RECOVERY, CONCURRENCY, RACE_CONDITION, IDEMPOTENCY, INTEGRATION, CONTRACT, DATA_INTEGRITY, AUDIT, STATE_TRANSITION, E2E, FIELD, HARDWARE_INTEGRATION, CHAOS, EXPLORATORY`.
@@ -53,7 +56,7 @@ Complete worked payloads for six domains live in `benchmarks/domains/*.json` (`s
                "oracle_source": {"source": "", "reference": ""}, "questions": [], "findings": [],
                "...": "same intent fields as a design test"},
       "covered_by": ["T4"], "intent": {"actor": "", "state": "", "trigger": "", "failure_domain": "", "expected": ""},
-      "question": "Q key", "reason": ""
+      "question": "Q key", "reason": "", "shared_policy": "when one Question answers several surfaces"
     }],
     "patterns_reviewed": [{"items": ["WRONG_RESOURCE"], "status": "CANDIDATES"},
                           {"items": ["ABANDONED_OPERATION"], "status": "NOT_APPLICABLE", "reason": ""}],
@@ -69,6 +72,8 @@ Complete worked payloads for six domains live in `benchmarks/domains/*.json` (`s
 - All 17 dimensions appear once. `OPERATOR_ERROR` carries `patterns_reviewed` covering every operator pattern; `CHAOS` carries `surfaces_reviewed` covering every failure surface. `CANDIDATES` items must have at least one candidate (in any dimension) carrying that `pattern`/`surface`.
 - `DERIVED` needs `oracle_source` in Functional Authority; `CHARACTERIZATION` in implementation evidence or a test asset; `EXPLORATORY` links a Question. Every non-E2E test anchors to design claims with destination `TEST`.
 - `ALREADY_COVERED` needs the candidate intent; alignment against the target test is checked (actor/state/trigger containment ≥ 0.34, failure domain Jaccard ≥ 0.4, expected Jaccard ≥ 0.34) and the scores are kept for audit.
+- Coverage is semantic, not lexical: an intent identical to the target's (4 of 5 fields) is rejected as copied; the description must relate to the target (containment ≥ 0.25); candidates in adversarial dimensions (`NEGATIVE`, `BOUNDARY`, `OPERATOR_ERROR`, `MISUSE`, `CONCURRENCY`, `RACE_CONDITION`, `IDEMPOTENCY`, `INTEGRATION`, `RECOVERY`, `CHAOS`, `SECURITY`, `AUTHORIZATION`) or carrying a pattern/surface cannot be covered only by happy-path Acceptance tests (primary type `FUNCTIONAL`, `FIELD` or `PERFORMANCE`). Test assets that converge on the same target must share its failure domain or expected result (Jaccard ≥ 0.4).
+- Failure surfaces are not collapsed: several surfaces resolved by one Question need `shared_policy` (≥ 5 words) naming the single decision they share.
 - E2E: `dimension: "E2E"` candidates. A `MATERIALIZED` journey's test has `stages: [{"name", "test", "trigger", "observation"}]` over at least two distinct atomic tests; each stage's observation must match the composed test's expected result. Every `USE_CASE` identifier needs an E2E candidate with `use_case`; `ALREADY_COVERED` journeys list at least two atomic tests and a reason.
 - Every discovered test asset (listed in the work order) needs exactly one disposition.
 
@@ -84,6 +89,7 @@ Complete worked payloads for six domains live in `benchmarks/domains/*.json` (`s
   "oracle_step": 2,
   "single_step_reason": "required when there is one step",
   "unknowns": [{"kind": "MISSING_FIXTURE", "detail": "", "question": "Q key"}],
+  "evidence_refs": [{"source": "selected path", "reference": "section, function or screen"}],
   "automation": {"suitability": "HIGH | MEDIUM | LOW | MANUAL_ONLY",
                  "layer": "UI | API | SERVICE | INTEGRATION | HARDWARE | MIXED",
                  "tool_hint": "PLAYWRIGHT | API_TEST | TESTSPRITE | PYTEST | OTHER | NONE"}
@@ -92,4 +98,6 @@ Complete worked payloads for six domains live in `benchmarks/domains/*.json` (`s
 
 - One procedure per Test Case. The `oracle_step` (default last) must observe the designed `expected` (containment ≥ 0.4). A `MISSING_ORACLE` unknown allows an empty expected result and must link the Question that asks for it.
 - Derived fields: `status` READY / NEEDS_REVIEW / BLOCKED_EXTERNAL_DEPENDENCY / EXPLORATORY, `automation_readiness` READY / NEEDS_FIXTURE / NEEDS_SELECTOR / NEEDS_ENVIRONMENT / NEEDS_POLICY / BLOCKED_EXTERNAL_DEPENDENCY / NOT_APPLICABLE, `automation_candidate = suitability in {HIGH, MEDIUM}`. A blocking Question linked to the test also prevents READY.
+- Grounding: each procedure cites `evidence_refs` inside the selected scope, or declares `MISSING_EXECUTION_SURFACE` / `UNKNOWN_SETUP_PATH`. A generic authentication step is rejected unless the test is about authentication. Procedures run on frozen identities: identity, oracle and composition fields are rejected.
+- Diagnostics: `procedures_generated`, `procedures_with_evidence_refs`, `procedures_requiring_additional_evidence`, `targeted_source_lookups`, `procedure_generation_seconds`, `average_procedure_generation_seconds`, `runtime_source_rereads` (always 0: sources are read once at start and only digest-checked later), `repeated_step_template_ratio` (a warning above 0.5).
 - Rejected: generic preconditions, placeholders (`<...>`, `TBD`), abstract actions ("execute the described flow"), unobservable results ("works as expected"), hidden variants ("valid and invalid", "repeat for each"), a one-step case without reason or that compresses several actions.

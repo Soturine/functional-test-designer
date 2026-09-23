@@ -23,7 +23,7 @@ A stage that violates an invariant is rejected before anything is recorded, so a
 
 ## Metrics and warnings (never gates)
 
-`run-metrics.json` reports counts by basis, dimension, status, suitability and readiness; priority distribution (with a flattening warning above 90%); average steps and one-step ratio; identifier coverage by kind; Findings, Questions, families, merge candidates; per-stage wall time and rejections. Warnings include priority flattening and possible multi-action steps.
+`run-metrics.json` reports counts by basis, dimension, status, suitability and readiness; priority distribution (with a flattening warning above 90%); average steps and one-step ratio; identifier coverage by kind; Findings, Questions, families, merge candidates; per-stage wall time and rejections; procedure diagnostics (`procedures_generated`, `procedures_with_evidence_refs`, `procedures_requiring_additional_evidence`, `targeted_source_lookups`, `procedure_generation_seconds`, `average_procedure_generation_seconds`, `runtime_source_reads`, `runtime_source_rereads`, `source_integrity_checks`). Warnings include priority flattening, possible multi-action steps and `PROCEDURE_BOILERPLATE` (more than half of all steps share a template).
 
 ## Historical baselines (benchmark only)
 

@@ -34,7 +34,19 @@ After the baseline is frozen, go looking for failure. For each dimension record 
 
 ## Procedures
 
-Stage A decided *what* to test; stage B decides *how to execute it*. Write only the detail needed to run the case: real starting context, semantic fixtures with clear properties, one action per step, an observable result per step, cleanup when relevant. Readiness is about material unknowns, not about literal database ids. Automation suitability (how well the case lends itself to automation) and automation readiness (what is still missing to automate it) are different questions.
+Stage A decided *what* to test; stage B decides *how to execute it*. **Test design decides what must be tested. Procedure generation only explains how to execute it.** Procedures run after identities are frozen: they cannot add, delete, merge, retitle or re-oracle a test.
+
+Write only the detail needed to run the case: real starting context, semantic fixtures with clear properties, one action per step, an observable result per step, cleanup when relevant. Readiness is about material unknowns, not about literal database ids. Automation suitability (how well the case lends itself to automation) and automation readiness (what is still missing to automate it) are different questions.
+
+Write steps the way a good product manual does, for the person who uses the screen rather than the person who maintains the code:
+
+- **Imperative action plus what the tester sees.** "Click **Save**." followed by the visible outcome, not "the save handler runs".
+- **Visible labels, quoted exactly as the evidence shows them**, in the language the product displays. Component, template, route or class names appear only on integrator/API steps, where the published contract is the vocabulary.
+- **Setup is not action.** Reaching the starting state belongs in preconditions and test data; steps start where the behavior under test starts.
+- **Side effects after the confirming action.** Observe what changed (state, balance, record, message) in a step after the one that commits it.
+- **Never invent controls.** A menu, button, message, limit or permission that no selected evidence shows becomes an unknown (`MISSING_EXECUTION_SURFACE`, `UNKNOWN_SETUP_PATH`, `MISSING_SELECTOR`) or a Question, never prose.
+- **Cite the path.** `evidence_refs` names the source and section each procedure relies on. Evidence is looked up once per section and shared by the family batch, never reread per Test Case.
+- **The oracle step observes the designed expected result.** Navigation evidence can add steps; it never changes what the test asserts.
 
 ## Scenario Families and merge candidates
 
