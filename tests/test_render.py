@@ -104,7 +104,7 @@ class LegacySuiteRenderTests(unittest.TestCase):
         labels = render.labels_for(index)
         html = render.render_case_template(
             case, index["test_cases"][0], render.mermaid_source(case, labels), labels,
-            {item["id"]: item for item in index["requirements"]}, "G", "Group", set(), {"JSON"},
+            {item["id"]: item for item in index["requirements"]}, "G", "Group", set(), {"JSON"}, {}, {},
         )
         self.assertNotIn("</script><script>", html)
         self.assertIn("&lt;script&gt;", html)
@@ -125,8 +125,9 @@ class LegacySuiteRenderTests(unittest.TestCase):
             render.render_report(self.output)
 
 
-class ModalReviewGlossaryTests(unittest.TestCase):
-    """v2.4 HTML UX round: one-Test-Case-at-a-time modal, local review toggle, glossary."""
+class RequirementModalTests(unittest.TestCase):
+    """v2.4 corrective UX round: modal paginates by requirement identifier, not by TC;
+    TCs are accordion rows (disclosure state only, no review/localStorage concept)."""
 
     def setUp(self) -> None:
         self.temp_dir = tempfile.TemporaryDirectory()
@@ -142,46 +143,234 @@ class ModalReviewGlossaryTests(unittest.TestCase):
         report = self.render_all()
         self.assertIn('class="open-group"', report)
         self.assertNotIn('class="group-toggle"', report)
-        self.assertNotIn("id=\"expand-all\"", report)
+        self.assertNotIn('id="expand-all"', report)
 
-    def test_modal_structure_has_pagination_counter_and_close(self) -> None:
+    def test_modal_structure_has_requirement_navigation_and_close(self) -> None:
         report = self.render_all()
         self.assertIn('id="tc-modal"', report)
         self.assertIn('id="tc-modal-body"', report)
+        self.assertIn('id="tc-modal-title"', report)
         self.assertIn('id="tc-prev"', report)
         self.assertIn('id="tc-next"', report)
         self.assertIn('id="tc-position"', report)
         self.assertIn('id="tc-modal-close"', report)
 
-    def test_only_one_template_per_case_no_visible_expanded_duplicate_card(self) -> None:
+    def test_pagination_is_by_requirement_not_by_test_case(self) -> None:
         report = self.render_all()
+        self.assertIn('class="req-template"', report)
+        self.assertIn('data-key=', report)
+        self.assertIn('reqTemplates', report)
+        self.assertIn('tcState.pages', report)
+        # no leftover TC-level pagination state from the previous round
+        self.assertNotIn('tcState.items', report)
+
+    def test_one_family_with_three_identifiers_reports_1_of_3(self) -> None:
+        # source_identifiers is additive metadata (unlike requirement_refs it carries no
+        # cross-file coverage obligation), so it is the safe way to give one legacy-schema
+        # family three distinct official identifiers without disturbing normative coverage.
+        index_path = self.output / "test-cases.json"
+        index = json.loads(index_path.read_text(encoding="utf-8"))
+        # TC-002..TC-004 already share one requirement (REQ-002), so they already share one
+        # family group; only their identifiers need to differ to prove the group now has 3 pages.
+        same_group = [tc for tc in index["test_cases"] if tc["requirement_refs"] == ["REQ-002"]][:3]
+        self.assertEqual(3, len(same_group))
+        for tc, identifier in zip(same_group, ("SYN-A", "SYN-B", "SYN-C")):
+            case_path = self.output / tc["file"]
+            case = json.loads(case_path.read_text(encoding="utf-8"))
+            case["source_identifiers"] = [identifier]
+            case_path.write_text(json.dumps(case), encoding="utf-8")
+        report = self.render_all()
+        self.assertIn('POS_OF', report)
+        self.assertGreaterEqual(report.count('class="req-template"'), 3)
+        self.assertIn('data-key="SYN-A"', report)
+        self.assertIn('data-key="SYN-B"', report)
+        self.assertIn('data-key="SYN-C"', report)
+
+    def test_no_tc_level_previous_next_pagination_remains(self) -> None:
+        report = self.render_all()
+        self.assertNotIn('renderCurrentCase', report)
+        self.assertNotIn('tc-modal-family', report)
+
+    def test_all_tcs_for_a_requirement_are_lightweight_accordion_rows(self) -> None:
+        report = self.render_all()
+        self.assertIn('class="tc-row"', report)
+        self.assertIn('class="tc-row-toggle"', report)
+        self.assertIn('aria-expanded="false"', report)
+        self.assertIn('class="tc-row-body"', report)
+
+    def test_full_tc_body_is_materialized_only_when_the_row_is_opened(self) -> None:
+        report = self.render_all()
+        self.assertIn('tpl.content.cloneNode(true)', report)
+        self.assertIn("body.dataset.materialized", report)
+        # exactly one full body per TC, in its own global template — never duplicated per row
         index = json.loads((self.output / "test-cases.json").read_text(encoding="utf-8"))
         self.assertEqual(len(index["test_cases"]), report.count('class="tc-template"'))
         self.assertEqual(0, report.count('class="tc-content"') - report.count('<template class="tc-template"'))
 
-    def test_review_toggle_control_exists_with_report_scoped_and_tc_scoped_storage_key(self) -> None:
+    def test_no_review_checkbox_or_localstorage_code_remains(self) -> None:
         report = self.render_all()
-        self.assertIn('id="tc-review-toggle"', report)
-        self.assertIn("REPORT_NS=", report.replace(" ", ""))
-        self.assertIn("functionstorageKey(id){returnREPORT_NS+':'+id;}", report.replace(" ", ""))
-        # The namespace must not be a bare literal like just "review": it is derived from
-        # the run's generated_at so unrelated reports never collide on the same TC id.
-        index = json.loads((self.output / "test-cases.json").read_text(encoding="utf-8"))
-        self.assertIn(json.dumps(str(index["generated_at"])), report)
+        for gone in (
+            "tc-review-toggle", "REPORT_NS", "localStorage", "clear-review",
+            "Aceito / Fechado", "Accepted / Closed", "Pendente", "isClosed", "setClosed",
+        ):
+            self.assertNotIn(gone, report)
 
-    def test_rendering_and_reviewing_never_touches_canonical_json(self) -> None:
-        json_files = sorted(self.output.rglob("*.json"))
-        before = {path: digest(path) for path in json_files}
-        self.render_all()
-        after = {path: digest(path) for path in json_files}
-        self.assertEqual(before, after)
-        report = (self.output / "report.html").read_text(encoding="utf-8")
-        self.assertNotIn('"accepted"', report)  # no canonical-looking review field was introduced
-
-    def test_localstorage_failure_is_handled_safely(self) -> None:
+    def test_multi_requirement_tc_appears_on_each_relevant_requirement_page_without_cloning_canonical_data(self) -> None:
+        index_path = self.output / "test-cases.json"
+        index = json.loads(index_path.read_text(encoding="utf-8"))
+        json_before = json.loads(json.dumps(index))
+        tc_entry = index["test_cases"][0]
+        case_path = self.output / tc_entry["file"]
+        case = json.loads(case_path.read_text(encoding="utf-8"))
+        # source_identifiers (not requirement_refs) is what drives requirement-page keys;
+        # two identifiers on one TC is exactly the "same TC, several pages" scenario.
+        case["source_identifiers"] = ["SYN-X", "SYN-Y"]
+        case_path.write_text(json.dumps(case), encoding="utf-8")
         report = self.render_all()
-        self.assertIn("try{", report.replace(" ", ""))
-        self.assertIn("catch(e){}", report.replace(" ", "").replace("catch(e){return false;}", "catch(e){}"))
+        self.assertGreaterEqual(report.count(f'data-id="{case["id"]}"'), 2)
+        self.assertEqual(1, report.count(f'id="tc-tpl-{case["id"]}"'))  # one global body, never cloned
+        after = json.loads(index_path.read_text(encoding="utf-8"))
+        self.assertEqual(json_before["test_cases"], after["test_cases"])  # index itself untouched by rendering
+
+    def test_finding_indicator_and_detail_appear_on_the_linked_tc(self) -> None:
+        index_path = self.output / "test-cases.json"
+        index = json.loads(index_path.read_text(encoding="utf-8"))
+        index["findings"] = [{
+            "id": "FND-900", "type": "IMPLEMENTATION_DIVERGENCE",
+            "statement": "The implementation allows X while the authority defines Y.",
+            "requirement_refs": [index["requirements"][0]["id"]], "related_test_cases": [index["test_cases"][0]["id"]],
+            "source_refs": [{"source": "examples/selected-source/order_service.py", "reference": "line 10"}],
+        }]
+        index_path.write_text(json.dumps(index), encoding="utf-8")
+        tc_entry = index["test_cases"][0]
+        case_path = self.output / tc_entry["file"]
+        case = json.loads(case_path.read_text(encoding="utf-8"))
+        case["finding_refs"] = ["FND-900"]
+        case_path.write_text(json.dumps(case), encoding="utf-8")
+        other_case_path = self.output / index["test_cases"][1]["file"]
+        other_case = json.loads(other_case_path.read_text(encoding="utf-8"))
+        self.assertNotIn("finding_refs", other_case)  # nothing else was touched
+        report = self.render_all()
+        self.assertIn("FND-900", report)
+        self.assertIn("IMPLEMENTATION_DIVERGENCE", report)
+        self.assertIn("The implementation allows X while the authority defines Y.", report)
+        self.assertIn('class="tc-alerts"', report)
+        self.assertIn("1 Finding", report)
+
+    def test_question_indicator_and_detail_appear_on_the_linked_tc(self) -> None:
+        index_path = self.output / "test-cases.json"
+        index = json.loads(index_path.read_text(encoding="utf-8"))
+        questions_path = self.output / "questions.json"
+        questions = json.loads(questions_path.read_text(encoding="utf-8"))
+        questions["questions"] = questions.get("questions", []) + [{
+            "id": "Q-900", "question": "What happens on a duplicate submission?",
+            "reason": "The authority does not define duplicate-submission behavior.",
+            "blocking": True, "impact": "EXPECTED_RESULT",
+            "requirement_refs": [index["requirements"][0]["id"]], "related_test_cases": [index["test_cases"][0]["id"]],
+            "source_refs": [{"source": "examples/selected-source/order_service.py", "reference": "section 2"}],
+        }]
+        questions_path.write_text(json.dumps(questions), encoding="utf-8")
+        index["test_cases"][0]["status"] = "BLOCKED"  # a blocking Question needs a BLOCKED TC (schema 1.2 uses the literal status)
+        index_path.write_text(json.dumps(index), encoding="utf-8")
+        tc_entry = index["test_cases"][0]
+        case_path = self.output / tc_entry["file"]
+        case = json.loads(case_path.read_text(encoding="utf-8"))
+        case["question_refs"] = ["Q-900"]
+        case["status"] = "BLOCKED"
+        case_path.write_text(json.dumps(case), encoding="utf-8")
+        report = self.render_all()
+        self.assertIn("Q-900", report)
+        self.assertIn("What happens on a duplicate submission?", report)
+        self.assertIn("The authority does not define duplicate-submission behavior.", report)
+        self.assertIn("blocking", report)  # question-item blocking styling class present
+
+    def test_unrelated_tc_does_not_show_a_finding_it_is_not_linked_to(self) -> None:
+        index_path = self.output / "test-cases.json"
+        index = json.loads(index_path.read_text(encoding="utf-8"))
+        index["findings"] = [{
+            "id": "FND-901", "type": "COVERAGE_GAP", "statement": "Only linked to TC-001.",
+            "requirement_refs": [], "related_test_cases": [index["test_cases"][0]["id"]],
+            "source_refs": [{"source": "examples/selected-source/order_service.py", "reference": "n/a"}],
+        }]
+        index_path.write_text(json.dumps(index), encoding="utf-8")
+        case_path = self.output / index["test_cases"][0]["file"]
+        case = json.loads(case_path.read_text(encoding="utf-8"))
+        case["finding_refs"] = ["FND-901"]
+        case_path.write_text(json.dumps(case), encoding="utf-8")
+        render.render_markdown(self.output)
+        render.render_report(self.output)
+        # The TC's own template carries the alert; every other TC's template must not.
+        other = json.loads((self.output / index["test_cases"][1]["file"]).read_text(encoding="utf-8"))
+        labels = render.labels_for(index)
+        requirements = {item["id"]: item for item in index["requirements"]}
+        other_body = render.render_case_body(
+            other, index["test_cases"][1], render.mermaid_source(other, labels), labels, requirements,
+            "Group", {"JSON"}, {"FND-901": index["findings"][0]}, {},
+        )
+        self.assertNotIn("FND-901", other_body)
+
+    def test_glossary_covers_expansion_and_blocking_question_in_portuguese(self) -> None:
+        index_path = self.output / "test-cases.json"
+        index = json.loads(index_path.read_text(encoding="utf-8"))
+        index["output_locale"] = "pt-BR"
+        index_path.write_text(json.dumps(index), encoding="utf-8")
+        report = self.render_all()
+        self.assertIn('id="glossary"', report)
+        for term in (
+            "Findings", "Normativos", "Derivados", "Cobertura", "CRITICAL", "HIGH",
+            "READY", "NEEDS_REVIEW", "BLOCKED", "Exploratório", "Automação pronta",
+            "Pergunta bloqueante", "Candidatos", "Materializados", "Já cobertos", "Não aplicável",
+        ):
+            self.assertIn(term, report)
+        for code in render.EXPANSION_DIMENSION_INFO["pt"]:
+            self.assertIn(code, report)
+
+    def test_glossary_in_english_locale_uses_english_terms(self) -> None:
+        index_path = self.output / "test-cases.json"
+        index = json.loads(index_path.read_text(encoding="utf-8"))
+        index["output_locale"] = "en-US"
+        index_path.write_text(json.dumps(index), encoding="utf-8")
+        report = self.render_all()
+        for term in ("Findings", "Derived", "Coverage", "Normative", "Automation ready", "Blocking Question"):
+            self.assertIn(term, report)
+
+    def test_expansion_columns_are_explained_and_all_17_dimensions_documented(self) -> None:
+        report = self.render_all()
+        self.assertIn('class="expansion-help"', report)
+        self.assertIn('class="expansion-legend"', report)
+        for code in render.EXPANSION_DIMENSION_INFO["en"]:
+            self.assertIn(code, report)
+            label, _ = render.EXPANSION_DIMENSION_INFO["en"][code]
+            self.assertIn(label, report)
+
+    def test_expansion_metric_values_are_unchanged_by_the_explanatory_ui(self) -> None:
+        index_path = self.output / "test-cases.json"
+        index = json.loads(index_path.read_text(encoding="utf-8"))
+        index["expansion_summary"] = [{
+            "dimension": "BOUNDARY", "evaluated": True, "candidates_considered": 4, "materialized": 2,
+            "already_covered": 1, "question_required": 1, "not_applicable": 0,
+        }]
+        index_path.write_text(json.dumps(index), encoding="utf-8")
+        report = self.render_all()
+        self.assertIn(">4<", report)
+        self.assertIn(">2<", report)
+
+    def test_filters_remove_requirement_pages_with_zero_matches_no_silent_fallback(self) -> None:
+        report = self.render_all()
+        self.assertIn("matchesId", report)
+        self.assertIn(".filter(p=>p.matchedIds.length>0)", report)
+        self.assertNotIn("matched.length===0)matched=own", report)  # no more "fall back to the whole group" behavior
+        self.assertIn(render.LABELS["en"]["no_filter_results"], report)
+
+    def test_no_matches_state_message_exists_in_both_locales(self) -> None:
+        report_en = self.render_all()
+        self.assertIn(render.LABELS["en"]["no_filter_results"], report_en)
+        index_path = self.output / "test-cases.json"
+        index = json.loads(index_path.read_text(encoding="utf-8"))
+        index["output_locale"] = "pt-BR"
+        index_path.write_text(json.dumps(index), encoding="utf-8")
+        report_pt = self.render_all()
+        self.assertIn(render.LABELS["pt"]["no_filter_results"], report_pt)
 
     def test_modal_is_a_native_accessible_dialog_with_escape_and_focus_return(self) -> None:
         report = self.render_all()
@@ -196,28 +385,6 @@ class ModalReviewGlossaryTests(unittest.TestCase):
         self.assertIn("ArrowRight", report)
         self.assertIn("['INPUT','SELECT','TEXTAREA']", report)
 
-    def test_glossary_section_defines_the_major_report_terms_in_portuguese(self) -> None:
-        index_path = self.output / "test-cases.json"
-        index = json.loads(index_path.read_text(encoding="utf-8"))
-        index["output_locale"] = "pt-BR"
-        index_path.write_text(json.dumps(index), encoding="utf-8")
-        report = self.render_all()
-        self.assertIn('id="glossary"', report)
-        for term in (
-            "Findings", "Normativos", "Derivados", "Cobertura", "CRITICAL", "HIGH",
-            "READY", "NEEDS_REVIEW", "BLOCKED", "Exploratório", "Automação pronta",
-        ):
-            self.assertIn(term, report)
-
-    def test_glossary_in_english_locale_uses_english_terms(self) -> None:
-        index_path = self.output / "test-cases.json"
-        index = json.loads(index_path.read_text(encoding="utf-8"))
-        index["output_locale"] = "en-US"
-        index_path.write_text(json.dumps(index), encoding="utf-8")
-        report = self.render_all()
-        for term in ("Findings", "Derived", "Coverage", "Normative", "Automation ready"):
-            self.assertIn(term, report)
-
     def test_no_external_cdn_or_network_dependency_was_added(self) -> None:
         report = self.render_all()
         for forbidden in ("https://", "http://cdn", "<script src=", "unpkg.com", "jsdelivr.net"):
@@ -227,8 +394,56 @@ class ModalReviewGlossaryTests(unittest.TestCase):
         report = self.render_all()
         for control_id in ("search", "status-filter", "priority-filter", "family-filter", "feature-filter"):
             self.assertIn(f'id="{control_id}"', report)
-        self.assertIn("function matches(tpl)", report)
+        self.assertIn("function matchesTemplate(tpl)", report)
         self.assertIn("openGroup(", report)
+
+    def test_malicious_finding_statement_and_question_text_cannot_inject_script(self) -> None:
+        index_path = self.output / "test-cases.json"
+        index = json.loads(index_path.read_text(encoding="utf-8"))
+        index["findings"] = [{
+            "id": "FND-902", "type": "COVERAGE_GAP",
+            "statement": '</script><script>alert(1)</script>',
+            "requirement_refs": [], "related_test_cases": [index["test_cases"][0]["id"]],
+            "source_refs": [{"source": "examples/selected-source/order_service.py", "reference": "n/a"}],
+        }]
+        index_path.write_text(json.dumps(index), encoding="utf-8")
+        case_path = self.output / index["test_cases"][0]["file"]
+        case = json.loads(case_path.read_text(encoding="utf-8"))
+        case["finding_refs"] = ["FND-902"]
+        case_path.write_text(json.dumps(case), encoding="utf-8")
+        questions_path = self.output / "questions.json"
+        questions = json.loads(questions_path.read_text(encoding="utf-8"))
+        questions["questions"] = questions.get("questions", []) + [{
+            "id": "Q-902", "question": '</script><script>alert(2)</script>',
+            "reason": '</script><script>alert(3)</script>', "blocking": False, "impact": "EXPECTED_RESULT",
+            "requirement_refs": [index["requirements"][0]["id"]], "related_test_cases": [index["test_cases"][0]["id"]],
+            "source_refs": [{"source": "examples/selected-source/order_service.py", "reference": "n/a"}],
+        }]
+        questions_path.write_text(json.dumps(questions), encoding="utf-8")
+        case["question_refs"] = ["Q-902"]
+        case_path.write_text(json.dumps(case), encoding="utf-8")
+        report = self.render_all()
+        self.assertNotIn("</script><script>", report)
+        self.assertIn("&lt;script&gt;alert(1)&lt;/script&gt;", report)
+        self.assertIn("&lt;script&gt;alert(2)&lt;/script&gt;", report)
+        self.assertIn("&lt;script&gt;alert(3)&lt;/script&gt;", report)
+
+    def test_malicious_requirement_title_cannot_inject_script(self) -> None:
+        index_path = self.output / "test-cases.json"
+        index = json.loads(index_path.read_text(encoding="utf-8"))
+        index["requirements"][0]["source_title"] = '</script><script>alert(4)</script>'
+        index["requirements"][0]["source_identifier"] = "REQ-X"
+        index_path.write_text(json.dumps(index), encoding="utf-8")
+        report = self.render_all()
+        self.assertNotIn("</script><script>", report)
+        self.assertIn("&lt;script&gt;alert(4)&lt;/script&gt;", report)
+
+    def test_rendering_never_touches_canonical_json(self) -> None:
+        json_files = sorted(self.output.rglob("*.json"))
+        before = {path: digest(path) for path in json_files}
+        self.render_all()
+        after = {path: digest(path) for path in json_files}
+        self.assertEqual(before, after)
 
     def test_markdown_output_is_unaffected_by_the_modal_change(self) -> None:
         rendered = render.render_markdown(self.output)
@@ -238,6 +453,11 @@ class ModalReviewGlossaryTests(unittest.TestCase):
             markdown = (self.output / entry["markdown_file"]).read_text(encoding="utf-8")
             self.assertNotIn("tc-modal", markdown)
             self.assertNotIn("<template", markdown)
+
+    def test_other_report_sections_still_render(self) -> None:
+        report = self.render_all()
+        for section_id in ("summary", "test-cases", "merge", "findings", "questions", "coverage", "expansion", "gates"):
+            self.assertIn(f'id="{section_id}"', report)
 
 
 class OfficialTitleTests(unittest.TestCase):

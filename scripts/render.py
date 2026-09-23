@@ -48,10 +48,11 @@ LABELS = {
         "blocking": "Bloqueante", "reason": "Motivo", "impacted": "TCs impactados",
         "no_results": "Nenhum Test Case corresponde aos filtros.", "expand_all": "Expandir todos",
         "collapse_all": "Recolher todos", "collapse": "Recolher", "expand": "Expandir",
-        "open_group": "Ver Test Cases", "modal_prev": "Anterior", "modal_next": "Próximo",
-        "modal_of": " de ", "review_label": "Aceito / Fechado", "review_pending": "Pendente",
-        "review_closed": "Fechado", "closed_of": " fechados", "clear_review": "Limpar marcações deste relatório",
-        "glossary_title": "Legenda e termos do relatório", "modal_close": "Fechar",
+        "open_group": "Ver Test Cases", "modal_prev": "Requisito anterior", "modal_next": "Próximo requisito",
+        "modal_of": " de ", "glossary_title": "Legenda e termos do relatório", "modal_close": "Fechar",
+        "tc_alerts": "Atenções da análise", "finding_singular": "Finding", "question_singular": "Pergunta",
+        "no_filter_results": "Nenhum Test Case corresponde aos filtros ativos.",
+        "tc_count_suffix": "Test Cases", "blocking_question": "Pergunta bloqueante",
         "identifier": "Identificador", "disposition": "Disposição", "kind": "Tipo",
         "candidates": "Candidatos", "materialized": "Materializados", "covered": "Já cobertos",
         "question_required": "Pergunta", "not_applicable": "Não aplicável",
@@ -62,6 +63,13 @@ LABELS = {
         "single_step": "1 passo", "multi_step": "Vários passos", "catalog": "Catálogo de expansão",
         "catalog_intro": "Test Cases adicionados pela segunda passada obrigatória, agrupados por dimensão. Cada linha aponta para um Test Case canônico.",
         "evidence": "Evidência", "gap_metrics": "Métricas de lacunas", "authority_covered": "Identificadores cobertos",
+        "expansion_help_title": "Como ler estas colunas",
+        "candidates_help": "Quantidade de cenários candidatos materialmente relevantes considerados nesta dimensão. Não é o número de Test Cases finais.",
+        "materialized_help": "Candidatos que viraram Test Cases canônicos adicionais durante a expansão aditiva.",
+        "covered_help": "Candidatos já exercidos semanticamente por um TC existente, então nenhum TC duplicado foi criado.",
+        "question_required_help": "Candidatos que não puderam virar um TC determinístico com segurança porque a evidência selecionada deixou uma ambiguidade material; uma Pergunta foi criada.",
+        "not_applicable_help": "A dimensão foi avaliada mas não se aplica ao comportamento/contexto real do projeto (zero não significa que foi pulada).",
+        "dimension_all": "Todas as 17 dimensões avaliadas",
     },
     "en": {
         "objective": "Objective", "preconditions": "Preconditions", "test_data": "Test Data",
@@ -88,10 +96,11 @@ LABELS = {
         "blocking": "Blocking", "reason": "Reason", "impacted": "Impacted TCs",
         "no_results": "No Test Case matches the filters.", "expand_all": "Expand all",
         "collapse_all": "Collapse all", "collapse": "Collapse", "expand": "Expand",
-        "open_group": "View Test Cases", "modal_prev": "Previous", "modal_next": "Next",
-        "modal_of": " of ", "review_label": "Accepted / Closed", "review_pending": "Pending",
-        "review_closed": "Closed", "closed_of": " closed", "clear_review": "Clear marks for this report",
-        "glossary_title": "Report legend and terminology", "modal_close": "Close",
+        "open_group": "View Test Cases", "modal_prev": "Previous requirement", "modal_next": "Next requirement",
+        "modal_of": " of ", "glossary_title": "Report legend and terminology", "modal_close": "Close",
+        "tc_alerts": "Analysis alerts", "finding_singular": "Finding", "question_singular": "Question",
+        "no_filter_results": "No Test Case matches the active filters.",
+        "tc_count_suffix": "Test Cases", "blocking_question": "Blocking question",
         "identifier": "Identifier", "disposition": "Disposition", "kind": "Kind",
         "candidates": "Candidates", "materialized": "Materialized", "covered": "Already covered",
         "question_required": "Question", "not_applicable": "Not applicable",
@@ -102,8 +111,64 @@ LABELS = {
         "single_step": "1 step", "multi_step": "Multiple steps", "catalog": "Expansion catalog",
         "catalog_intro": "Test Cases added by the mandatory second pass, grouped by dimension. Each row points at a canonical Test Case.",
         "evidence": "Evidence", "gap_metrics": "Gap metrics", "authority_covered": "Identifiers covered",
+        "expansion_help_title": "How to read these columns",
+        "candidates_help": "Number of materially relevant scenario candidates considered for this dimension. Not the number of final Test Cases.",
+        "materialized_help": "Candidates that became additional canonical Test Cases during the additive expansion pass.",
+        "covered_help": "Candidates already semantically exercised by an existing TC, so no duplicate TC was added.",
+        "question_required_help": "Candidates that could not safely become a deterministic TC because the selected evidence left a material ambiguity; a Question was required instead.",
+        "not_applicable_help": "The dimension was evaluated but did not apply to the project's actual behavior/context (zero does not mean it was skipped).",
+        "dimension_all": "All 17 dimensions evaluated",
     },
 }
+# Human-readable descriptions only; these never feed generation logic, they only
+# explain the dimension codes the runtime already computed.
+EXPANSION_DIMENSION_INFO: dict[str, dict[str, tuple[str, str]]] = {
+    "pt": {
+        "NEGATIVE": ("Comportamento negativo", "Caminhos inválidos/recusados/de erro em torno de uma funcionalidade válida."),
+        "BOUNDARY": ("Condições de limite", "Limites, thresholds, bordas exatas e comportamento logo dentro/fora do permitido."),
+        "OPERATOR_ERROR": ("Erro de operador", "Erros humanos plausíveis: recurso errado, ator errado, sequência errada, associação errada ou ação omitida/repetida."),
+        "MISUSE": ("Uso indevido", "Uso de capacidades válidas de forma não intencional ou não suportada."),
+        "STATE_TRANSITION": ("Transição de estado", "Comportamento ao mover entre estados válidos/inválidos e a aplicação das transições permitidas."),
+        "DECISION_TABLE": ("Combinações de decisão", "Combinações relevantes de condições/regras cujas saídas diferem."),
+        "CONCURRENCY": ("Concorrência", "Dois ou mais atores/processos agindo simultaneamente sobre estado relacionado."),
+        "RACE_CONDITION": ("Condição de corrida", "Intercalações sensíveis a tempo em que a ordem de execução pode mudar o resultado."),
+        "IDEMPOTENCY": ("Idempotência", "Execução/retentativa repetida não deve duplicar ou corromper efeitos incorretamente."),
+        "INTEGRATION": ("Integração", "Comportamento nas fronteiras entre subsistemas internos/externos e suas dependências."),
+        "RECOVERY": ("Recuperação", "Retorno a um estado válido/conhecido após interrupção ou falha."),
+        "CHAOS": ("Caos / disrupção", "Disrupção deliberada de dependência/rede/processo/ambiente usada para expor comportamento de resiliência."),
+        "SECURITY": ("Segurança", "Comportamento sensível a segurança além das checagens funcionais comuns de autorização, quando a evidência sustenta."),
+        "AUTHORIZATION": ("Autorização", "Se atores só conseguem realizar operações permitidas por papel/política."),
+        "DATA_INTEGRITY": ("Integridade de dados", "Consistência/correção de dados persistidos ou propagados entre operações/falhas."),
+        "CROSS_REQUIREMENT": ("Interação entre requisitos", "Comportamento que emerge quando dois ou mais requisitos/regras interagem."),
+        "E2E": ("Ponta a ponta", "Uma jornada composta de usuário/sistema que percorre vários comportamentos atômicos."),
+    },
+    "en": {
+        "NEGATIVE": ("Negative behavior", "Invalid/refused/error paths around otherwise valid functionality."),
+        "BOUNDARY": ("Boundary conditions", "Limits, thresholds, exact edges and just-inside/just-outside behavior."),
+        "OPERATOR_ERROR": ("Operator error", "Plausible human mistakes: wrong resource, wrong actor, wrong sequence, wrong association or omitted/repeated action."),
+        "MISUSE": ("Misuse", "Use of valid capabilities in an unintended or unsupported way."),
+        "STATE_TRANSITION": ("State transition", "Behavior when moving between valid/invalid states and enforcing allowed transitions."),
+        "DECISION_TABLE": ("Decision combinations", "Relevant combinations of conditions/rules whose outputs differ."),
+        "CONCURRENCY": ("Concurrency", "Two or more actors/processes acting simultaneously on related state."),
+        "RACE_CONDITION": ("Race condition", "Timing-sensitive interleavings where execution order can change the outcome."),
+        "IDEMPOTENCY": ("Idempotency", "Repeated execution/retry should not incorrectly duplicate or corrupt effects."),
+        "INTEGRATION": ("Integration", "Behavior across external/internal subsystem boundaries and dependencies."),
+        "RECOVERY": ("Recovery", "Return to a valid/known state after interruption or failure."),
+        "CHAOS": ("Chaos / disruption", "Deliberate dependency/network/process/environment disruption used to expose resilience behavior."),
+        "SECURITY": ("Security", "Security-sensitive behavior beyond ordinary functional authorization checks, where evidence supports it."),
+        "AUTHORIZATION": ("Authorization", "Whether actors can perform only operations permitted by role/policy."),
+        "DATA_INTEGRITY": ("Data integrity", "Consistency/correctness of persisted or propagated data across operations/failures."),
+        "CROSS_REQUIREMENT": ("Cross-requirement interaction", "Behavior that emerges when two or more requirements/rules interact."),
+        "E2E": ("End-to-end", "A composed user/system journey spanning multiple atomic behaviors."),
+    },
+}
+
+
+def dimension_info(dimension: str, language: str) -> tuple[str, str]:
+    table = EXPANSION_DIMENSION_INFO.get(language, EXPANSION_DIMENSION_INFO["en"])
+    return table.get(dimension, (dimension, ""))
+
+
 OPERATOR_DIMENSIONS = {"OPERATOR_ERROR", "MISUSE"}
 CHAOS_DIMENSIONS = {"CHAOS", "RECOVERY"}
 CONCURRENCY_DIMENSIONS = {"CONCURRENCY", "RACE_CONDITION", "IDEMPOTENCY"}
@@ -463,14 +528,9 @@ def _case_flags(case: dict[str, Any], merge_ids: set[str], question_ids: set[str
     return flags
 
 
-def render_case_body(
-    case: dict[str, Any], entry: dict[str, Any], mermaid: str, labels: dict[str, str],
-    requirements: dict[str, dict[str, Any]], family: str, artifact_formats: set[str],
-) -> str:
-    """The expensive, per-case detail fragment (header + full content). Callers place
-    this inside a `<template>` so the browser never lays it out or materializes its
-    flow SVG until the one currently viewed case is cloned into the live modal."""
-    none = labels["none"]
+def _case_badges(case: dict[str, Any], labels: dict[str, str]) -> str:
+    """Shared between the compact TC row and the opened TC's own heading, so both
+    always agree — one badge-building rule, not two copies that can drift apart."""
     badges = [f'<span class="badge test-basis">{esc(case.get("test_basis", "ACCEPTANCE"))}</span>']
     if case.get("expansion_dimension"):
         badges.append(f'<span class="badge dimension">{esc(case["expansion_dimension"])}</span>')
@@ -481,6 +541,82 @@ def render_case_body(
             f'<span class="badge automation">{esc(case["automation_suitability"])} / '
             f'{esc(case.get("automation_readiness"))}</span>'
         )
+    n_findings, n_questions = len(case.get("finding_refs") or []), len(case.get("question_refs") or [])
+    if n_findings:
+        word = labels["finding_singular"] if n_findings == 1 else labels["findings"]
+        badges.append(f'<span class="badge badge-finding">{n_findings} {esc(word)}</span>')
+    if n_questions:
+        word = labels["question_singular"] if n_questions == 1 else labels["questions"]
+        badges.append(f'<span class="badge badge-question">{n_questions} {esc(word)}</span>')
+    return "".join(badges)
+
+
+def render_finding_card(finding: dict[str, Any], labels: dict[str, str], requirements: dict[str, dict[str, Any]]) -> str:
+    """Only the Finding fields canonical state actually stores; nothing is invented."""
+    none = labels["none"]
+    reqs = "; ".join(
+        requirement_label(requirements[r]) for r in finding.get("requirement_refs", []) if r in requirements
+    ) or none
+    evidence = "; ".join(f"{ref['source']} ({ref['reference']})" for ref in finding.get("source_refs", []) or []) or none
+    tcs = ", ".join(finding.get("related_test_cases", []) or []) or none
+    return (
+        f'<article class="finding-item"><div class="finding-title"><span class="badge">{esc(finding["type"])}</span>'
+        f'<strong>{esc(finding["id"])}</strong></div><p>{esc(finding["statement"])}</p>'
+        f'<dl class="technical-grid"><dt>{esc(labels["requirements"])}</dt><dd>{esc(reqs)}</dd>'
+        f'<dt>{esc(labels["impacted"])}</dt><dd>{esc(tcs)}</dd>'
+        f'<dt>{esc(labels["evidence"])}</dt><dd>{esc(evidence)}</dd></dl></article>'
+    )
+
+
+def render_question_card(question: dict[str, Any], labels: dict[str, str]) -> str:
+    """Only the Question fields canonical state actually stores; no answer is fabricated."""
+    none = labels["none"]
+    evidence = "; ".join(f"{ref['source']} ({ref['reference']})" for ref in question.get("source_refs", []) or []) or none
+    tcs = ", ".join(question.get("related_test_cases", []) or []) or none
+    blocking = bool(question.get("blocking"))
+    return (
+        f'<article class="question-item{" blocking" if blocking else ""}"><div class="question-title">'
+        f'<span>{esc(question["id"])} &middot; {esc(question["question"])}</span>'
+        f'<span class="badge">{esc(labels["blocking"])}: {esc(labels["yes"] if blocking else labels["no"])}</span></div>'
+        f'<p><strong>{esc(labels["reason"])}:</strong> {esc(question["reason"])}</p>'
+        f'<p><strong>{esc(labels["impacted"])}:</strong> {esc(tcs)}</p>'
+        f'<p class="muted"><strong>{esc(labels["evidence"])}:</strong> {esc(evidence)}</p></article>'
+    )
+
+
+def render_tc_alerts(
+    case: dict[str, Any], labels: dict[str, str], findings_by_id: dict[str, dict[str, Any]],
+    questions_by_id: dict[str, dict[str, Any]], requirements: dict[str, dict[str, Any]],
+) -> str:
+    """Only the Findings/Questions this specific TC links to — never an unrelated one,
+    and never rendered at all when there is nothing to show."""
+    finding_cards = [
+        render_finding_card(findings_by_id[ref], labels, requirements)
+        for ref in case.get("finding_refs", []) or [] if ref in findings_by_id
+    ]
+    question_cards = [
+        render_question_card(questions_by_id[ref], labels)
+        for ref in case.get("question_refs", []) or [] if ref in questions_by_id
+    ]
+    if not finding_cards and not question_cards:
+        return ""
+    return (
+        f'<section class="tc-alerts"><h3>{esc(labels["tc_alerts"])}</h3>'
+        f'{"".join(finding_cards)}{"".join(question_cards)}</section>'
+    )
+
+
+def render_case_body(
+    case: dict[str, Any], entry: dict[str, Any], mermaid: str, labels: dict[str, str],
+    requirements: dict[str, dict[str, Any]], family: str, artifact_formats: set[str],
+    findings_by_id: dict[str, dict[str, Any]] | None = None, questions_by_id: dict[str, dict[str, Any]] | None = None,
+) -> str:
+    """The expensive, per-case detail fragment (header + full content). Callers place
+    this inside a `<template>` so the browser never lays it out or materializes its
+    flow SVG until the one currently viewed case is cloned into the live modal."""
+    none = labels["none"]
+    badges = _case_badges(case, labels)
+    alerts = render_tc_alerts(case, labels, findings_by_id or {}, questions_by_id or {}, requirements)
     requirement_names = [
         requirement_label(requirements[ref]) if ref in requirements else ref for ref in case["requirement_refs"]
     ]
@@ -525,8 +661,9 @@ def render_case_body(
     except ValueError:
         flow, expand = '<div class="flow-error" role="status">-</div>', ""
     flow += f'<pre class="mermaid-source" hidden>{esc(mermaid)}</pre>'
-    return f"""<div class="tc-detail-head"><span class="tc-heading"><span class="tc-id">{esc(case['id'])}</span>{esc(case['title'])}{chips}</span><span class="badges">{''.join(badges)}</span></div>
+    return f"""<div class="tc-detail-head"><span class="tc-heading"><span class="tc-id">{esc(case['id'])}</span>{esc(case['title'])}{chips}</span><span class="badges">{badges}</span></div>
   <div class="tc-content">
+    {alerts}
     <section><h3>{esc(labels['objective'])}</h3><p>{esc(case['objective'])}</p></section>
     <p class="related-requirements"><strong>{esc(labels['requirements'])}:</strong> {esc('; '.join(requirement_names))}</p>
     <div class="two-column">
@@ -544,20 +681,67 @@ def render_case_body(
 def render_case_template(
     case: dict[str, Any], entry: dict[str, Any], mermaid: str, labels: dict[str, str],
     requirements: dict[str, dict[str, Any]], family_id: str, family: str, flags: set[str],
-    artifact_formats: set[str],
+    artifact_formats: set[str], findings_by_id: dict[str, dict[str, Any]], questions_by_id: dict[str, dict[str, Any]],
 ) -> str:
     """A `<template>` never renders/lays out its content and never runs the scripts or
     loads the resources it contains until it is explicitly cloned — the browser-native
     way to keep hundreds of Test Cases' full detail out of the visible/materialized DOM
-    while still shipping compact, filterable data-* attributes for every one of them."""
+    while still shipping compact, filterable data-* attributes for every one of them. One
+    global template per TC: the same TC can be cloned into several requirement pages
+    without its data ever being duplicated or mutated."""
     search = " ".join([case["id"], case["title"], case["objective"], family, " ".join(case.get("tags", [])),
                        " ".join(case.get("source_identifiers", []))]).casefold()
-    body = render_case_body(case, entry, mermaid, labels, requirements, family, artifact_formats)
+    body = render_case_body(case, entry, mermaid, labels, requirements, family, artifact_formats,
+                            findings_by_id, questions_by_id)
     return (
         f'<template class="tc-template" id="tc-tpl-{esc(case["id"])}" data-id="{esc(case["id"])}" '
         f'data-title="{esc(case["title"])}" data-status="{esc(case["status"])}" '
         f'data-priority="{esc(case["priority"])}" data-family="{esc(family_id)}" '
         f'data-features="{esc(" ".join(sorted(flags)))}" data-search="{esc(search)}">{body}</template>'
+    )
+
+
+def _case_row(case: dict[str, Any], labels: dict[str, str]) -> str:
+    """The lightweight, always-in-DOM header row for one TC inside a requirement page.
+    The expensive body is cloned from the TC's own global `<template>` only when this
+    row's disclosure control is opened — see the modal controller script."""
+    badges = _case_badges(case, labels)
+    body_id = f"tc-row-body-{esc(case['id'])}"
+    return (
+        f'<li class="tc-row" data-id="{esc(case["id"])}">'
+        f'<button type="button" class="tc-row-toggle" aria-expanded="false" aria-controls="{body_id}">'
+        f'<span class="tc-row-chevron" aria-hidden="true">&#9656;</span>'
+        f'<span class="tc-row-id">{esc(case["id"])}</span><span class="tc-row-title">{esc(case["title"])}</span>'
+        f'<span class="badges">{badges}</span></button>'
+        f'<div class="tc-row-body" id="{body_id}" hidden></div></li>'
+    )
+
+
+def _case_requirement_keys(case: dict[str, Any], requirements: dict[str, dict[str, Any]]) -> list[tuple[str, str]]:
+    """The official identifiers this TC belongs to (key, display title), in the order
+    the case lists them. Falls back to internal requirement_refs, with their stored
+    title, for suites that predate `source_identifiers` (schema 1.2)."""
+    identifiers = case.get("source_identifiers") or []
+    if identifiers:
+        return [(value, _identifier_title(value, requirements)) for value in identifiers]
+    return [
+        (ref, requirement_label(requirements[ref]) if ref in requirements else ref)
+        for ref in case.get("requirement_refs", []) or []
+    ]
+
+
+def render_requirement_page(group_id: str, key: str, title: str, members: list[dict[str, Any]], labels: dict[str, str]) -> str:
+    """One `<template>` per authoritative identifier inside a family/group: the modal
+    paginates these, never individual Test Cases. Reading `.content` (to find which TC
+    ids live on a page, or to filter them) never materializes or lays this out."""
+    rows = "".join(_case_row(case, labels) for case in members)
+    return (
+        f'<template class="req-template" data-family="{esc(group_id)}" data-key="{esc(key)}" '
+        f'data-title="{esc(title)}"><div class="req-page-head"><h4>{esc(title)}</h4>'
+        f'<p class="muted req-page-count"><span class="req-page-count-value">{len(members)}</span> '
+        f'{esc(labels["tc_count_suffix"])}</p></div>'
+        f'<ul class="tc-row-list">{rows}</ul>'
+        f'<p class="empty req-page-empty" hidden>{esc(labels["no_filter_results"])}</p></template>'
     )
 
 
@@ -593,6 +777,7 @@ GLOSSARY: dict[str, list[tuple[str, list[tuple[str, str]]]]] = {
         ("Conceitos de análise / qualidade", [
             ("Findings", "Divergências, conflitos ou observações notáveis da implementação, fundamentados em evidência, encontrados durante a análise. Um Finding não é automaticamente sinônimo de um Test Case reprovado."),
             ("Perguntas", "Questões abertas criadas quando a evidência selecionada é insuficiente ou ambígua e inventar uma resposta seria inseguro."),
+            ("Pergunta bloqueante", "Uma Pergunta cuja resposta ausente impede materialmente um oracle/execução determinística do comportamento afetado."),
             ("Cobertura / Identificadores cobertos", "Quantos identificadores da autoridade têm uma relação explícita de teste/disposição. Cobertura não significa que todos os testes passaram."),
             ("Quality gates", "Verificações determinísticas de integridade/qualidade que protegem escopo, baseline, referências, procedimentos, integridade do pipeline e publicação."),
             ("Baseline histórico", "Comparação opcional com um baseline histórico explicitamente carregado. NOT_APPLIED significa que nenhum baseline histórico foi carregado — não é uma falha."),
@@ -600,6 +785,14 @@ GLOSSARY: dict[str, list[tuple[str, list[tuple[str, str]]]]] = {
         ("Conceitos de automação", [
             ("Automatizáveis", "Casos cuja adequação à automação (automation suitability) é HIGH ou MEDIUM, conforme a métrica já implementada no relatório."),
             ("Automação pronta", "Casos cuja prontidão para automação (automation readiness) indica que as fixtures/ambiente/seletores/dependências hoje conhecidos são suficientes, conforme o contrato já existente da FTD."),
+        ]),
+        ("Expansão (segunda passada)", [
+            ("Candidatos", "Cenários candidatos materialmente relevantes considerados em uma dimensão. Não é o número de TCs finais."),
+            ("Materializados", "Candidatos que viraram Test Cases canônicos adicionais."),
+            ("Já cobertos", "Candidatos já exercidos semanticamente por um TC existente; nenhum TC duplicado foi criado."),
+            ("Pergunta", "Candidatos que não puderam virar um TC determinístico com segurança; uma Pergunta foi criada."),
+            ("Não aplicável", "A dimensão foi avaliada mas não se aplica ao comportamento real do projeto — zero não significa que foi pulada."),
+            *[(f"{code} — {label}", description) for code, (label, description) in EXPANSION_DIMENSION_INFO["pt"].items()],
         ]),
     ],
     "en": [
@@ -633,6 +826,7 @@ GLOSSARY: dict[str, list[tuple[str, list[tuple[str, str]]]]] = {
         ("Analysis / quality concepts", [
             ("Findings", "Evidence-backed discrepancies, conflicts or notable implementation observations found during analysis. A Finding is not automatically synonymous with a failed Test Case."),
             ("Questions", "Open Questions created where selected evidence is insufficient or ambiguous and inventing an answer would be unsafe."),
+            ("Blocking Question", "A Question whose missing answer materially prevents a deterministic oracle/execution for the affected behavior."),
             ("Coverage / Identifiers covered", "How many authoritative identifiers have an explicit test/disposition relationship. Coverage does not mean all tests passed."),
             ("Quality gates", "Deterministic integrity/quality checks protecting scope, baseline, references, procedures, pipeline integrity and publication."),
             ("Historical baseline", "Optional comparison against an explicitly loaded historical baseline. NOT_APPLIED means no historical baseline was loaded — not a failure."),
@@ -640,6 +834,14 @@ GLOSSARY: dict[str, list[tuple[str, list[tuple[str, str]]]]] = {
         ("Automation concepts", [
             ("Automatable", "Cases whose automation suitability is HIGH or MEDIUM according to the report's existing metric."),
             ("Automation ready", "Cases whose automation readiness indicates the currently known fixtures/environment/selectors/dependencies are sufficient, per the existing FTD contract."),
+        ]),
+        ("Expansion (second pass)", [
+            ("Candidates", "Materially relevant scenario candidates considered for a dimension. Not the number of final TCs."),
+            ("Materialized", "Candidates that became additional canonical Test Cases."),
+            ("Already covered", "Candidates already semantically exercised by an existing TC; no duplicate TC was created."),
+            ("Question", "Candidates that could not safely become a deterministic TC; a Question was created instead."),
+            ("Not applicable", "The dimension was evaluated but did not apply to the project's actual behavior — zero does not mean it was skipped."),
+            *[(f"{code} — {label}", description) for code, (label, description) in EXPANSION_DIMENSION_INFO["en"].items()],
         ]),
     ],
 }
@@ -690,26 +892,37 @@ def render_report(output_dir: Path, destination: Path | None = None, artifact_fo
         group_order = list(dict.fromkeys(value[0] for value in group_of.values()))
     merge_ids = {tc for item in index.get("merge_candidates", []) for tc in item.get("test_case_ids", [])}
     question_case_ids = {tc for item in questions for tc in item.get("related_test_cases", [])}
+    findings_by_id = {item["id"]: item for item in index.get("findings", [])}
+    questions_by_id = {item["id"]: item for item in questions}
     groups_html = []
     for group_id in group_order:
         members = [(entry, case) for entry, case in zip(index["test_cases"], cases) if group_of[case["id"]][0] == group_id]
         if not members:
             continue
         title = group_of[members[0][1]["id"]][1]
-        member_requirements = list(dict.fromkeys(ref for _, case in members for ref in case["requirement_refs"]))
-        req_line = "; ".join(requirement_label(requirements[ref]) for ref in member_requirements if ref in requirements)
+        # One authoritative identifier can be touched by several TCs, and one TC can
+        # touch several identifiers; the modal paginates by identifier, never by TC.
+        pages: dict[str, dict[str, Any]] = {}
+        for _, case in members:
+            for key, page_title in _case_requirement_keys(case, requirements):
+                pages.setdefault(key, {"title": page_title, "cases": []})["cases"].append(case)
+        req_line = "; ".join(f"{key} — {page['title']}" if page["title"] != key else key for key, page in pages.items())
         templates = "".join(
             render_case_template(case, entry, mermaid_by_id[case["id"]], labels, requirements, group_id, title,
-                                 _case_flags(case, merge_ids, question_case_ids), artifact_formats)
+                                 _case_flags(case, merge_ids, question_case_ids), artifact_formats,
+                                 findings_by_id, questions_by_id)
             for entry, case in members
+        )
+        req_pages_html = "".join(
+            render_requirement_page(group_id, key, page["title"], page["cases"], labels)
+            for key, page in pages.items()
         )
         groups_html.append(
             f'<section class="tc-group" id="family-{esc(group_id)}" data-family="{esc(group_id)}">'
             f'<div class="tc-group-card">'
-            f'<div><h3>{esc(title)}</h3><span><span class="tc-count">{len(members)}</span> TCs &middot; {esc(req_line)}'
-            f'<span class="tc-group-closed" data-family="{esc(group_id)}" hidden></span></span></div>'
+            f'<div><h3>{esc(title)}</h3><span><span class="tc-count">{len(members)}</span> TCs &middot; {esc(req_line)}</span></div>'
             f'<button type="button" class="open-group" data-family="{esc(group_id)}">{esc(labels["open_group"])}</button>'
-            f'</div>{templates}</section>'
+            f'</div>{templates}{req_pages_html}</section>'
         )
 
     status = Counter(case["status"] for case in cases)
@@ -778,16 +991,34 @@ def render_report(output_dir: Path, destination: Path | None = None, artifact_fo
         + f'<div class="table-wrap"><table><thead><tr><th>{esc(labels["requirements"])}</th><th>{esc(labels["objective"])}</th>'
         f'<th>TCs</th></tr></thead><tbody>{requirement_rows}</tbody></table></div>'
     )
+    expansion_help = (
+        f'<div class="expansion-help"><h3>{esc(labels["expansion_help_title"])}</h3><dl class="technical-grid">'
+        f'<dt>{esc(labels["candidates"])}</dt><dd>{esc(labels["candidates_help"])}</dd>'
+        f'<dt>{esc(labels["materialized"])}</dt><dd>{esc(labels["materialized_help"])}</dd>'
+        f'<dt>{esc(labels["covered"])}</dt><dd>{esc(labels["covered_help"])}</dd>'
+        f'<dt>{esc(labels["question_required"])}</dt><dd>{esc(labels["question_required_help"])}</dd>'
+        f'<dt>{esc(labels["not_applicable"])}</dt><dd>{esc(labels["not_applicable_help"])}</dd></dl></div>'
+    )
     expansion_rows = "".join(
-        f'<tr><td>{esc(item["dimension"])}</td><td>{item["candidates_considered"]}</td><td>{item["materialized"]}</td>'
-        f'<td>{item["already_covered"]}</td><td>{item["question_required"]}</td><td>{item["not_applicable"]}</td></tr>'
+        (lambda dim_label, dim_desc:
+         f'<tr><td><span class="dimension-name" title="{esc(dim_desc)}">{esc(item["dimension"])} &mdash; {esc(dim_label)}</span></td>'
+         f'<td>{item["candidates_considered"]}</td><td>{item["materialized"]}</td>'
+         f'<td>{item["already_covered"]}</td><td>{item["question_required"]}</td><td>{item["not_applicable"]}</td></tr>'
+        )(*dimension_info(item["dimension"], language))
         for item in index.get("expansion_summary", [])
     )
+    expansion_legend = "".join(
+        f'<dt>{esc(code)} &mdash; {esc(label)}</dt><dd>{esc(description)}</dd>'
+        for code, (label, description) in EXPANSION_DIMENSION_INFO.get(language, EXPANSION_DIMENSION_INFO["en"]).items()
+    )
     expansion_html = (
-        f'<div class="table-wrap"><table><thead><tr><th>{esc(labels["dimension"])}</th><th>{esc(labels["candidates"])}</th>'
+        expansion_help +
+        (f'<div class="table-wrap"><table><thead><tr><th>{esc(labels["dimension"])}</th><th>{esc(labels["candidates"])}</th>'
         f'<th>{esc(labels["materialized"])}</th><th>{esc(labels["covered"])}</th><th>{esc(labels["question_required"])}</th>'
         f'<th>{esc(labels["not_applicable"])}</th></tr></thead><tbody>{expansion_rows}</tbody></table></div>'
-        if expansion_rows else f'<p class="empty">{esc(labels["none"])}</p>'
+        if expansion_rows else f'<p class="empty">{esc(labels["none"])}</p>')
+        + f'<details class="expansion-legend"><summary>{esc(labels["dimension_all"])}</summary>'
+        f'<dl class="technical-grid">{expansion_legend}</dl></details>'
     )
     gate_html = "".join(
         f'<li><strong>{esc(item["gate"])}</strong> <span class="badge status-ready">{esc(item["status"])}</span> '
@@ -815,76 +1046,111 @@ def render_report(output_dir: Path, destination: Path | None = None, artifact_fo
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{esc(labels['report_title'])}</title>
 <style>
-:root {{ --ink:#182027; --muted:#5f6b73; --line:#d7dfe3; --surface:#fff; --soft:#f3f6f7; --accent:#087f5b; --warning:#9a6700; --danger:#b42318; --shadow:0 8px 24px rgba(26,43,52,.07); }}
+:root {{ --ink:#182027; --muted:#5f6b73; --line:#d7dfe3; --surface:#fff; --soft:#f3f6f7; --accent:#087f5b; --accent-soft:#eaf7f2; --warning:#9a6700; --warning-soft:#fff8e6; --danger:#b42318; --danger-soft:#fdecea; --info:#3949ab; --info-soft:#f0f1ff; --shadow:0 8px 24px rgba(26,43,52,.07); --shadow-lift:0 12px 28px rgba(26,43,52,.12); --radius:10px; }}
 * {{ box-sizing:border-box; }}
-body {{ margin:0; color:var(--ink); background:var(--soft); font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif; }}
+body {{ margin:0; color:var(--ink); background:var(--soft); font:15px/1.6 system-ui,-apple-system,"Segoe UI",sans-serif; }}
 body.modal-open {{ overflow:hidden; }}
-.shell {{ width:min(1180px,calc(100% - 32px)); margin:0 auto; }}
-header {{ position:sticky; top:0; z-index:20; background:rgba(255,255,255,.97); border-bottom:1px solid var(--line); padding:18px 0 10px; }}
-h1 {{ margin:0 0 4px; font-size:28px; }} h2 {{ margin:0 0 16px; font-size:22px; }} h3 {{ margin:0 0 8px; font-size:15px; }}
+.shell {{ width:min(1200px,calc(100% - 32px)); margin:0 auto; }}
+header {{ position:sticky; top:0; z-index:20; background:rgba(255,255,255,.97); backdrop-filter:blur(4px); border-bottom:1px solid var(--line); padding:18px 0 10px; }}
+h1 {{ margin:0 0 4px; font-size:26px; font-weight:800; letter-spacing:-.01em; }}
+h2 {{ margin:0 0 16px; font-size:20px; font-weight:800; padding-bottom:8px; border-bottom:2px solid var(--line); }}
+h3 {{ margin:0 0 8px; font-size:15px; font-weight:750; }}
 .muted,.empty,.subtitle {{ color:var(--muted); }}
-nav {{ display:flex; gap:8px; flex-wrap:wrap; margin-top:14px; }} nav a {{ padding:6px 10px; text-decoration:none; font-weight:650; color:inherit; }}
-main {{ padding:24px 0 56px; }} main>section {{ padding:18px 0; }}
+.empty {{ padding:14px; border:1px dashed var(--line); border-radius:var(--radius); background:#fff; }}
+nav {{ display:flex; gap:4px; flex-wrap:wrap; margin-top:14px; }}
+nav a {{ padding:6px 10px; border-radius:6px; text-decoration:none; font-weight:650; font-size:13px; color:var(--muted); }}
+nav a:hover,nav a:focus-visible {{ background:var(--soft); color:var(--ink); }}
+main {{ padding:24px 0 56px; }} main>section {{ padding:22px 0; border-bottom:1px solid var(--line); }} main>section:last-child {{ border-bottom:none; }}
+a,button,input,select,summary,[tabindex] {{ outline-offset:2px; }}
+a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visible,[tabindex]:focus-visible {{ outline:2px solid var(--accent); }}
 .metrics {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:10px; }}
-.metric {{ background:#fff; border:1px solid var(--line); border-radius:10px; padding:12px; box-shadow:var(--shadow); }}
-.metric strong {{ display:block; font-size:22px; }} .metric span {{ color:var(--muted); font-size:13px; }}
-.run-info {{ margin-top:12px; display:flex; gap:18px; flex-wrap:wrap; }}
-.filter-panel {{ padding:14px; border:1px solid var(--line); border-radius:10px; background:#fff; margin-bottom:18px; }}
+.metric {{ background:#fff; border:1px solid var(--line); border-radius:var(--radius); padding:12px 14px; box-shadow:var(--shadow); }}
+.metric strong {{ display:block; font-size:23px; font-weight:800; }} .metric span {{ color:var(--muted); font-size:12.5px; }}
+.run-info {{ margin-top:14px; display:flex; gap:20px; flex-wrap:wrap; font-size:13.5px; }}
+.filter-panel {{ padding:16px; border:1px solid var(--line); border-radius:var(--radius); background:#fff; margin-bottom:18px; box-shadow:var(--shadow); }}
 .filters {{ display:grid; grid-template-columns:minmax(200px,1fr) repeat(4,minmax(130px,190px)); gap:10px; }}
-.bulk-controls {{ display:flex; justify-content:flex-end; gap:8px; margin-bottom:10px; }}
-button {{ border:1px solid #aeb7bc; border-radius:5px; background:#fff; padding:6px 10px; font:inherit; cursor:pointer; }}
-input,select {{ width:100%; min-height:38px; border:1px solid #aeb7bc; border-radius:4px; padding:7px 9px; font:inherit; background:#fff; }}
-.tc-group {{ margin:18px 0 24px; }}
-.tc-group-card {{ display:flex; align-items:center; gap:12px; padding:14px; border:1px solid var(--line); border-left:4px solid var(--accent); border-radius:8px; background:#fff; box-shadow:var(--shadow); }}
-.tc-group-card h3 {{ margin:0; font-size:17px; }} .tc-group-card span {{ color:var(--muted); font-size:12px; }} .open-group {{ margin-left:auto; font-weight:700; }}
-.tc-group-closed:not([hidden]) {{ display:inline; }} .tc-group-closed::before {{ content:" \\2022 "; }}
+.filters label {{ font-size:12.5px; font-weight:650; color:var(--muted); }}
+button {{ border:1px solid #aeb7bc; border-radius:6px; background:#fff; padding:7px 12px; font:inherit; font-weight:600; cursor:pointer; transition:background-color .12s,box-shadow .12s; }}
+button:hover:not(:disabled) {{ background:var(--soft); }} button:disabled {{ opacity:.5; cursor:not-allowed; }}
+input,select {{ width:100%; min-height:38px; border:1px solid #aeb7bc; border-radius:6px; padding:7px 9px; font:inherit; background:#fff; margin-top:4px; }}
+.tc-group {{ margin:16px 0; }}
+.tc-group-card {{ display:flex; align-items:center; gap:14px; padding:16px; border:1px solid var(--line); border-left:4px solid var(--accent); border-radius:var(--radius); background:#fff; box-shadow:var(--shadow); transition:box-shadow .15s; }}
+.tc-group-card:hover {{ box-shadow:var(--shadow-lift); }}
+.tc-group-card h3 {{ margin:0 0 3px; font-size:16.5px; }} .tc-group-card span {{ color:var(--muted); font-size:12.5px; line-height:1.5; }}
+.open-group {{ margin-left:auto; font-weight:700; border-color:var(--accent); color:var(--accent); flex-shrink:0; }}
 .tc-heading {{ display:flex; gap:10px; align-items:baseline; flex-wrap:wrap; }}
 .identifier-chips {{ display:inline-flex; gap:4px; flex-wrap:wrap; }}
-.chip {{ border:1px solid #9fd8c6; background:#eaf7f2; color:#075e47; border-radius:4px; padding:1px 6px; font-size:11px; font-weight:700; }} .tc-id {{ color:var(--muted); font-size:13px; white-space:nowrap; }}
-.badges {{ display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end; }}
-.badge {{ display:inline-block; border:1px solid var(--line); border-radius:999px; padding:2px 8px; font-size:11px; font-weight:750; white-space:nowrap; }}
+.chip {{ border:1px solid #9fd8c6; background:var(--accent-soft); color:#075e47; border-radius:4px; padding:1px 6px; font-size:11px; font-weight:700; }}
+.tc-id {{ color:var(--muted); font-size:13px; white-space:nowrap; font-weight:600; }}
+.badges {{ display:flex; gap:6px; flex-wrap:wrap; align-items:center; }}
+.badge {{ display:inline-block; border:1px solid var(--line); border-radius:999px; padding:2px 9px; font-size:10.5px; font-weight:750; letter-spacing:.02em; white-space:nowrap; }}
 .status-ready {{ color:#08633f; background:#eaf7f0; border-color:#b8dfc9; }} .status-needs_review {{ color:#765500; background:#fff6dd; }}
-.status-exploratory,.test-basis,.dimension,.automation {{ color:#3949ab; background:#f0f1ff; border-color:#c5cae9; }}
+.status-exploratory,.test-basis,.dimension,.automation {{ color:var(--info); background:var(--info-soft); border-color:#c5cae9; }}
 [class*="status-blocked"] {{ color:#8f1d14; background:#fff0ee; }}
-.tc-detail-head {{ display:flex; align-items:flex-start; justify-content:space-between; gap:16px; flex-wrap:wrap; padding-bottom:12px; border-bottom:1px solid var(--line); margin-bottom:12px; }}
-.tc-content {{ padding:0; }} .two-column {{ display:grid; grid-template-columns:1fr 1fr; gap:24px; }}
+.badge-finding {{ color:#7a4a00; background:var(--warning-soft); border-color:#f0dca6; }}
+.badge-question {{ color:#1e3a8a; background:#eaf1ff; border-color:#bcd2f7; }}
+.tc-detail-head {{ display:flex; align-items:flex-start; justify-content:space-between; gap:16px; flex-wrap:wrap; padding-bottom:12px; border-bottom:1px solid var(--line); margin-bottom:14px; }}
+.tc-detail-head .tc-heading {{ font-size:15.5px; font-weight:700; }}
+.tc-content {{ padding:0; }} .tc-content>section {{ margin-bottom:18px; }}
+.two-column {{ display:grid; grid-template-columns:1fr 1fr; gap:24px; }}
 .related-requirements {{ color:var(--muted); font-size:13px; }}
 .table-wrap {{ overflow-x:auto; }} table {{ width:100%; border-collapse:collapse; background:#fff; margin-bottom:14px; }}
-th,td {{ border:1px solid var(--line); padding:9px 11px; text-align:left; vertical-align:top; overflow-wrap:anywhere; }} th {{ background:#f0f3f2; font-size:13px; }}
+th,td {{ border:1px solid var(--line); padding:9px 11px; text-align:left; vertical-align:top; overflow-wrap:anywhere; }} th {{ background:#f0f3f2; font-size:12.5px; font-weight:750; }}
 .step-number {{ width:48px; text-align:center; font-weight:700; }}
-.flow-section {{ margin-top:16px; border:1px solid var(--line); border-radius:6px; background:#fbfcfc; padding:12px; }}
+.flow-section {{ margin-top:16px; border:1px solid var(--line); border-radius:8px; background:#fbfcfc; padding:14px; }}
 .flow-heading {{ display:flex; align-items:center; justify-content:space-between; }}
 .mermaid-container {{ overflow-x:auto; background:#fff; }} .mermaid-svg {{ display:block; width:100%; min-width:520px; max-width:760px; margin:0 auto; }}
 .node-label-title {{ font-weight:700; }}
-dialog {{ border:none; padding:0; box-shadow:var(--shadow); border-radius:10px; }}
+dialog {{ border:none; padding:0; box-shadow:var(--shadow-lift); border-radius:var(--radius); }}
 dialog::backdrop {{ background:rgba(20,29,34,.72); }}
 .flow-modal {{ width:min(1040px,calc(100% - 40px)); max-height:calc(100vh - 40px); }}
 .flow-modal-panel {{ max-height:calc(100vh - 40px); overflow:auto; padding:16px; }}
-.tc-modal {{ width:min(1140px,calc(100% - 32px)); max-height:calc(100vh - 48px); }}
+.tc-modal {{ width:min(1180px,calc(100% - 32px)); max-height:calc(100vh - 48px); }}
 .tc-modal-panel {{ display:flex; flex-direction:column; max-height:calc(100vh - 48px); }}
-.tc-modal-header {{ display:flex; justify-content:space-between; align-items:flex-start; gap:14px; padding:16px 18px; border-bottom:1px solid var(--line); position:sticky; top:0; background:#fff; z-index:2; border-radius:10px 10px 0 0; }}
-.tc-modal-header h3 {{ margin:0; font-size:18px; }}
-.tc-modal-body {{ padding:16px 18px; overflow:auto; }}
-.tc-modal-footer {{ display:flex; align-items:center; gap:16px; padding:12px 18px; border-top:1px solid var(--line); position:sticky; bottom:0; background:#fff; flex-wrap:wrap; border-radius:0 0 10px 10px; }}
-.tc-position {{ font-weight:700; }}
-.tc-review-toggle {{ margin-left:auto; display:flex; align-items:center; gap:6px; font-weight:600; }}
-.tc-review-toggle input {{ width:auto; min-height:auto; }}
+.tc-modal-header {{ display:flex; justify-content:space-between; align-items:flex-start; gap:14px; padding:16px 20px; border-bottom:1px solid var(--line); position:sticky; top:0; background:#fff; z-index:2; border-radius:var(--radius) var(--radius) 0 0; }}
+.tc-modal-header h3 {{ margin:0; font-size:19px; }} .tc-modal-header p {{ margin:2px 0 0; font-size:12.5px; }}
+.tc-modal-body {{ padding:18px 20px; overflow:auto; background:var(--soft); }}
+.tc-modal-footer {{ display:flex; align-items:center; gap:16px; padding:12px 20px; border-top:1px solid var(--line); position:sticky; bottom:0; background:#fff; flex-wrap:wrap; border-radius:0 0 var(--radius) var(--radius); }}
+.tc-position {{ font-weight:700; font-size:13px; }}
 .modal-close {{ font-size:20px; line-height:1; padding:4px 10px; }}
-.artifact-links {{ display:flex; gap:10px; }} .artifact-links a {{ border:1px solid #aeb7bc; border-radius:4px; padding:6px 10px; text-decoration:none; }}
+.tc-row-list {{ list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:8px; }}
+.tc-row {{ border:1px solid var(--line); border-radius:8px; background:#fff; box-shadow:var(--shadow); overflow:hidden; }}
+.tc-row-toggle {{ width:100%; display:flex; align-items:center; gap:10px; padding:11px 14px; border:none; background:transparent; text-align:left; cursor:pointer; font-weight:650; border-radius:0; }}
+.tc-row-toggle:hover {{ background:var(--soft); }}
+.tc-row-chevron {{ flex-shrink:0; transition:transform .15s; color:var(--muted); }}
+.tc-row-toggle[aria-expanded="true"] .tc-row-chevron {{ transform:rotate(90deg); }}
+.tc-row-id {{ color:var(--muted); font-size:12.5px; font-weight:700; flex-shrink:0; }}
+.tc-row-title {{ flex:1; min-width:120px; }}
+.tc-row-body {{ border-top:1px solid var(--line); padding:16px; background:#fff; }}
+.req-page-head {{ display:flex; justify-content:space-between; align-items:baseline; gap:10px; margin-bottom:14px; flex-wrap:wrap; }}
+.req-page-head h4 {{ margin:0; font-size:17px; font-weight:800; }}
+.req-page-empty {{ margin-top:10px; }}
+.tc-alerts {{ margin-bottom:18px; padding:14px; border:1px solid #f0dca6; border-radius:8px; background:var(--warning-soft); }}
+.tc-alerts h3 {{ margin-top:0; }}
+.artifact-links {{ display:flex; gap:10px; }} .artifact-links a {{ border:1px solid #aeb7bc; border-radius:6px; padding:6px 10px; text-decoration:none; }}
 .technical {{ margin-top:12px; color:var(--muted); font-size:13px; }}
-.technical-grid {{ display:grid; grid-template-columns:max-content 1fr; gap:5px 12px; }} .technical-grid dt {{ font-weight:700; color:var(--ink); }} .technical-grid dd {{ margin:0; }}
+.technical-grid {{ display:grid; grid-template-columns:max-content 1fr; gap:6px 14px; }} .technical-grid dt {{ font-weight:700; color:var(--ink); }} .technical-grid dd {{ margin:0; }}
 .question-item,.finding-item {{ margin-bottom:10px; border:1px solid var(--line); border-left:4px solid var(--warning); border-radius:8px; background:#fff; padding:14px; }}
-.question-item.blocking {{ border-left-color:var(--danger); }} .question-title,.finding-title {{ display:flex; justify-content:space-between; gap:12px; font-weight:700; }}
+.finding-item {{ border-left-color:var(--warning); }}
+.question-item {{ border-left-color:var(--info); }}
+.question-item.blocking {{ border-left-color:var(--danger); background:var(--danger-soft); }}
+.question-title,.finding-title {{ display:flex; justify-content:space-between; gap:12px; font-weight:700; }}
 .needs-answer {{ color:var(--danger); font-weight:700; }}
 .gates li {{ margin-bottom:6px; }}
+.expansion-help {{ background:#fff; border:1px solid var(--line); border-radius:var(--radius); padding:14px 16px; margin-bottom:16px; }}
+.expansion-help h3 {{ margin-top:0; }}
+.dimension-name {{ cursor:help; border-bottom:1px dotted var(--muted); }}
+.expansion-legend {{ margin-top:12px; background:#fff; border:1px solid var(--line); border-radius:var(--radius); padding:12px 16px; }}
+.expansion-legend summary {{ cursor:pointer; font-weight:700; }}
+.expansion-legend[open] summary {{ margin-bottom:10px; }}
 .glossary-grid {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:18px; }}
-.glossary-group {{ background:#fff; border:1px solid var(--line); border-radius:10px; padding:14px; }}
-.glossary-list {{ margin:0; }} .glossary-list dt {{ font-weight:700; margin-top:8px; }} .glossary-list dt:first-child {{ margin-top:0; }}
+.glossary-group {{ background:#fff; border:1px solid var(--line); border-radius:var(--radius); padding:16px; }}
+.glossary-list {{ margin:0; }} .glossary-list dt {{ font-weight:700; margin-top:10px; }} .glossary-list dt:first-child {{ margin-top:0; }}
 .glossary-list dd {{ margin:2px 0 0; color:var(--muted); font-size:13px; }}
 [hidden] {{ display:none!important; }}
-@media (max-width:720px) {{ .filters,.two-column {{ grid-template-columns:1fr; }} .tc-group-card {{ flex-direction:column; align-items:flex-start; }} .open-group {{ margin-left:0; }}
+@media (max-width:720px) {{ .filters,.two-column {{ grid-template-columns:1fr; }} .tc-group-card {{ flex-direction:column; align-items:flex-start; }} .open-group {{ margin-left:0; width:100%; }}
   .tc-modal,.flow-modal {{ width:100%; height:100%; max-height:100%; max-width:100%; border-radius:0; margin:0; }} .tc-modal-panel {{ max-height:100%; }}
-  .tc-modal-header,.tc-modal-footer {{ border-radius:0; }} .tc-review-toggle {{ margin-left:0; width:100%; }} }}
+  .tc-modal-header,.tc-modal-footer {{ border-radius:0; }} .tc-row-toggle {{ flex-wrap:wrap; }} .badges {{ justify-content:flex-start; }} }}
 @media print {{ header {{ position:static; }} nav,.filter-panel,.open-group,.expand-flow {{ display:none!important; }} }}
 </style>
 </head>
@@ -893,7 +1159,7 @@ dialog::backdrop {{ background:rgba(20,29,34,.72); }}
 <nav><a href="#summary">{esc(labels['summary'])}</a><a href="#test-cases">{esc(labels['test_cases'])}</a><a href="#merge">{esc(labels['merge'])}</a><a href="#findings">{esc(labels['findings'])}</a><a href="#questions">{esc(labels['questions'])}</a><a href="#coverage">{esc(labels['coverage'])}</a><a href="#expansion">{esc(labels['expansion'])}</a><a href="#gates">{esc(labels['gates'])}</a><a href="#glossary">{esc(labels['glossary_title'])}</a></nav></div></header>
 <main class="shell">
 <section id="summary"><h2>{esc(labels['summary'])}</h2><div class="metrics">{metric_html}</div><div class="run-info">{''.join(f'<span>{item}</span>' for item in info)}</div></section>
-<section id="test-cases"><h2>{esc(labels['test_cases'])}</h2><div class="filter-panel"><div class="bulk-controls"><button type="button" id="clear-review">{esc(labels['clear_review'])}</button></div><div class="filters">
+<section id="test-cases"><h2>{esc(labels['test_cases'])}</h2><div class="filter-panel"><div class="filters">
 <label>{esc(labels['search'])}<input id="search" type="search"></label>
 <label>{esc(labels['status'])}<select id="status-filter"><option value="">{esc(labels['all'])}</option>{status_options}</select></label>
 <label>{esc(labels['priority'])}<select id="priority-filter"><option value="">{esc(labels['all'])}</option><option>CRITICAL</option><option>HIGH</option><option>MEDIUM</option><option>LOW</option></select></label>
@@ -912,7 +1178,7 @@ dialog::backdrop {{ background:rgba(20,29,34,.72); }}
 <dialog id="tc-modal" class="tc-modal" aria-labelledby="tc-modal-title">
   <div class="tc-modal-panel">
     <div class="tc-modal-header">
-      <div><h3 id="tc-modal-title"></h3><p id="tc-modal-family" class="muted"></p></div>
+      <div><h3 id="tc-modal-title"></h3><p id="tc-modal-count" class="muted"></p></div>
       <button type="button" id="tc-modal-close" class="modal-close" aria-label="{esc(labels['modal_close'])}">&times;</button>
     </div>
     <div class="tc-modal-body" id="tc-modal-body"></div>
@@ -920,7 +1186,6 @@ dialog::backdrop {{ background:rgba(20,29,34,.72); }}
       <button type="button" id="tc-prev">&larr; {esc(labels['modal_prev'])}</button>
       <span id="tc-position" class="tc-position"></span>
       <button type="button" id="tc-next">{esc(labels['modal_next'])} &rarr;</button>
-      <label class="tc-review-toggle"><input type="checkbox" id="tc-review-toggle"> {esc(labels['review_label'])} &mdash; <span id="tc-review-state"></span></label>
     </div>
   </div>
 </dialog>
@@ -928,18 +1193,14 @@ dialog::backdrop {{ background:rgba(20,29,34,.72); }}
 const q=id=>document.getElementById(id);
 const controls=['search','status-filter','priority-filter','family-filter','feature-filter'].map(q);
 const groupEls=[...document.querySelectorAll('.tc-group')];
-const templates=[...document.querySelectorAll('template.tc-template')];
-const REPORT_NS='ftd-review:'+{json.dumps(str(index.get("generated_at", "unknown")))};
+const tcTemplates=[...document.querySelectorAll('template.tc-template')];
+const tcTemplateById={{}};
+tcTemplates.forEach(t=>tcTemplateById[t.dataset.id]=t);
+const reqTemplates=[...document.querySelectorAll('template.req-template')];
 const POS_OF={json.dumps(labels["modal_of"])};
-const REVIEW_PENDING={json.dumps(labels["review_pending"])};
-const REVIEW_CLOSED={json.dumps(labels["review_closed"])};
-const CLOSED_SUFFIX={json.dumps(labels["closed_of"])};
+const TC_COUNT_SUFFIX={json.dumps(labels["tc_count_suffix"])};
 
-function storageKey(id){{return REPORT_NS+':'+id;}}
-function isClosed(id){{try{{return localStorage.getItem(storageKey(id))==='1';}}catch(e){{return false;}}}}
-function setClosed(id,value){{try{{if(value)localStorage.setItem(storageKey(id),'1');else localStorage.removeItem(storageKey(id));}}catch(e){{}}}}
-
-function matches(tpl){{
+function matchesTemplate(tpl){{
   const term=q('search').value.trim().toLocaleLowerCase();
   const status=q('status-filter').value,priority=q('priority-filter').value,family=q('family-filter').value,feature=q('feature-filter').value;
   return (!term||tpl.dataset.search.includes(term))
@@ -948,31 +1209,22 @@ function matches(tpl){{
     &&(!family||tpl.dataset.family===family)
     &&(!feature||tpl.dataset.features.split(' ').includes(feature));
 }}
-
-function updateGroupClosedCount(group){{
-  const familyId=group.dataset.family;
-  const own=templates.filter(t=>t.dataset.family===familyId);
-  const closedEl=group.querySelector('.tc-group-closed');
-  if(!closedEl)return;
-  const closed=own.filter(t=>isClosed(t.dataset.id)).length;
-  closedEl.hidden=closed===0;
-  closedEl.textContent=closed+'/'+own.length+CLOSED_SUFFIX;
-}}
-function refreshClosedCounts(){{groupEls.forEach(updateGroupClosedCount);}}
+function matchesId(id){{const tpl=tcTemplateById[id];return tpl?matchesTemplate(tpl):false;}}
+function reqPageTcIds(reqTpl){{return [...reqTpl.content.querySelectorAll('.tc-row')].map(li=>li.dataset.id);}}
 
 function applyFilters(){{
   let visibleGroups=0;
   groupEls.forEach(group=>{{
     const familyId=group.dataset.family;
-    const own=templates.filter(t=>t.dataset.family===familyId);
-    const matched=own.filter(matches);
+    const own=tcTemplates.filter(t=>t.dataset.family===familyId);
+    const matched=own.filter(matchesTemplate);
     const countEl=group.querySelector('.tc-count');
     if(countEl)countEl.textContent=matched.length;
     const show=matched.length>0;
     group.hidden=!show;
     if(show)visibleGroups+=1;
     const openBtn=group.querySelector('.open-group');
-    if(openBtn)openBtn.disabled=own.length===0;
+    if(openBtn)openBtn.disabled=matched.length===0;
   }});
   q('no-results').hidden=visibleGroups!==0;
 }}
@@ -994,49 +1246,76 @@ flowModal.querySelector('.modal-close').addEventListener('click',closeFlowModal)
 flowModal.addEventListener('click',event=>{{if(event.target===flowModal)closeFlowModal();}});
 flowModal.addEventListener('close',closeFlowModal);
 
+// The modal navigates authoritative requirement identifiers, one page at a time.
+// Each page's Test Case rows are an accordion: a row's full body is cloned from its
+// own global tc-template only the first time it is opened, and stays hidden, never
+// removed, once collapsed again.
 const tcModal=q('tc-modal');
-const tcState={{items:[],index:0,opener:null}};
-function renderReviewToggle(id){{
-  const closed=isClosed(id);
-  q('tc-review-toggle').checked=closed;
-  q('tc-review-state').textContent=closed?REVIEW_CLOSED:REVIEW_PENDING;
+const tcState={{familyId:null,pages:[],index:0,opener:null}};
+
+function renderNoMatches(){{
+  q('tc-modal-body').replaceChildren();
+  const empty=document.createElement('p');
+  empty.className='empty';
+  empty.textContent={json.dumps(labels["no_filter_results"])};
+  q('tc-modal-body').appendChild(empty);
+  q('tc-modal-title').textContent='';
+  q('tc-modal-count').textContent='';
+  q('tc-position').hidden=true;q('tc-prev').hidden=true;q('tc-next').hidden=true;
 }}
-function renderCurrentCase(){{
-  const tpl=tcState.items[tcState.index];
-  if(!tpl)return;
-  q('tc-modal-body').replaceChildren(tpl.content.cloneNode(true));
-  q('tc-modal-title').textContent=tpl.dataset.title;
-  q('tc-modal-family').textContent=tpl.dataset.id;
-  q('tc-position').textContent=(tcState.index+1)+POS_OF+tcState.items.length;
+
+function renderCurrentPage(){{
+  const page=tcState.pages[tcState.index];
+  if(!page){{renderNoMatches();return;}}
+  const clone=page.tpl.content.cloneNode(true);
+  clone.querySelectorAll('.tc-row').forEach(li=>{{li.hidden=!page.matchedIds.includes(li.dataset.id);}});
+  const emptyMsg=clone.querySelector('.req-page-empty');
+  if(emptyMsg)emptyMsg.hidden=page.matchedIds.length>0;
+  const countValue=clone.querySelector('.req-page-count-value');
+  if(countValue)countValue.textContent=page.matchedIds.length;
+  q('tc-modal-body').replaceChildren(clone);
+  q('tc-modal-title').textContent=page.key===page.title?page.key:(page.key+' — '+page.title);
+  q('tc-modal-count').textContent=page.matchedIds.length+' '+TC_COUNT_SUFFIX;
+  const single=tcState.pages.length<=1;
+  q('tc-position').hidden=single;q('tc-prev').hidden=single;q('tc-next').hidden=single;
+  if(!single)q('tc-position').textContent=page.key+' · '+(tcState.index+1)+POS_OF+tcState.pages.length;
   q('tc-prev').disabled=tcState.index===0;
-  q('tc-next').disabled=tcState.index===tcState.items.length-1;
-  renderReviewToggle(tpl.dataset.id);
+  q('tc-next').disabled=tcState.index===tcState.pages.length-1;
 }}
-function openGroup(familyId,title,opener){{
-  const own=templates.filter(t=>t.dataset.family===familyId);
-  let matched=own.filter(matches);
-  if(matched.length===0)matched=own; // filters currently exclude the whole group: open it unfiltered rather than show nothing
-  if(matched.length===0)return;
-  tcState.items=matched;tcState.index=0;tcState.opener=opener;
-  q('tc-modal-family').textContent=title;
-  renderCurrentCase();
+
+function openGroup(familyId,opener){{
+  const pages=reqTemplates.filter(t=>t.dataset.family===familyId).map(t=>{{
+    const tcIds=reqPageTcIds(t);
+    return {{tpl:t,key:t.dataset.key,title:t.dataset.title,tcIds:tcIds,matchedIds:tcIds.filter(matchesId)}};
+  }}).filter(p=>p.matchedIds.length>0);
+  tcState.familyId=familyId;tcState.pages=pages;tcState.index=0;tcState.opener=opener;
+  renderCurrentPage();
   tcModal.showModal();
   document.body.classList.add('modal-open');
 }}
 document.querySelectorAll('.open-group').forEach(button=>button.addEventListener('click',()=>{{
-  const group=button.closest('.tc-group');
-  const title=group.querySelector('h3').textContent;
-  openGroup(button.dataset.family,title,button);
+  openGroup(button.dataset.family,button);
 }}));
-q('tc-prev').addEventListener('click',()=>{{if(tcState.index>0){{tcState.index-=1;renderCurrentCase();}}}});
-q('tc-next').addEventListener('click',()=>{{if(tcState.index<tcState.items.length-1){{tcState.index+=1;renderCurrentCase();}}}});
-q('tc-review-toggle').addEventListener('change',()=>{{
-  const tpl=tcState.items[tcState.index];
-  if(!tpl)return;
-  setClosed(tpl.dataset.id,q('tc-review-toggle').checked);
-  renderReviewToggle(tpl.dataset.id);
-  refreshClosedCounts();
+q('tc-prev').addEventListener('click',()=>{{if(tcState.index>0){{tcState.index-=1;renderCurrentPage();}}}});
+q('tc-next').addEventListener('click',()=>{{if(tcState.index<tcState.pages.length-1){{tcState.index+=1;renderCurrentPage();}}}});
+
+// Accordion: opening a TC row clones its full body from the global template exactly
+// once; closing only hides it. Several rows may stay open at once.
+q('tc-modal-body').addEventListener('click',event=>{{
+  const toggle=event.target.closest('.tc-row-toggle');
+  if(!toggle)return;
+  const row=toggle.closest('.tc-row');
+  const body=row.querySelector('.tc-row-body');
+  const expanded=toggle.getAttribute('aria-expanded')==='true';
+  if(!expanded&&!body.dataset.materialized){{
+    const tpl=tcTemplateById[row.dataset.id];
+    if(tpl)body.appendChild(tpl.content.cloneNode(true));
+    body.dataset.materialized='1';
+  }}
+  toggle.setAttribute('aria-expanded',String(!expanded));
+  body.hidden=expanded;
 }});
+
 function closeTcModal(){{if(tcModal.open)tcModal.close();document.body.classList.remove('modal-open');}}
 q('tc-modal-close').addEventListener('click',closeTcModal);
 tcModal.addEventListener('click',event=>{{if(event.target===tcModal)closeTcModal();}});
@@ -1044,17 +1323,11 @@ tcModal.addEventListener('close',()=>{{if(tcState.opener)tcState.opener.focus();
 tcModal.addEventListener('keydown',event=>{{
   const tag=(document.activeElement&&document.activeElement.tagName)||'';
   if(['INPUT','SELECT','TEXTAREA'].includes(tag))return;
-  if(event.key==='ArrowLeft'){{event.preventDefault();q('tc-prev').click();}}
-  if(event.key==='ArrowRight'){{event.preventDefault();q('tc-next').click();}}
-}});
-q('clear-review').addEventListener('click',()=>{{
-  templates.forEach(t=>setClosed(t.dataset.id,false));
-  refreshClosedCounts();
-  if(tcModal.open)renderReviewToggle(tcState.items[tcState.index].dataset.id);
+  if(event.key==='ArrowLeft'&&!q('tc-prev').hidden){{event.preventDefault();q('tc-prev').click();}}
+  if(event.key==='ArrowRight'&&!q('tc-next').hidden){{event.preventDefault();q('tc-next').click();}}
 }});
 
 applyFilters();
-refreshClosedCounts();
 </script>
 </body>
 </html>
