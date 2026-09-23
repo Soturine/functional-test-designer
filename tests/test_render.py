@@ -41,7 +41,8 @@ class LegacySuiteRenderTests(unittest.TestCase):
         self.assertIn("Submit a create-order request", report)
         self.assertIn('href="test-cases/TC-001.json"', report)
         self.assertIn('href="test-cases-md/TC-010.md"', report)
-        self.assertEqual(11, report.count('class="tc-card"'))
+        self.assertEqual(0, report.count('class="tc-card"'))
+        self.assertEqual(11, report.count('class="tc-template"'))
         for forbidden in ("https://", "<script src=", "unpkg", "jsdelivr", "mermaid.min.js", 'src="http'):
             self.assertNotIn(forbidden, report)
 
@@ -89,11 +90,23 @@ class LegacySuiteRenderTests(unittest.TestCase):
         case = json.loads((self.output / "test-cases/TC-001.json").read_text(encoding="utf-8"))
         case["steps"][0]["action"] = '<script>alert("x")</script>'
         labels = render.labels_for(index)
-        html = render.render_case_html(
+        html = render.render_case_body(
+            case, index["test_cases"][0], render.mermaid_source(case, labels), labels,
+            {item["id"]: item for item in index["requirements"]}, "Group", {"JSON"},
+        )
+        self.assertNotIn("<script>", html)
+        self.assertIn("&lt;script&gt;", html)
+
+    def test_a_case_ending_with_a_script_close_tag_cannot_break_out_of_its_template(self) -> None:
+        index = json.loads((self.output / "test-cases.json").read_text(encoding="utf-8"))
+        case = json.loads((self.output / "test-cases/TC-001.json").read_text(encoding="utf-8"))
+        case["title"] = '</script><script>alert(1)</script>'
+        labels = render.labels_for(index)
+        html = render.render_case_template(
             case, index["test_cases"][0], render.mermaid_source(case, labels), labels,
             {item["id"]: item for item in index["requirements"]}, "G", "Group", set(), {"JSON"},
         )
-        self.assertNotIn("<script>", html)
+        self.assertNotIn("</script><script>", html)
         self.assertIn("&lt;script&gt;", html)
 
     def test_html_refuses_missing_or_divergent_markdown(self) -> None:
@@ -110,6 +123,121 @@ class LegacySuiteRenderTests(unittest.TestCase):
         (self.output / "test-cases" / "TC-001.json").unlink()
         with self.assertRaisesRegex(ValueError, "Output validation failed"):
             render.render_report(self.output)
+
+
+class ModalReviewGlossaryTests(unittest.TestCase):
+    """v2.4 HTML UX round: one-Test-Case-at-a-time modal, local review toggle, glossary."""
+
+    def setUp(self) -> None:
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.output = Path(self.temp_dir.name) / "output"
+        shutil.copytree(ROOT / "examples" / "expected-output", self.output)
+        self.addCleanup(self.temp_dir.cleanup)
+
+    def render_all(self) -> str:
+        render.render_markdown(self.output)
+        return render.render_report(self.output).read_text(encoding="utf-8")
+
+    def test_group_cards_open_a_modal_instead_of_expanding_inline(self) -> None:
+        report = self.render_all()
+        self.assertIn('class="open-group"', report)
+        self.assertNotIn('class="group-toggle"', report)
+        self.assertNotIn("id=\"expand-all\"", report)
+
+    def test_modal_structure_has_pagination_counter_and_close(self) -> None:
+        report = self.render_all()
+        self.assertIn('id="tc-modal"', report)
+        self.assertIn('id="tc-modal-body"', report)
+        self.assertIn('id="tc-prev"', report)
+        self.assertIn('id="tc-next"', report)
+        self.assertIn('id="tc-position"', report)
+        self.assertIn('id="tc-modal-close"', report)
+
+    def test_only_one_template_per_case_no_visible_expanded_duplicate_card(self) -> None:
+        report = self.render_all()
+        index = json.loads((self.output / "test-cases.json").read_text(encoding="utf-8"))
+        self.assertEqual(len(index["test_cases"]), report.count('class="tc-template"'))
+        self.assertEqual(0, report.count('class="tc-content"') - report.count('<template class="tc-template"'))
+
+    def test_review_toggle_control_exists_with_report_scoped_and_tc_scoped_storage_key(self) -> None:
+        report = self.render_all()
+        self.assertIn('id="tc-review-toggle"', report)
+        self.assertIn("REPORT_NS=", report.replace(" ", ""))
+        self.assertIn("functionstorageKey(id){returnREPORT_NS+':'+id;}", report.replace(" ", ""))
+        # The namespace must not be a bare literal like just "review": it is derived from
+        # the run's generated_at so unrelated reports never collide on the same TC id.
+        index = json.loads((self.output / "test-cases.json").read_text(encoding="utf-8"))
+        self.assertIn(json.dumps(str(index["generated_at"])), report)
+
+    def test_rendering_and_reviewing_never_touches_canonical_json(self) -> None:
+        json_files = sorted(self.output.rglob("*.json"))
+        before = {path: digest(path) for path in json_files}
+        self.render_all()
+        after = {path: digest(path) for path in json_files}
+        self.assertEqual(before, after)
+        report = (self.output / "report.html").read_text(encoding="utf-8")
+        self.assertNotIn('"accepted"', report)  # no canonical-looking review field was introduced
+
+    def test_localstorage_failure_is_handled_safely(self) -> None:
+        report = self.render_all()
+        self.assertIn("try{", report.replace(" ", ""))
+        self.assertIn("catch(e){}", report.replace(" ", "").replace("catch(e){return false;}", "catch(e){}"))
+
+    def test_modal_is_a_native_accessible_dialog_with_escape_and_focus_return(self) -> None:
+        report = self.render_all()
+        self.assertIn('<dialog id="tc-modal"', report)
+        self.assertIn('aria-labelledby="tc-modal-title"', report)
+        self.assertIn("tcModal.showModal()", report)
+        self.assertIn("tcState.opener.focus()", report)
+
+    def test_keyboard_arrow_navigation_is_wired_and_ignores_form_controls(self) -> None:
+        report = self.render_all()
+        self.assertIn("ArrowLeft", report)
+        self.assertIn("ArrowRight", report)
+        self.assertIn("['INPUT','SELECT','TEXTAREA']", report)
+
+    def test_glossary_section_defines_the_major_report_terms_in_portuguese(self) -> None:
+        index_path = self.output / "test-cases.json"
+        index = json.loads(index_path.read_text(encoding="utf-8"))
+        index["output_locale"] = "pt-BR"
+        index_path.write_text(json.dumps(index), encoding="utf-8")
+        report = self.render_all()
+        self.assertIn('id="glossary"', report)
+        for term in (
+            "Findings", "Normativos", "Derivados", "Cobertura", "CRITICAL", "HIGH",
+            "READY", "NEEDS_REVIEW", "BLOCKED", "Exploratório", "Automação pronta",
+        ):
+            self.assertIn(term, report)
+
+    def test_glossary_in_english_locale_uses_english_terms(self) -> None:
+        index_path = self.output / "test-cases.json"
+        index = json.loads(index_path.read_text(encoding="utf-8"))
+        index["output_locale"] = "en-US"
+        index_path.write_text(json.dumps(index), encoding="utf-8")
+        report = self.render_all()
+        for term in ("Findings", "Derived", "Coverage", "Normative", "Automation ready"):
+            self.assertIn(term, report)
+
+    def test_no_external_cdn_or_network_dependency_was_added(self) -> None:
+        report = self.render_all()
+        for forbidden in ("https://", "http://cdn", "<script src=", "unpkg.com", "jsdelivr.net"):
+            self.assertNotIn(forbidden, report)
+
+    def test_existing_filters_remain_present_and_reusable_by_the_modal_controller(self) -> None:
+        report = self.render_all()
+        for control_id in ("search", "status-filter", "priority-filter", "family-filter", "feature-filter"):
+            self.assertIn(f'id="{control_id}"', report)
+        self.assertIn("function matches(tpl)", report)
+        self.assertIn("openGroup(", report)
+
+    def test_markdown_output_is_unaffected_by_the_modal_change(self) -> None:
+        rendered = render.render_markdown(self.output)
+        index = json.loads((self.output / "test-cases.json").read_text(encoding="utf-8"))
+        self.assertEqual(len(index["test_cases"]), len(rendered))
+        for entry in index["test_cases"]:
+            markdown = (self.output / entry["markdown_file"]).read_text(encoding="utf-8")
+            self.assertNotIn("tc-modal", markdown)
+            self.assertNotIn("<template", markdown)
 
 
 class OfficialTitleTests(unittest.TestCase):

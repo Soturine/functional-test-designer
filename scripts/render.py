@@ -48,6 +48,10 @@ LABELS = {
         "blocking": "Bloqueante", "reason": "Motivo", "impacted": "TCs impactados",
         "no_results": "Nenhum Test Case corresponde aos filtros.", "expand_all": "Expandir todos",
         "collapse_all": "Recolher todos", "collapse": "Recolher", "expand": "Expandir",
+        "open_group": "Ver Test Cases", "modal_prev": "Anterior", "modal_next": "Próximo",
+        "modal_of": " de ", "review_label": "Aceito / Fechado", "review_pending": "Pendente",
+        "review_closed": "Fechado", "closed_of": " fechados", "clear_review": "Limpar marcações deste relatório",
+        "glossary_title": "Legenda e termos do relatório", "modal_close": "Fechar",
         "identifier": "Identificador", "disposition": "Disposição", "kind": "Tipo",
         "candidates": "Candidatos", "materialized": "Materializados", "covered": "Já cobertos",
         "question_required": "Pergunta", "not_applicable": "Não aplicável",
@@ -84,6 +88,10 @@ LABELS = {
         "blocking": "Blocking", "reason": "Reason", "impacted": "Impacted TCs",
         "no_results": "No Test Case matches the filters.", "expand_all": "Expand all",
         "collapse_all": "Collapse all", "collapse": "Collapse", "expand": "Expand",
+        "open_group": "View Test Cases", "modal_prev": "Previous", "modal_next": "Next",
+        "modal_of": " of ", "review_label": "Accepted / Closed", "review_pending": "Pending",
+        "review_closed": "Closed", "closed_of": " closed", "clear_review": "Clear marks for this report",
+        "glossary_title": "Report legend and terminology", "modal_close": "Close",
         "identifier": "Identifier", "disposition": "Disposition", "kind": "Kind",
         "candidates": "Candidates", "materialized": "Materialized", "covered": "Already covered",
         "question_required": "Question", "not_applicable": "Not applicable",
@@ -455,14 +463,14 @@ def _case_flags(case: dict[str, Any], merge_ids: set[str], question_ids: set[str
     return flags
 
 
-def render_case_html(
+def render_case_body(
     case: dict[str, Any], entry: dict[str, Any], mermaid: str, labels: dict[str, str],
-    requirements: dict[str, dict[str, Any]], family_id: str, family: str, flags: set[str],
-    artifact_formats: set[str],
+    requirements: dict[str, dict[str, Any]], family: str, artifact_formats: set[str],
 ) -> str:
+    """The expensive, per-case detail fragment (header + full content). Callers place
+    this inside a `<template>` so the browser never lays it out or materializes its
+    flow SVG until the one currently viewed case is cloned into the live modal."""
     none = labels["none"]
-    search = " ".join([case["id"], case["title"], case["objective"], family, " ".join(case.get("tags", [])),
-                       " ".join(case.get("source_identifiers", []))]).casefold()
     badges = [f'<span class="badge test-basis">{esc(case.get("test_basis", "ACCEPTANCE"))}</span>']
     if case.get("expansion_dimension"):
         badges.append(f'<span class="badge dimension">{esc(case["expansion_dimension"])}</span>')
@@ -517,9 +525,7 @@ def render_case_html(
     except ValueError:
         flow, expand = '<div class="flow-error" role="status">-</div>', ""
     flow += f'<pre class="mermaid-source" hidden>{esc(mermaid)}</pre>'
-    return f"""
-<details class="tc-card" data-status="{esc(case['status'])}" data-priority="{esc(case['priority'])}" data-family="{esc(family_id)}" data-features="{esc(' '.join(sorted(flags)))}" data-search="{esc(search)}">
-  <summary><span class="tc-heading"><span class="tc-id">{esc(case['id'])}</span>{esc(case['title'])}{chips}</span><span class="badges">{''.join(badges)}</span></summary>
+    return f"""<div class="tc-detail-head"><span class="tc-heading"><span class="tc-id">{esc(case['id'])}</span>{esc(case['title'])}{chips}</span><span class="badges">{''.join(badges)}</span></div>
   <div class="tc-content">
     <section><h3>{esc(labels['objective'])}</h3><p>{esc(case['objective'])}</p></section>
     <p class="related-requirements"><strong>{esc(labels['requirements'])}:</strong> {esc('; '.join(requirement_names))}</p>
@@ -532,8 +538,122 @@ def render_case_html(
     {f'<section><h3>{esc(labels["suitability"])}</h3>{automation}</section>' if automation else ''}
     <section><h3>{esc(labels['artifacts'])}</h3><div class="artifact-links">{''.join(links) or esc(none)}</div></section>
     <details class="technical"><summary>{esc(labels['technical'])}</summary>{trace}</details>
-  </div>
-</details>"""
+  </div>"""
+
+
+def render_case_template(
+    case: dict[str, Any], entry: dict[str, Any], mermaid: str, labels: dict[str, str],
+    requirements: dict[str, dict[str, Any]], family_id: str, family: str, flags: set[str],
+    artifact_formats: set[str],
+) -> str:
+    """A `<template>` never renders/lays out its content and never runs the scripts or
+    loads the resources it contains until it is explicitly cloned — the browser-native
+    way to keep hundreds of Test Cases' full detail out of the visible/materialized DOM
+    while still shipping compact, filterable data-* attributes for every one of them."""
+    search = " ".join([case["id"], case["title"], case["objective"], family, " ".join(case.get("tags", [])),
+                       " ".join(case.get("source_identifiers", []))]).casefold()
+    body = render_case_body(case, entry, mermaid, labels, requirements, family, artifact_formats)
+    return (
+        f'<template class="tc-template" id="tc-tpl-{esc(case["id"])}" data-id="{esc(case["id"])}" '
+        f'data-title="{esc(case["title"])}" data-status="{esc(case["status"])}" '
+        f'data-priority="{esc(case["priority"])}" data-family="{esc(family_id)}" '
+        f'data-features="{esc(" ".join(sorted(flags)))}" data-search="{esc(search)}">{body}</template>'
+    )
+
+
+GLOSSARY: dict[str, list[tuple[str, list[tuple[str, str]]]]] = {
+    "pt": [
+        ("Natureza do Test Case", [
+            ("Normativos / Acceptance", "Test Cases derivados diretamente dos requisitos/regras da autoridade normativa e do baseline normativo congelado."),
+            ("Derivados", "Test Cases adicionais, determinísticos, derivados semanticamente de regras, relações, estados ou comportamento de falha já conhecidos, sem inventar um novo requisito."),
+            ("Caracterização", "Testes que documentam o comportamento observado da implementação, especialmente quando ele precisa ser entendido separadamente da expectativa normativa."),
+            ("Exploratório", "Uma hipótese/cenário que vale investigar quando não existe um oracle ou política determinística completa."),
+            ("E2E", "Uma jornada ponta a ponta composta, que percorre vários comportamentos/estágios atômicos."),
+        ]),
+        ("Status de execução / prontidão", [
+            ("READY", "Existe informação fundamentada suficiente para executar o TC como desenhado."),
+            ("NEEDS_REVIEW", "O cenário é válido, mas uma incerteza material ou um detalhe de execução ausente exige revisão/esclarecimento."),
+            ("BLOCKED", "A execução depende de uma dependência externa, ambiente, equipamento indisponível ou outra condição bloqueante."),
+            ("EXPLORATORY", "O caso é intencionalmente exploratório, não um teste normativo determinístico de aprova/reprova."),
+        ]),
+        ("Prioridade", [
+            ("CRITICAL", "A falha pode quebrar um fluxo central, integridade/segurança, uma transição irreversível, auditabilidade crítica ou comportamento igualmente severo."),
+            ("HIGH", "Falha funcional ou operacional de alto impacto, exigindo cobertura forte."),
+            ("MEDIUM", "Comportamento relevante, de impacto moderado."),
+            ("LOW", "Comportamento de baixo impacto, de suporte ou cosmético."),
+        ]),
+        ("Conceitos de QA / expansão", [
+            ("Erro de operador", "Cenários que exploram erros humanos plausíveis: recurso, associação, ator, estado ou sequência errados, entre outros."),
+            ("Caos / Recuperação", "Comportamento de falha/recuperação envolvendo dependências, interrupções, reinício, retentativa, falha parcial ou disrupção operacional semelhante."),
+            ("Concorrência", "Ações simultâneas/concorrentes, idempotência e consistência de estado sob execução concorrente."),
+            ("Segurança / Autorização", "Comportamento de autenticação/autorização/controle de acesso/segurança representado na suíte."),
+            ("Famílias", "Famílias de cenários usadas para organizar Test Cases relacionados para revisão."),
+            ("Merge Candidates", "Casos parecidos o suficiente para uma revisão humana de possível consolidação; não são mesclados automaticamente."),
+        ]),
+        ("Conceitos de análise / qualidade", [
+            ("Findings", "Divergências, conflitos ou observações notáveis da implementação, fundamentados em evidência, encontrados durante a análise. Um Finding não é automaticamente sinônimo de um Test Case reprovado."),
+            ("Perguntas", "Questões abertas criadas quando a evidência selecionada é insuficiente ou ambígua e inventar uma resposta seria inseguro."),
+            ("Cobertura / Identificadores cobertos", "Quantos identificadores da autoridade têm uma relação explícita de teste/disposição. Cobertura não significa que todos os testes passaram."),
+            ("Quality gates", "Verificações determinísticas de integridade/qualidade que protegem escopo, baseline, referências, procedimentos, integridade do pipeline e publicação."),
+            ("Baseline histórico", "Comparação opcional com um baseline histórico explicitamente carregado. NOT_APPLIED significa que nenhum baseline histórico foi carregado — não é uma falha."),
+        ]),
+        ("Conceitos de automação", [
+            ("Automatizáveis", "Casos cuja adequação à automação (automation suitability) é HIGH ou MEDIUM, conforme a métrica já implementada no relatório."),
+            ("Automação pronta", "Casos cuja prontidão para automação (automation readiness) indica que as fixtures/ambiente/seletores/dependências hoje conhecidos são suficientes, conforme o contrato já existente da FTD."),
+        ]),
+    ],
+    "en": [
+        ("Test Case nature", [
+            ("Normative / Acceptance", "Test Cases derived directly from normative authority requirements/rules and the frozen normative baseline."),
+            ("Derived", "Additional deterministic Test Cases derived semantically from known rules, relationships, states or failure behavior, without inventing a new requirement."),
+            ("Characterization", "Tests documenting observed implementation behavior, especially where it must be understood separately from normative expectation."),
+            ("Exploratory", "A hypothesis/scenario worth investigating when a complete deterministic oracle/policy is not established."),
+            ("E2E", "A composed end-to-end journey spanning multiple atomic behaviors/stages."),
+        ]),
+        ("Execution / readiness status", [
+            ("READY", "Enough grounded information exists to execute the TC as designed."),
+            ("NEEDS_REVIEW", "The scenario is valid, but a material uncertainty or missing execution detail requires review/clarification."),
+            ("BLOCKED", "Execution depends on an unavailable external dependency/environment/equipment or another blocking condition."),
+            ("EXPLORATORY", "The case is intentionally exploratory rather than a deterministic normative pass/fail test."),
+        ]),
+        ("Priority", [
+            ("CRITICAL", "Failure can break a core flow, integrity/security, an irreversible transition, critical auditability, or similarly severe behavior."),
+            ("HIGH", "High-impact functional or operational failure requiring strong coverage."),
+            ("MEDIUM", "Relevant behavior with moderate impact."),
+            ("LOW", "Lower-impact, supporting or cosmetic behavior."),
+        ]),
+        ("QA / expansion concepts", [
+            ("Operator error", "Scenarios exploring plausible human/operator mistakes: wrong resource, association, actor, state, sequence, and similar."),
+            ("Chaos / Recovery", "Failure/recovery behavior involving dependencies, interruptions, restart, retry, partial failure, or similar operational disruption."),
+            ("Concurrency", "Simultaneous/racing actions, idempotency and state consistency under concurrent execution."),
+            ("Security / Authorization", "Authentication/authorization/access-control/security behavior represented in the suite."),
+            ("Families", "Scenario families used to organize related Test Cases for review."),
+            ("Merge Candidates", "Cases that may be similar enough for human review of possible consolidation; they are not automatically merged."),
+        ]),
+        ("Analysis / quality concepts", [
+            ("Findings", "Evidence-backed discrepancies, conflicts or notable implementation observations found during analysis. A Finding is not automatically synonymous with a failed Test Case."),
+            ("Questions", "Open Questions created where selected evidence is insufficient or ambiguous and inventing an answer would be unsafe."),
+            ("Coverage / Identifiers covered", "How many authoritative identifiers have an explicit test/disposition relationship. Coverage does not mean all tests passed."),
+            ("Quality gates", "Deterministic integrity/quality checks protecting scope, baseline, references, procedures, pipeline integrity and publication."),
+            ("Historical baseline", "Optional comparison against an explicitly loaded historical baseline. NOT_APPLIED means no historical baseline was loaded — not a failure."),
+        ]),
+        ("Automation concepts", [
+            ("Automatable", "Cases whose automation suitability is HIGH or MEDIUM according to the report's existing metric."),
+            ("Automation ready", "Cases whose automation readiness indicates the currently known fixtures/environment/selectors/dependencies are sufficient, per the existing FTD contract."),
+        ]),
+    ],
+}
+
+
+def render_glossary(labels: dict[str, str], language: str) -> str:
+    categories = GLOSSARY.get(language, GLOSSARY["en"])
+    sections = "".join(
+        f'<div class="glossary-group"><h3>{esc(category)}</h3><dl class="glossary-list">' +
+        "".join(f"<dt>{esc(term)}</dt><dd>{esc(description)}</dd>" for term, description in terms) +
+        "</dl></div>"
+        for category, terms in categories
+    )
+    return f'<section id="glossary"><h2>{esc(labels["glossary_title"])}</h2><div class="glossary-grid">{sections}</div></section>'
 
 
 def render_report(output_dir: Path, destination: Path | None = None, artifact_formats: set[str] | None = None) -> Path:
@@ -544,6 +664,7 @@ def render_report(output_dir: Path, destination: Path | None = None, artifact_fo
     artifact_formats = {"JSON", "MARKDOWN"} if artifact_formats is None else set(artifact_formats)
     index = read_json(output_dir / "test-cases.json")
     labels = labels_for(index)
+    language = str(index.get("output_locale", "en")).split("-", 1)[0].casefold()
     questions = read_json(output_dir / "questions.json")["questions"]
     cases = [read_json(output_dir / entry["file"]) for entry in index["test_cases"]]
     requirements = {item["id"]: item for item in index["requirements"]}
@@ -577,17 +698,18 @@ def render_report(output_dir: Path, destination: Path | None = None, artifact_fo
         title = group_of[members[0][1]["id"]][1]
         member_requirements = list(dict.fromkeys(ref for _, case in members for ref in case["requirement_refs"]))
         req_line = "; ".join(requirement_label(requirements[ref]) for ref in member_requirements if ref in requirements)
-        cards = "".join(
-            render_case_html(case, entry, mermaid_by_id[case["id"]], labels, requirements, group_id, title,
-                             _case_flags(case, merge_ids, question_case_ids), artifact_formats)
+        templates = "".join(
+            render_case_template(case, entry, mermaid_by_id[case["id"]], labels, requirements, group_id, title,
+                                 _case_flags(case, merge_ids, question_case_ids), artifact_formats)
             for entry, case in members
         )
-        body_id = f"family-body-{group_id}"
         groups_html.append(
-            f'<section class="tc-group" id="family-{esc(group_id)}" data-family="{esc(group_id)}"><div class="tc-group-title">'
-            f'<div><h3>{esc(title)}</h3><span>{len(members)} TCs &middot; {esc(req_line)}</span></div>'
-            f'<button type="button" class="group-toggle" aria-expanded="true" aria-controls="{esc(body_id)}">{esc(labels["collapse"])}</button>'
-            f'</div><div class="tc-group-body" id="{esc(body_id)}">{cards}</div></section>'
+            f'<section class="tc-group" id="family-{esc(group_id)}" data-family="{esc(group_id)}">'
+            f'<div class="tc-group-card">'
+            f'<div><h3>{esc(title)}</h3><span><span class="tc-count">{len(members)}</span> TCs &middot; {esc(req_line)}'
+            f'<span class="tc-group-closed" data-family="{esc(group_id)}" hidden></span></span></div>'
+            f'<button type="button" class="open-group" data-family="{esc(group_id)}">{esc(labels["open_group"])}</button>'
+            f'</div>{templates}</section>'
         )
 
     status = Counter(case["status"] for case in cases)
@@ -713,10 +835,9 @@ main {{ padding:24px 0 56px; }} main>section {{ padding:18px 0; }}
 button {{ border:1px solid #aeb7bc; border-radius:5px; background:#fff; padding:6px 10px; font:inherit; cursor:pointer; }}
 input,select {{ width:100%; min-height:38px; border:1px solid #aeb7bc; border-radius:4px; padding:7px 9px; font:inherit; background:#fff; }}
 .tc-group {{ margin:18px 0 24px; }}
-.tc-group-title {{ display:flex; align-items:center; gap:12px; padding:12px 14px; border:1px solid var(--line); border-left:4px solid var(--accent); border-radius:8px; background:#fff; margin-bottom:10px; }}
-.tc-group-title h3 {{ margin:0; font-size:17px; }} .tc-group-title span {{ color:var(--muted); font-size:12px; }} .group-toggle {{ margin-left:auto; }}
-.tc-card {{ margin-bottom:10px; border:1px solid var(--line); border-radius:8px; background:#fff; }}
-.tc-card>summary {{ display:flex; align-items:center; justify-content:space-between; gap:16px; padding:12px 16px; cursor:pointer; font-weight:700; }}
+.tc-group-card {{ display:flex; align-items:center; gap:12px; padding:14px; border:1px solid var(--line); border-left:4px solid var(--accent); border-radius:8px; background:#fff; box-shadow:var(--shadow); }}
+.tc-group-card h3 {{ margin:0; font-size:17px; }} .tc-group-card span {{ color:var(--muted); font-size:12px; }} .open-group {{ margin-left:auto; font-weight:700; }}
+.tc-group-closed:not([hidden]) {{ display:inline; }} .tc-group-closed::before {{ content:" \\2022 "; }}
 .tc-heading {{ display:flex; gap:10px; align-items:baseline; flex-wrap:wrap; }}
 .identifier-chips {{ display:inline-flex; gap:4px; flex-wrap:wrap; }}
 .chip {{ border:1px solid #9fd8c6; background:#eaf7f2; color:#075e47; border-radius:4px; padding:1px 6px; font-size:11px; font-weight:700; }} .tc-id {{ color:var(--muted); font-size:13px; white-space:nowrap; }}
@@ -725,7 +846,8 @@ input,select {{ width:100%; min-height:38px; border:1px solid #aeb7bc; border-ra
 .status-ready {{ color:#08633f; background:#eaf7f0; border-color:#b8dfc9; }} .status-needs_review {{ color:#765500; background:#fff6dd; }}
 .status-exploratory,.test-basis,.dimension,.automation {{ color:#3949ab; background:#f0f1ff; border-color:#c5cae9; }}
 [class*="status-blocked"] {{ color:#8f1d14; background:#fff0ee; }}
-.tc-content {{ border-top:1px solid var(--line); padding:16px; }} .two-column {{ display:grid; grid-template-columns:1fr 1fr; gap:24px; }}
+.tc-detail-head {{ display:flex; align-items:flex-start; justify-content:space-between; gap:16px; flex-wrap:wrap; padding-bottom:12px; border-bottom:1px solid var(--line); margin-bottom:12px; }}
+.tc-content {{ padding:0; }} .two-column {{ display:grid; grid-template-columns:1fr 1fr; gap:24px; }}
 .related-requirements {{ color:var(--muted); font-size:13px; }}
 .table-wrap {{ overflow-x:auto; }} table {{ width:100%; border-collapse:collapse; background:#fff; margin-bottom:14px; }}
 th,td {{ border:1px solid var(--line); padding:9px 11px; text-align:left; vertical-align:top; overflow-wrap:anywhere; }} th {{ background:#f0f3f2; font-size:13px; }}
@@ -734,8 +856,20 @@ th,td {{ border:1px solid var(--line); padding:9px 11px; text-align:left; vertic
 .flow-heading {{ display:flex; align-items:center; justify-content:space-between; }}
 .mermaid-container {{ overflow-x:auto; background:#fff; }} .mermaid-svg {{ display:block; width:100%; min-width:520px; max-width:760px; margin:0 auto; }}
 .node-label-title {{ font-weight:700; }}
-.flow-modal {{ position:fixed; inset:0; z-index:1000; display:grid; place-items:center; padding:20px; background:rgba(20,29,34,.72); }}
-.flow-modal-panel {{ width:min(1040px,100%); max-height:calc(100vh - 40px); overflow:auto; border-radius:6px; background:#fff; padding:16px; }}
+dialog {{ border:none; padding:0; box-shadow:var(--shadow); border-radius:10px; }}
+dialog::backdrop {{ background:rgba(20,29,34,.72); }}
+.flow-modal {{ width:min(1040px,calc(100% - 40px)); max-height:calc(100vh - 40px); }}
+.flow-modal-panel {{ max-height:calc(100vh - 40px); overflow:auto; padding:16px; }}
+.tc-modal {{ width:min(1140px,calc(100% - 32px)); max-height:calc(100vh - 48px); }}
+.tc-modal-panel {{ display:flex; flex-direction:column; max-height:calc(100vh - 48px); }}
+.tc-modal-header {{ display:flex; justify-content:space-between; align-items:flex-start; gap:14px; padding:16px 18px; border-bottom:1px solid var(--line); position:sticky; top:0; background:#fff; z-index:2; border-radius:10px 10px 0 0; }}
+.tc-modal-header h3 {{ margin:0; font-size:18px; }}
+.tc-modal-body {{ padding:16px 18px; overflow:auto; }}
+.tc-modal-footer {{ display:flex; align-items:center; gap:16px; padding:12px 18px; border-top:1px solid var(--line); position:sticky; bottom:0; background:#fff; flex-wrap:wrap; border-radius:0 0 10px 10px; }}
+.tc-position {{ font-weight:700; }}
+.tc-review-toggle {{ margin-left:auto; display:flex; align-items:center; gap:6px; font-weight:600; }}
+.tc-review-toggle input {{ width:auto; min-height:auto; }}
+.modal-close {{ font-size:20px; line-height:1; padding:4px 10px; }}
 .artifact-links {{ display:flex; gap:10px; }} .artifact-links a {{ border:1px solid #aeb7bc; border-radius:4px; padding:6px 10px; text-decoration:none; }}
 .technical {{ margin-top:12px; color:var(--muted); font-size:13px; }}
 .technical-grid {{ display:grid; grid-template-columns:max-content 1fr; gap:5px 12px; }} .technical-grid dt {{ font-weight:700; color:var(--ink); }} .technical-grid dd {{ margin:0; }}
@@ -743,17 +877,23 @@ th,td {{ border:1px solid var(--line); padding:9px 11px; text-align:left; vertic
 .question-item.blocking {{ border-left-color:var(--danger); }} .question-title,.finding-title {{ display:flex; justify-content:space-between; gap:12px; font-weight:700; }}
 .needs-answer {{ color:var(--danger); font-weight:700; }}
 .gates li {{ margin-bottom:6px; }}
+.glossary-grid {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:18px; }}
+.glossary-group {{ background:#fff; border:1px solid var(--line); border-radius:10px; padding:14px; }}
+.glossary-list {{ margin:0; }} .glossary-list dt {{ font-weight:700; margin-top:8px; }} .glossary-list dt:first-child {{ margin-top:0; }}
+.glossary-list dd {{ margin:2px 0 0; color:var(--muted); font-size:13px; }}
 [hidden] {{ display:none!important; }}
-@media (max-width:720px) {{ .filters,.two-column {{ grid-template-columns:1fr; }} .tc-card>summary {{ flex-direction:column; align-items:flex-start; }} }}
-@media print {{ header {{ position:static; }} nav,.filter-panel,.group-toggle,.expand-flow {{ display:none!important; }} .tc-group-body {{ display:block!important; }} }}
+@media (max-width:720px) {{ .filters,.two-column {{ grid-template-columns:1fr; }} .tc-group-card {{ flex-direction:column; align-items:flex-start; }} .open-group {{ margin-left:0; }}
+  .tc-modal,.flow-modal {{ width:100%; height:100%; max-height:100%; max-width:100%; border-radius:0; margin:0; }} .tc-modal-panel {{ max-height:100%; }}
+  .tc-modal-header,.tc-modal-footer {{ border-radius:0; }} .tc-review-toggle {{ margin-left:0; width:100%; }} }}
+@media print {{ header {{ position:static; }} nav,.filter-panel,.open-group,.expand-flow {{ display:none!important; }} }}
 </style>
 </head>
 <body>
 <header><div class="shell"><h1>{esc(labels['report_title'])}</h1><p class="subtitle">{esc(labels['report_subtitle'])}</p>
-<nav><a href="#summary">{esc(labels['summary'])}</a><a href="#test-cases">{esc(labels['test_cases'])}</a><a href="#merge">{esc(labels['merge'])}</a><a href="#findings">{esc(labels['findings'])}</a><a href="#questions">{esc(labels['questions'])}</a><a href="#coverage">{esc(labels['coverage'])}</a><a href="#expansion">{esc(labels['expansion'])}</a><a href="#gates">{esc(labels['gates'])}</a></nav></div></header>
+<nav><a href="#summary">{esc(labels['summary'])}</a><a href="#test-cases">{esc(labels['test_cases'])}</a><a href="#merge">{esc(labels['merge'])}</a><a href="#findings">{esc(labels['findings'])}</a><a href="#questions">{esc(labels['questions'])}</a><a href="#coverage">{esc(labels['coverage'])}</a><a href="#expansion">{esc(labels['expansion'])}</a><a href="#gates">{esc(labels['gates'])}</a><a href="#glossary">{esc(labels['glossary_title'])}</a></nav></div></header>
 <main class="shell">
 <section id="summary"><h2>{esc(labels['summary'])}</h2><div class="metrics">{metric_html}</div><div class="run-info">{''.join(f'<span>{item}</span>' for item in info)}</div></section>
-<section id="test-cases"><h2>{esc(labels['test_cases'])}</h2><div class="filter-panel"><div class="bulk-controls"><button type="button" id="expand-all">{esc(labels['expand_all'])}</button><button type="button" id="collapse-all">{esc(labels['collapse_all'])}</button></div><div class="filters">
+<section id="test-cases"><h2>{esc(labels['test_cases'])}</h2><div class="filter-panel"><div class="bulk-controls"><button type="button" id="clear-review">{esc(labels['clear_review'])}</button></div><div class="filters">
 <label>{esc(labels['search'])}<input id="search" type="search"></label>
 <label>{esc(labels['status'])}<select id="status-filter"><option value="">{esc(labels['all'])}</option>{status_options}</select></label>
 <label>{esc(labels['priority'])}<select id="priority-filter"><option value="">{esc(labels['all'])}</option><option>CRITICAL</option><option>HIGH</option><option>MEDIUM</option><option>LOW</option></select></label>
@@ -766,18 +906,155 @@ th,td {{ border:1px solid var(--line); padding:9px 11px; text-align:left; vertic
 <section id="coverage"><h2>{esc(labels['coverage'])}</h2>{coverage_html}</section>
 <section id="expansion"><h2>{esc(labels['expansion'])}</h2>{expansion_html}</section>
 <section id="gates"><h2>{esc(labels['gates'])}</h2><ul class="gates">{gate_html or f'<li>{esc(labels["none"])}</li>'}</ul>{f'<h3>{esc(labels["gap_metrics"])}</h3><ul>{gap_html}</ul>' if gap_html else ''}</section>
+{render_glossary(labels, language)}
 </main>
-<div id="flow-modal" class="flow-modal" role="dialog" aria-modal="true" hidden><div class="flow-modal-panel"><button type="button" class="modal-close">{esc(labels['close'])}</button><div id="flow-modal-canvas"></div></div></div>
+<dialog id="flow-modal" class="flow-modal"><div class="flow-modal-panel"><button type="button" class="modal-close" aria-label="{esc(labels['modal_close'])}">{esc(labels['close'])}</button><div id="flow-modal-canvas"></div></div></dialog>
+<dialog id="tc-modal" class="tc-modal" aria-labelledby="tc-modal-title">
+  <div class="tc-modal-panel">
+    <div class="tc-modal-header">
+      <div><h3 id="tc-modal-title"></h3><p id="tc-modal-family" class="muted"></p></div>
+      <button type="button" id="tc-modal-close" class="modal-close" aria-label="{esc(labels['modal_close'])}">&times;</button>
+    </div>
+    <div class="tc-modal-body" id="tc-modal-body"></div>
+    <div class="tc-modal-footer">
+      <button type="button" id="tc-prev">&larr; {esc(labels['modal_prev'])}</button>
+      <span id="tc-position" class="tc-position"></span>
+      <button type="button" id="tc-next">{esc(labels['modal_next'])} &rarr;</button>
+      <label class="tc-review-toggle"><input type="checkbox" id="tc-review-toggle"> {esc(labels['review_label'])} &mdash; <span id="tc-review-state"></span></label>
+    </div>
+  </div>
+</dialog>
 <script>
-const q=id=>document.getElementById(id);const controls=['search','status-filter','priority-filter','family-filter','feature-filter'].map(q);const cards=[...document.querySelectorAll('.tc-card')];const groups=[...document.querySelectorAll('.tc-group')];
-function applyFilters(){{const term=q('search').value.trim().toLocaleLowerCase();let visible=0;cards.forEach(card=>{{const status=q('status-filter').value;const show=(!term||card.dataset.search.includes(term))&&(!status||card.dataset.status===status||(status==='BLOCKED'&&card.dataset.status.startsWith('BLOCKED')))&&(!q('priority-filter').value||card.dataset.priority===q('priority-filter').value)&&(!q('family-filter').value||card.dataset.family===q('family-filter').value)&&(!q('feature-filter').value||card.dataset.features.split(' ').includes(q('feature-filter').value));card.hidden=!show;if(show)visible+=1;}});groups.forEach(group=>{{group.hidden=![...group.querySelectorAll('.tc-card')].some(card=>!card.hidden);}});q('no-results').hidden=visible!==0;}}
+const q=id=>document.getElementById(id);
+const controls=['search','status-filter','priority-filter','family-filter','feature-filter'].map(q);
+const groupEls=[...document.querySelectorAll('.tc-group')];
+const templates=[...document.querySelectorAll('template.tc-template')];
+const REPORT_NS='ftd-review:'+{json.dumps(str(index.get("generated_at", "unknown")))};
+const POS_OF={json.dumps(labels["modal_of"])};
+const REVIEW_PENDING={json.dumps(labels["review_pending"])};
+const REVIEW_CLOSED={json.dumps(labels["review_closed"])};
+const CLOSED_SUFFIX={json.dumps(labels["closed_of"])};
+
+function storageKey(id){{return REPORT_NS+':'+id;}}
+function isClosed(id){{try{{return localStorage.getItem(storageKey(id))==='1';}}catch(e){{return false;}}}}
+function setClosed(id,value){{try{{if(value)localStorage.setItem(storageKey(id),'1');else localStorage.removeItem(storageKey(id));}}catch(e){{}}}}
+
+function matches(tpl){{
+  const term=q('search').value.trim().toLocaleLowerCase();
+  const status=q('status-filter').value,priority=q('priority-filter').value,family=q('family-filter').value,feature=q('feature-filter').value;
+  return (!term||tpl.dataset.search.includes(term))
+    &&(!status||tpl.dataset.status===status||(status==='BLOCKED'&&tpl.dataset.status.startsWith('BLOCKED')))
+    &&(!priority||tpl.dataset.priority===priority)
+    &&(!family||tpl.dataset.family===family)
+    &&(!feature||tpl.dataset.features.split(' ').includes(feature));
+}}
+
+function updateGroupClosedCount(group){{
+  const familyId=group.dataset.family;
+  const own=templates.filter(t=>t.dataset.family===familyId);
+  const closedEl=group.querySelector('.tc-group-closed');
+  if(!closedEl)return;
+  const closed=own.filter(t=>isClosed(t.dataset.id)).length;
+  closedEl.hidden=closed===0;
+  closedEl.textContent=closed+'/'+own.length+CLOSED_SUFFIX;
+}}
+function refreshClosedCounts(){{groupEls.forEach(updateGroupClosedCount);}}
+
+function applyFilters(){{
+  let visibleGroups=0;
+  groupEls.forEach(group=>{{
+    const familyId=group.dataset.family;
+    const own=templates.filter(t=>t.dataset.family===familyId);
+    const matched=own.filter(matches);
+    const countEl=group.querySelector('.tc-count');
+    if(countEl)countEl.textContent=matched.length;
+    const show=matched.length>0;
+    group.hidden=!show;
+    if(show)visibleGroups+=1;
+    const openBtn=group.querySelector('.open-group');
+    if(openBtn)openBtn.disabled=own.length===0;
+  }});
+  q('no-results').hidden=visibleGroups!==0;
+}}
 controls.forEach(control=>control.addEventListener(control.id==='search'?'input':'change',applyFilters));
-document.querySelectorAll('.group-toggle').forEach(button=>button.addEventListener('click',()=>{{const body=button.closest('.tc-group').querySelector('.tc-group-body');const expanded=button.getAttribute('aria-expanded')==='true';button.setAttribute('aria-expanded',String(!expanded));button.textContent=expanded?{json.dumps(labels['expand'])}:{json.dumps(labels['collapse'])};body.hidden=expanded;}}));
-function setAll(open){{document.querySelectorAll('.tc-group-body').forEach(body=>body.hidden=!open);cards.forEach(card=>card.open=open);}}
-q('expand-all').addEventListener('click',()=>setAll(true));q('collapse-all').addEventListener('click',()=>setAll(false));
-const modal=q('flow-modal');const canvas=q('flow-modal-canvas');function closeModal(){{modal.hidden=true;canvas.replaceChildren();document.body.classList.remove('modal-open');}}
-document.querySelectorAll('.expand-flow').forEach(button=>button.addEventListener('click',()=>{{const svg=q(button.dataset.flowTarget).querySelector('svg');canvas.replaceChildren(svg.cloneNode(true));modal.hidden=false;document.body.classList.add('modal-open');}}));
-modal.querySelector('.modal-close').addEventListener('click',closeModal);modal.addEventListener('click',event=>{{if(event.target===modal)closeModal();}});document.addEventListener('keydown',event=>{{if(event.key==='Escape')closeModal();}});
+
+const flowModal=q('flow-modal');const flowCanvas=q('flow-modal-canvas');
+function closeFlowModal(){{if(flowModal.open)flowModal.close();flowCanvas.replaceChildren();document.body.classList.remove('modal-open');}}
+document.addEventListener('click',event=>{{
+  const button=event.target.closest('.expand-flow');
+  if(!button)return;
+  const container=q(button.dataset.flowTarget);
+  const svg=container&&container.querySelector('svg');
+  if(!svg)return;
+  flowCanvas.replaceChildren(svg.cloneNode(true));
+  flowModal.showModal();
+  document.body.classList.add('modal-open');
+}});
+flowModal.querySelector('.modal-close').addEventListener('click',closeFlowModal);
+flowModal.addEventListener('click',event=>{{if(event.target===flowModal)closeFlowModal();}});
+flowModal.addEventListener('close',closeFlowModal);
+
+const tcModal=q('tc-modal');
+const tcState={{items:[],index:0,opener:null}};
+function renderReviewToggle(id){{
+  const closed=isClosed(id);
+  q('tc-review-toggle').checked=closed;
+  q('tc-review-state').textContent=closed?REVIEW_CLOSED:REVIEW_PENDING;
+}}
+function renderCurrentCase(){{
+  const tpl=tcState.items[tcState.index];
+  if(!tpl)return;
+  q('tc-modal-body').replaceChildren(tpl.content.cloneNode(true));
+  q('tc-modal-title').textContent=tpl.dataset.title;
+  q('tc-modal-family').textContent=tpl.dataset.id;
+  q('tc-position').textContent=(tcState.index+1)+POS_OF+tcState.items.length;
+  q('tc-prev').disabled=tcState.index===0;
+  q('tc-next').disabled=tcState.index===tcState.items.length-1;
+  renderReviewToggle(tpl.dataset.id);
+}}
+function openGroup(familyId,title,opener){{
+  const own=templates.filter(t=>t.dataset.family===familyId);
+  let matched=own.filter(matches);
+  if(matched.length===0)matched=own; // filters currently exclude the whole group: open it unfiltered rather than show nothing
+  if(matched.length===0)return;
+  tcState.items=matched;tcState.index=0;tcState.opener=opener;
+  q('tc-modal-family').textContent=title;
+  renderCurrentCase();
+  tcModal.showModal();
+  document.body.classList.add('modal-open');
+}}
+document.querySelectorAll('.open-group').forEach(button=>button.addEventListener('click',()=>{{
+  const group=button.closest('.tc-group');
+  const title=group.querySelector('h3').textContent;
+  openGroup(button.dataset.family,title,button);
+}}));
+q('tc-prev').addEventListener('click',()=>{{if(tcState.index>0){{tcState.index-=1;renderCurrentCase();}}}});
+q('tc-next').addEventListener('click',()=>{{if(tcState.index<tcState.items.length-1){{tcState.index+=1;renderCurrentCase();}}}});
+q('tc-review-toggle').addEventListener('change',()=>{{
+  const tpl=tcState.items[tcState.index];
+  if(!tpl)return;
+  setClosed(tpl.dataset.id,q('tc-review-toggle').checked);
+  renderReviewToggle(tpl.dataset.id);
+  refreshClosedCounts();
+}});
+function closeTcModal(){{if(tcModal.open)tcModal.close();document.body.classList.remove('modal-open');}}
+q('tc-modal-close').addEventListener('click',closeTcModal);
+tcModal.addEventListener('click',event=>{{if(event.target===tcModal)closeTcModal();}});
+tcModal.addEventListener('close',()=>{{if(tcState.opener)tcState.opener.focus();}});
+tcModal.addEventListener('keydown',event=>{{
+  const tag=(document.activeElement&&document.activeElement.tagName)||'';
+  if(['INPUT','SELECT','TEXTAREA'].includes(tag))return;
+  if(event.key==='ArrowLeft'){{event.preventDefault();q('tc-prev').click();}}
+  if(event.key==='ArrowRight'){{event.preventDefault();q('tc-next').click();}}
+}});
+q('clear-review').addEventListener('click',()=>{{
+  templates.forEach(t=>setClosed(t.dataset.id,false));
+  refreshClosedCounts();
+  if(tcModal.open)renderReviewToggle(tcState.items[tcState.index].dataset.id);
+}});
+
+applyFilters();
+refreshClosedCounts();
 </script>
 </body>
 </html>
