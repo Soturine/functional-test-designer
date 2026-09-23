@@ -15,6 +15,7 @@ Task states:
     FAILED_WORKER  a reader ran and reported failure; the source stays visible
     FAILED_TO_READ the runtime could not extract text (needs transcription/failed)
     UNSUPPORTED    binary/metadata-only source; nothing to read
+    EMPTY          readable but zero bytes; nothing to catalog, still accounted for
     MAIN_MODEL     SEQUENTIAL strategy: the main model reads it directly, no reader
 """
 
@@ -30,7 +31,9 @@ from common import StageError, now, read_json, write_json
 CONTRACT_VERSION = "1"
 READER_ROLE = "LIGHTWEIGHT_SOURCE_READER"
 STRATEGIES = ("MULTI_AGENT_PER_SOURCE", "MULTI_AGENT_BATCHED", "SEQUENTIAL")
-TASK_STATES = ("PLANNED", "REUSED", "CATALOGED", "FAILED_WORKER", "FAILED_TO_READ", "UNSUPPORTED", "MAIN_MODEL")
+TASK_STATES = ("PLANNED", "REUSED", "CATALOGED", "FAILED_WORKER", "FAILED_TO_READ", "UNSUPPORTED", "EMPTY",
+               "MAIN_MODEL")
+EMPTY_DIGEST = hashlib.sha256(b"").hexdigest()
 # Factual catalog sections a reader may fill; all optional, all lists.
 CATALOG_FIELDS = {
     "headings", "identifiers", "actors", "entities", "states", "operations", "integrations",
@@ -97,6 +100,8 @@ def plan(
             task["state"] = "UNSUPPORTED"
         elif record["status"] not in {"READ", "TRANSCRIBED"}:
             task["state"] = "FAILED_TO_READ"
+        elif record["content_digest"] == EMPTY_DIGEST:
+            task["state"] = "EMPTY"
         elif strategy == "SEQUENTIAL":
             task["state"] = "MAIN_MODEL"
         else:

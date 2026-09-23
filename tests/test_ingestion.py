@@ -109,6 +109,16 @@ class ReadingTaskPlanTests(unittest.TestCase):
         states = {task["path"]: task["state"] for task in plan["tasks"]}
         self.assertEqual({"docs/spec.pdf": "FAILED_TO_READ", "assets/logo.png": "UNSUPPORTED"}, states)
 
+    def test_an_empty_source_is_accounted_for_without_a_reader(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            plan = reading.plan([
+                {"path": "pkg/__init__.py", "role": "IMPLEMENTATION_EVIDENCE", "status": "READ",
+                 "content_digest": reading.EMPTY_DIGEST},
+                {"path": "pkg/core.py", "role": "IMPLEMENTATION_EVIDENCE", "status": "READ", "content_digest": "z"},
+            ], Path(temp), Path(temp) / "run")
+        states = {task["path"]: task["state"] for task in plan["tasks"]}
+        self.assertEqual({"pkg/__init__.py": "EMPTY", "pkg/core.py": "PLANNED"}, states)
+
 
 class ReaderContractTests(unittest.TestCase):
     def setUp(self) -> None:

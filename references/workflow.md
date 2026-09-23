@@ -74,7 +74,7 @@ Many lightweight readers read faster; one main model decides.
   Claims, oracles, tests, Findings, Questions, coverage and authority decisions are rejected.
 - **Submission.** `pipeline.py reading-submit` validates results as all-or-nothing: the digest matches, the role is unchanged, the catalog is non-empty and excerpt lines exist. A worker failure is submitted as `FAILED` with an error.
 - **Reconciliation.** `pipeline.py reading-reconcile` refuses while any source lacks a result. It preserves conflicting identifier statements and cross-references with no majority vote, writes `reading/source-catalog.json` and `reading/reconciliation.json`, and binds the reconciliation into the `TEST_DESIGN` manifest record. Design cannot start before reconciliation.
-- **States:** `PLANNED`, `CATALOGED` (only with a validated reader result), `REUSED`, `FAILED_WORKER`, `FAILED_TO_READ`, `UNSUPPORTED` and `MAIN_MODEL` (sequential).
+- **States:** `PLANNED`, `CATALOGED` (only with a validated reader result), `REUSED`, `FAILED_WORKER`, `FAILED_TO_READ`, `UNSUPPORTED`, `EMPTY` (a zero-byte file, accounted for with no reader) and `MAIN_MODEL` (sequential).
 - **Reuse.** Validated catalogs are cached under `<artifact-root>/.ftd/catalog-cache/`. The key is a collision-safe source key (a digest of the normalized path plus a readable suffix) together with the content digest, the role and the contract version.
   - A later run reuses them without rerunning any reader. A changed source, or a changed role, invalidates only that entry.
   - Extracted text is cached by digest, so an unchanged large PDF is not re-extracted.
