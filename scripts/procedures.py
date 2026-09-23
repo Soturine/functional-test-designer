@@ -59,13 +59,32 @@ ABSTRACT_ACTION = re.compile(
     r"\b(?:executar|realizar|acionar|efetuar) (?:a|o) (?:a[cç][aã]o|opera[cç][aã]o|processo|fluxo|cen[aá]rio) "
     r"(?:descrit[oa]|indicad[oa]|aplic[aá]vel|adequad[oa]|em teste|do objetivo)\b|"
     r"\b(?:prosseguir|continuar) conforme (?:necess[aá]rio|aplic[aá]vel)\b|"
-    r"\bvalidar que funcionou\b|\bvalidate that it worked\b",
+    r"\bvalidar que funcionou\b|\bvalidate that it worked\b|"
+    # A whole step that names no actor, target or observable: "access the system",
+    # "perform the operation", "validate it", "check if it worked", "continue the flow",
+    # "do everything required". Anchored to the full step, so concrete steps that merely
+    # start with the same verb are untouched.
+    r"^\s*(?:"
+    r"(?:access|open|enter|log into) the (?:system|application|app|platform)|"
+    r"(?:perform|execute|do|complete) the (?:operation|action|process|procedure|task)|"
+    r"(?:validate|verify|check|confirm) (?:it|this|that|everything|the result)|"
+    r"(?:check|verify|see) (?:if|whether) it (?:worked|works|succeeded)|"
+    r"(?:continue|proceed with|follow) the (?:flow|process)|"
+    r"do (?:everything|all) (?:required|necessary|needed)|"
+    r"acess(?:ar|e) o (?:sistema|aplicativo)|"
+    r"(?:realiz|execut|efetu|faz|fa[cç])(?:ar|e|er|a) a (?:opera[cç][aã]o|a[cç][aã]o|tarefa)|"
+    r"(?:valid|verific|confirm)(?:ar|e|ue) (?:isso|tudo|o resultado)|"
+    r"verifi(?:car|que) se (?:funcionou|deu certo)|"
+    r"(?:continu|sig)(?:ar|e|a) o fluxo|"
+    r"fa(?:zer|[cç]a) tudo (?:o )?que (?:for )?(?:necess[aá]rio|preciso)"
+    r")\s*[.!]?\s*$",
     re.IGNORECASE,
 )
 ABSTRACT_OBSERVATION = re.compile(
     r"\bthe (?:step|flow|next step) (?:becomes|remains|is) available\b|\bworks as expected\b|"
     r"\bfunciona (?:conforme|como) (?:esperado|o esperado)\b|\b(?:a etapa|o fluxo) (?:fica dispon[ií]vel|segue normalmente)\b|"
-    r"\bcomportamento esperado\b|\bexpected behaviou?r\b",
+    r"\bcomportamento esperado\b|\bexpected behaviou?r\b|"
+    r"^\s*(?:it works|it worked|success(?:ful)?|ok|done|funciona|funcionou|deu certo|sucesso)\s*[.!]?\s*$",
     re.IGNORECASE,
 )
 ACTION_VERB = re.compile(
@@ -206,7 +225,7 @@ def validate_procedures(payload: dict[str, Any], context: dict[str, Any]) -> dic
             if not expected and not missing_oracle:
                 errors.append(f"{label} step {number} requires an observable expected_result")
             if ABSTRACT_ACTION.search(action):
-                errors.append(f"{label} step {number} action is abstract; name the concrete operation")
+                errors.append(f"{label} step {number} action is abstract; say who does which atomic action to which target (and where, with which semantic data) as the evidence supports, or keep the known intent and declare MISSING_EXECUTION_SURFACE / UNKNOWN_SETUP_PATH")
             if expected and ABSTRACT_OBSERVATION.search(expected):
                 errors.append(f"{label} step {number} expected result is not observable")
             if AUTH_ONLY.search(action) and not about_auth:
