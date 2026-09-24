@@ -677,7 +677,10 @@ class ExecutionViewTests(unittest.TestCase):
         plan = render.render_execution_plan(organization, index)
         self.assertLess(plan.index("[TC-004]"), plan.index("[TC-002]"))
         self.assertEqual(2, plan.count("[TC-003]"))  # functional group + load view, a link each
-        self.assertIn("CH-001 (chaos-001)", plan)
+        self.assertIn("CH-001 (post-suite chaos-001)", plan)
+        self.assertIn("_Order: main-flow order (UC-9)_", plan)
+        index["output_locale"] = "pt-BR"
+        self.assertTrue(render.render_execution_plan(organization, index).startswith("# Plano de execução"))
 
 
 if __name__ == "__main__":

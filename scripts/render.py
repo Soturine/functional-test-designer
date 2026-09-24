@@ -55,6 +55,7 @@ LABELS = {
         "rc_varies": "O que varia", "rc_measurements": "Medições",
         "SELF_CLEANING": "o próprio caso limpa (ver Limpeza)",
         "REQUIRES_FIXTURE_RESET": "o harness deve reiniciar as fixtures de Dados de teste antes do próximo caso",
+        "execution_plan": "Plano de execução", "plan_order": "Ordem", "plan_post_suite": "pós-suíte",
         "view_functional": "Por requisito", "view_all": "Todos", "view_families": "Famílias", "modal_page": "Visão", "notes": "Notas", "post_suite": "Pós-suíte", "post_suite_rationale": "Motivação",
         "post_suite_related": "Test Cases relacionados", "post_suite_lineage": "Origem (execução pós-suíte · run)",
         "order_use_case_main_flow": "ordem do fluxo principal", "order_canonical_order": "ordem canônica",
@@ -113,6 +114,7 @@ LABELS = {
         "rc_varies": "What varies", "rc_measurements": "Measurements",
         "SELF_CLEANING": "the case cleans up itself (see Cleanup)",
         "REQUIRES_FIXTURE_RESET": "the harness must reset the Test Data fixtures before the next case",
+        "execution_plan": "Execution plan", "plan_order": "Order", "plan_post_suite": "post-suite",
         "view_functional": "By requirement", "view_all": "All", "view_families": "Families", "modal_page": "View", "notes": "Notes", "post_suite": "Post-suite", "post_suite_rationale": "Rationale",
         "post_suite_related": "Related Test Cases", "post_suite_lineage": "Origin (post-suite run · run)",
         "order_use_case_main_flow": "main-flow order", "order_canonical_order": "canonical order",
@@ -865,19 +867,22 @@ def render_post_suite_template(case: dict[str, Any], labels: dict[str, str]) -> 
 def render_execution_plan(organization: dict[str, Any], index: dict[str, Any]) -> str:
     """Markdown view of the organization: every group with its cases in execution order.
     Cases are referenced, never repeated in full."""
+    labels = labels_for(index)
     titles = {entry["id"]: entry.get("title", "") for entry in index.get("test_cases", [])}
     post = {case["key"]: case for case in organization.get("post_suite_cases", [])}
-    lines = ["# Execution plan", ""]
+    lines = [f"# {labels['execution_plan']}", ""]
     for group in organization["groups"]:
         lines += [f"## {group['label']}", ""]
-        if group.get("flow_reference"):
-            lines += [f"_Order: {group['order_source']} ({group['flow_reference']})_", ""]
+        order = labels.get(f"order_{group['order_source'].lower()}", group["order_source"])
+        reference = f" ({group['flow_reference']})" if group.get("flow_reference") else ""
+        lines += [f"_{labels['plan_order']}: {order}{reference}_", ""]
         for member in group["members"]:
             if member["origin"] == "CANONICAL":
                 lines.append(f"{member['order']}. [{member['case']}](test-cases-md/{member['case']}.md) — {titles.get(member['case'], '')}")
             else:
                 key = f"{member['chaos_run_id']}:{member['case']}"
-                lines.append(f"{member['order']}. {member['case']} ({member['chaos_run_id']}) — {post.get(key, {}).get('title', '')}")
+                lines.append(f"{member['order']}. {member['case']} ({labels['plan_post_suite']} {member['chaos_run_id']})"
+                             f" — {post.get(key, {}).get('title', '')}")
         lines.append("")
     return "\n".join(lines)
 
