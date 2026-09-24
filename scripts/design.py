@@ -132,8 +132,11 @@ def validate_test_intent(test: dict[str, Any], label: str, locale: str, errors: 
 
 def validate_questions_and_findings(
     payload: dict[str, Any], requirement_keys: set[str], locale: str, errors: list[str],
-    stage: str, taken: set[str],
+    stage: str, taken: set[str], prior_questions: set[str] | None = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """A Finding whose coverage disposition is QUESTION must name the real Question(s)
+    that ask what has to be resolved (from this stage or an earlier one); one Question
+    may serve several Findings about the same unresolved policy."""
     questions, findings = [], []
     for number, item in enumerate(payload.get("questions", []) or [], 1):
         key = _text(item.get("key")) or f"{stage}-Q{number}"
@@ -179,9 +182,20 @@ def validate_questions_and_findings(
         findings.append({
             "key": key, "type": str(item.get("type", "")), "statement": _text(item.get("statement")),
             "requirements": requirements, "tests": _keys(item.get("tests")),
+            "question_keys": _keys(item.get("questions")),
             "source_refs": _refs(item.get("source_refs")), "coverage_disposition": disposition,
             "stage": stage,
         })
+    known = set(prior_questions or ()) | {item["key"] for item in questions}
+    for finding in findings:
+        label = f"finding {finding['key']}"
+        unknown = [key for key in finding["question_keys"] if key not in known]
+        if unknown:
+            errors.append(f"{label} links unknown questions {unknown}")
+        if finding["coverage_disposition"] == "QUESTION" and not finding["question_keys"]:
+            errors.append(
+                f"{label} has coverage_disposition QUESTION but links no Question; add `questions` naming the "
+                "Question that asks what must be resolved (reuse one that already asks it)")
     return questions, findings
 
 

@@ -564,7 +564,9 @@ def render_finding_card(finding: dict[str, Any], labels: dict[str, str], require
         f'<strong>{esc(finding["id"])}</strong></div><p>{esc(finding["statement"])}</p>'
         f'<dl class="technical-grid"><dt>{esc(labels["requirements"])}</dt><dd>{esc(reqs)}</dd>'
         f'<dt>{esc(labels["impacted"])}</dt><dd>{esc(tcs)}</dd>'
-        f'<dt>{esc(labels["evidence"])}</dt><dd>{esc(evidence)}</dd></dl></article>'
+        + (f'<dt>{esc(labels["questions"])}</dt><dd>{esc(", ".join(finding["question_refs"]))}</dd>'
+           if finding.get("question_refs") else "")
+        + f'<dt>{esc(labels["evidence"])}</dt><dd>{esc(evidence)}</dd></dl></article>'
     )
 
 

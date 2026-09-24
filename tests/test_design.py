@@ -134,5 +134,55 @@ class DesignStageTests(unittest.TestCase):
             submit("design")
 
 
+class FindingQuestionTraceabilityTests(unittest.TestCase):
+    """A Finding that says a Question must resolve it names that real Question."""
+
+    def submit_with(self, **finding_changes):
+        def mutate(pack):
+            design(pack)["findings"][0].update(finding_changes)
+        run = PackRun("saas-accounts", mutate)
+        self.addCleanup(run.close)
+        run.start()
+        return run
+
+    def test_question_disposition_without_a_question_is_rejected(self) -> None:
+        run = self.submit_with(coverage_disposition="QUESTION")
+        with self.assertRaisesRegex(StageError, "coverage_disposition QUESTION but links no Question"):
+            run.submit("design")
+
+    def test_an_omitted_disposition_defaults_to_question_and_needs_the_link(self) -> None:
+        def mutate(pack):
+            design(pack)["findings"][0].pop("coverage_disposition")
+        run = PackRun("saas-accounts", mutate)
+        self.addCleanup(run.close)
+        run.start()
+        with self.assertRaisesRegex(StageError, "links no Question"):
+            run.submit("design")
+
+    def test_unknown_question_link_is_rejected(self) -> None:
+        run = self.submit_with(coverage_disposition="QUESTION", questions=["Q-NOPE"])
+        with self.assertRaisesRegex(StageError, r"links unknown questions \['Q-NOPE'\]"):
+            run.submit("design")
+
+    def test_linked_question_is_traceable_in_the_canonical_suite(self) -> None:
+        run = self.submit_with(coverage_disposition="QUESTION", questions=["Q-REUSE"])
+        run.submit("design")
+        run.submit("expansion")
+        run.submit("procedures")
+        from pipeline import finalize_run, read_canonical  # noqa: E402
+        finalize_run(run.run_dir, ["JSON", "HTML", "MARKDOWN"])
+        canonical = read_canonical(run.run_dir / "canonical-suite.json")
+        finding = canonical["index"]["findings"][0]
+        self.assertEqual(1, len(finding["question_refs"]))
+        question = next(q for q in canonical["questions"]["questions"] if q["id"] == finding["question_refs"][0])
+        self.assertTrue(question["question"])
+        report = (run.artifacts / "output" / "report.html").read_text(encoding="utf-8")
+        self.assertIn(f"<dt>Questions</dt><dd>{finding['question_refs'][0]}</dd>", report)
+
+    def test_other_dispositions_need_no_question(self) -> None:
+        run = self.submit_with(coverage_disposition="DIVERGENCE_SCENARIO")
+        run.submit("design")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -641,6 +641,7 @@ def build_canonical(run_dir: Path, baseline_comparison: dict[str, Any] | None = 
         "requirement_refs": sorted(req_by_key[key]["id"] for key in f["requirements"]),
         "source_refs": _clean_refs(f["source_refs"]), "related_test_cases": sorted(finding_links[f["key"]]),
         "coverage_disposition": f["coverage_disposition"],
+        "question_refs": sorted(question_id[key] for key in f.get("question_keys", [])),
     } for f in findings_raw]
     questions_by_case: dict[str, list[str]] = {}
     for question in questions:

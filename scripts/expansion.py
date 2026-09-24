@@ -126,6 +126,7 @@ def validate_expansion(payload: dict[str, Any], context: dict[str, Any]) -> dict
     taken = set(context["taken_keys"])
     questions, findings = validate_questions_and_findings(
         payload, requirement_keys, locale, errors, "expansion", taken,
+        prior_questions={item["key"] for item in design["questions"]},
     )
     question_keys = {item["key"] for item in [*design["questions"], *questions]}
     finding_keys = {item["key"] for item in [*design["findings"], *findings]}

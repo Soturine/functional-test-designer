@@ -411,6 +411,14 @@
             "NOT_TESTABLE",
             "OUT_OF_SCOPE"
           ]
+        },
+        "question_refs": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^Q-[0-9]{3,}$"
+          }
         }
       }
     },
