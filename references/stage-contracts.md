@@ -96,6 +96,7 @@ When `start` plans reader tasks (`next_stage: reading`), every `PLANNED` source 
 - Any of `claims`, `tests`, `test_cases`, `oracles`, `findings`, `questions`, `requirements`, `coverage`, `dispositions`, `authority`, `role_override` or `completeness` is rejected: those decisions belong to the main model.
 - A submission is all-or-nothing.
 - `pipeline.py reading-reconcile --run <run>` then consolidates everything. It preserves conflicting statements with no vote and moves the run to `design`.
+- The reusable file catalog (`.ftd/catalog-cache/`) of each file also receives the selector-level facts that cite it, so a later run reusing file catalogs loses nothing a reader reported.
 - A selector catalog is an index over its files: a fact restated by a file result and the selector-level result appears once, with its file provenance (`duplicate_catalog_items_removed` in the telemetry). Distinct statements are never merged.
 - `identifier_conflicts` lists only official identifiers (from the authority index) that two different defining sources (authority or technical context) state in disagreeing ways; one statement containing the other agrees. Implementation and test mentions are kept separately as `identifier_references`, and identifiers outside the authority universe never enter the conflict list.
 

@@ -368,6 +368,18 @@ class SelectorReaderTests(unittest.TestCase):
         self.assertEqual(4, len(operations))
         self.assertEqual(4, len({item["file"] for item in operations}))
 
+    def test_facts_reported_only_at_selector_level_survive_reuse(self) -> None:
+        _, run_dir, plan = self.start(self.SELECTED)
+        results = [self.selector_result(plan, s["selector_id"]) for s in plan["selectors"]]  # files INSPECTED
+        pipeline.submit_reading(run_dir, results)
+        pipeline.reconcile_reading(run_dir)
+        _, second_dir, second = self.start(self.SELECTED, run_id="second")
+        self.assertEqual({"REUSED"}, {t["state"] for t in second["tasks"]})
+        rec = json.loads((second_dir / "reading" / "reconciliation.json").read_text(encoding="utf-8"))
+        src = next(s for s in rec["selectors"] if s["path"] == "src")
+        catalog = json.loads((second_dir / "reading" / src["catalog_ref"]).read_text(encoding="utf-8"))["catalog"]
+        self.assertIn({"file": "src/a.py", "fact": "defines a function"}, catalog["operations"])
+
     def test_complete_selector_results_reconcile_with_file_provenance(self) -> None:
         _, run_dir, plan = self.start(self.SELECTED)
         pipeline.submit_reading(run_dir, [self.selector_result(plan, s["selector_id"]) for s in plan["selectors"]])

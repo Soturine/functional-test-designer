@@ -483,6 +483,47 @@ def _with_file(items: list[Any], path: str) -> list[Any]:
     return out
 
 
+def _selector_facts_by_file(run_dir: Path) -> dict[str, dict[str, list[Any]]]:
+    """Selector-level catalog items grouped by the file they cite."""
+    by_file: dict[str, dict[str, list[Any]]] = {}
+    for item_path in sorted((run_dir / "reading" / "selector-results").glob("*/*.json")):
+        for section, values in (read_json(item_path).get("catalog") or {}).items():
+            for value in values or []:
+                if isinstance(value, dict) and value.get("file"):
+                    by_file.setdefault(value["file"], {}).setdefault(section, []).append(value)
+    return by_file
+
+
+def refresh_file_cache(run_dir: Path, artifact_root: Path) -> int:
+    """Write the reusable file catalog of every file this run's readers recorded. Facts a
+    reader put in its selector-level result are folded into the catalog of the file they
+    cite, so reusing file catalogs later loses nothing a reader reported. Reads the run,
+    writes only the artifact root's catalog cache; the run itself is not modified."""
+    task_plan = read_json(run_dir / "reading" / "task-plan.json")
+    selector_facts = _selector_facts_by_file(run_dir)
+    written = 0
+    for task in task_plan["tasks"]:
+        if task["state"] != "CATALOGED":
+            continue
+        result = dict(read_json(run_dir / "reading" / "results" / f"{task['source_key']}.json"))
+        folded = selector_facts.get(task["path"], {})
+        if folded:
+            catalog: dict[str, list[Any]] = {}
+            for section, items in (result.get("catalog") or {}).items():
+                catalog[section] = _with_file(items, task["path"])
+            for section, items in folded.items():
+                catalog.setdefault(section, []).extend(items)
+            result["catalog"], _ = _dedupe(catalog)
+            if result.get("status") == "INSPECTED" and any(result["catalog"].values()):
+                result["status"] = "CATALOGED"
+        write_json(_cache_path(artifact_root, task["source_key"]), {
+            "contract_version": CONTRACT_VERSION, "path": task["path"], "role": task["role"],
+            "content_digest": task["content_digest"], "status": "CATALOGED", "result": result,
+            "selector_facts_folded": sum(len(v) for v in folded.values())})
+        written += 1
+    return written
+
+
 def reconcile(run_dir: Path, artifact_root: Path) -> dict[str, Any]:
     """Require every physical file under every selector to be accounted for, preserve
     conflicts, build one provenance-preserving catalog per selector and fill the file
@@ -528,10 +569,6 @@ def reconcile(run_dir: Path, artifact_root: Path) -> dict[str, Any]:
             for ref in cat.get("references", []) or []:
                 target = ref.get("target") if isinstance(ref, dict) else str(ref)
                 references.append({"source": task["path"], "target": target, "selected": target in selected_paths})
-            if task["state"] == "CATALOGED":
-                write_json(_cache_path(artifact_root, task["source_key"]), {
-                    "contract_version": CONTRACT_VERSION, "path": task["path"], "role": task["role"],
-                    "content_digest": task["content_digest"], "status": "CATALOGED", "result": result})
         elif task["state"] == "FAILED_WORKER":
             entry["error"] = task.get("error")
         sources.append(entry)
@@ -589,6 +626,7 @@ def reconcile(run_dir: Path, artifact_root: Path) -> dict[str, Any]:
         },
         "note": "Conflicts are preserved for the main model; nothing was majority-voted.",
     }
+    reconciliation["telemetry"]["file_catalogs_cached"] = refresh_file_cache(run_dir, artifact_root)
     write_json(run_dir / "reading" / "source-catalog.json", {"sources": sources})
     write_json(run_dir / "reading" / "reconciliation.json", reconciliation)
     return reconciliation
