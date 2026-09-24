@@ -1172,6 +1172,17 @@ def render_outputs(canonical_path: Path, artifact_root: Path, formats: Any = Non
     errors = validation.validate(work)
     if errors:
         raise ValueError("Canonical suite validation failed:\n- " + "\n- ".join(errors))
+    # One organization (functional placements, execution views, post-suite cases) feeds the
+    # report, the machine-readable views and the Azure suites alike.
+    run_dir = Path(canonical_path).parent
+    organization = None
+    if (run_dir / "sources.json").is_file() and (run_dir / "run.json").is_file():
+        organization = organization_for_run(run_dir, canonical)
+        organization["post_suite_cases"] = [
+            {**case, "key": f"{run['chaos_run_id']}:{case['id']}", "chaos_run_id": run["chaos_run_id"],
+             "parent_run_id": run["parent_run_id"]}
+            for run in _chaos_runs_for(run_dir) for case in run["cases"]]
+        write_json(work / "organization.json", organization)
     markdown = render.render_markdown(work)
     report = render.render_report(work, artifact_formats=selected & {"JSON", "MARKDOWN"})
     output = Path(artifact_root).resolve() / "output"
@@ -1184,12 +1195,22 @@ def render_outputs(canonical_path: Path, artifact_root: Path, formats: Any = Non
         for name in ("test-cases.json", "questions.json"):
             shutil.copy2(work / name, output / name)
             files.append(output / name)
+        if organization:
+            # Placements reference cases; post-suite case content stays in its own run's files.
+            refs = [{k: case.get(k) for k in ("key", "id", "chaos_run_id", "parent_run_id", "title")}
+                    for case in organization["post_suite_cases"]]
+            write_json(output / "organization.json", {**organization, "post_suite_cases": refs})
+            files.append(output / "organization.json")
         for entry in canonical["index"]["test_cases"]:
             (output / "test-cases").mkdir(exist_ok=True)
             shutil.copy2(work / entry["file"], output / entry["file"])
             files.append(output / entry["file"])
         rendered.append("JSON")
     if "MARKDOWN" in selected:
+        if organization:
+            plan = output / "execution-plan.md"
+            plan.write_text(render.render_execution_plan(organization, canonical["index"]), encoding="utf-8")
+            files.append(plan)
         (output / "test-cases-md").mkdir(exist_ok=True)
         for path in markdown:
             shutil.copy2(path, output / "test-cases-md" / path.name)

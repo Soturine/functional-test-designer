@@ -585,5 +585,100 @@ class FamilyModalTests(unittest.TestCase):
             self.assertNotIn(forbidden, report)
 
 
+
+def _member(case: str, order: int, origin: str = "CANONICAL", **extra: str) -> dict[str, Any]:
+    return {"case": case, "origin": origin, "via": "test", "order": order, **extra}
+
+
+class ExecutionViewTests(unittest.TestCase):
+    """An organization publishes views over the same Test Cases: the report shows them
+    as tabs, in placement order, with post-suite cases discoverable and nothing cloned."""
+
+    CHAOS = {"id": "CH-001", "key": "chaos-001:CH-001", "chaos_run_id": "chaos-001", "parent_run_id": "run-a",
+             "title": "Dependency outage during submission", "rationale": "A dependency drops mid-request.",
+             "related_test_cases": ["TC-002"], "execution_tags": ["CHAOS_RECOVERY"], "priority": "HIGH",
+             "preconditions": ["Dependency reachable"], "test_data": [{"name": "ORDER_A", "description": "A valid order"}],
+             "steps": [{"action": "Stop the dependency during submission", "expected_result": "The request fails cleanly"}],
+             "postconditions": ["No partial order persists"], "unknowns": [], "notes": []}
+
+    def setUp(self) -> None:
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.output = Path(self.temp_dir.name) / "output"
+        shutil.copytree(ROOT / "examples" / "expected-output", self.output)
+        self.addCleanup(self.temp_dir.cleanup)
+        organization = {"schema_version": "1", "groups": [
+            {"id": "REQ002", "kind": "FUNCTIONAL", "label": "REQ-002", "identifier": "REQ-002",
+             "flow_reference": "UC-9", "order_source": "USE_CASE_MAIN_FLOW",
+             "members": [_member("TC-004", 1), _member("TC-002", 2),
+                         _member("CH-001", 3, "POST_SUITE", chaos_run_id="chaos-001"), _member("TC-003", 4)]},
+            {"id": "LOAD_CONCURRENCY", "kind": "EXECUTION_VIEW", "label": "Load", "order_source": "EXECUTION_ORDER",
+             "members": [_member("TC-003", 1)]},
+            {"id": "CHAOS_RESILIENCE", "kind": "EXECUTION_VIEW", "label": "Chaos", "order_source": "EXECUTION_ORDER",
+             "members": [_member("CH-001", 1, "POST_SUITE", chaos_run_id="chaos-001")]}],
+            "memberships": {}, "post_suite_cases": [self.CHAOS]}
+        (self.output / "organization.json").write_text(json.dumps(organization), encoding="utf-8")
+
+    def render_all(self) -> str:
+        render.render_markdown(self.output)
+        return render.render_report(self.output).read_text(encoding="utf-8")
+
+    def groups(self, report: str) -> dict[str, dict[str, Any]]:
+        parser = _FamilyPages()
+        parser.feed(report)
+        return parser.families
+
+    def test_views_are_tabs_and_the_functional_view_is_the_default(self) -> None:
+        report = self.render_all()
+        tabs = report[report.index('class="view-tabs"'):]
+        order = [tabs.index(f'data-view="{view}"') for view in ("functional", "families", "load_concurrency",
+                                                               "chaos_resilience", "all")]
+        self.assertEqual(sorted(order), order)
+        self.assertIn('<div class="case-view" data-view="functional">', report)
+        self.assertIn('<div class="case-view" data-view="families" hidden>', report)
+
+    def test_the_functional_group_follows_placement_order_not_canonical_order(self) -> None:
+        pages = self.groups(self.render_all())["functional:REQ002"]["pages"]
+        self.assertEqual("all", pages[0]["scope"])
+        self.assertEqual(["TC-004", "TC-002", "chaos-001:CH-001", "TC-003"], pages[0]["ids"])
+
+    def test_every_card_count_equals_its_whole_group_page(self) -> None:
+        for group in self.groups(self.render_all()).values():
+            self.assertEqual(group["count"], len(group["pages"][0]["ids"]))
+
+    def test_a_post_suite_case_is_discoverable_with_its_own_body(self) -> None:
+        report = self.render_all()
+        self.assertIn('id="tc-tpl-chaos-001:CH-001"', report)
+        self.assertIn("Stop the dependency during submission", report)
+        self.assertEqual(["chaos-001:CH-001"], self.groups(report)["chaos_resilience:CHAOS_RESILIENCE"]["pages"][0]["ids"])
+
+    def test_views_reference_cases_without_cloning_their_templates(self) -> None:
+        report = self.render_all()
+        self.assertEqual(12, report.count('class="tc-template"'))  # 11 canonical + 1 post-suite
+        self.assertEqual(1, report.count('id="tc-tpl-TC-003"'))
+        groups = self.groups(report)
+        self.assertIn("TC-003", groups["load_concurrency:LOAD_CONCURRENCY"]["pages"][0]["ids"])
+        self.assertEqual(11 + 1, len(groups["all:ALL"]["pages"][0]["ids"]))
+
+    def test_modal_position_names_the_view_page_not_the_family(self) -> None:
+        report = self.render_all()
+        self.assertIn("PAGE_LABEL+' '+(tcState.index+1)+POS_OF", report)
+        self.assertNotIn("page.key+' · '+(tcState.index+1)", report)
+        self.assertIn('const PAGE_LABEL="View"', report)
+
+    def test_without_an_organization_the_report_has_no_view_tabs(self) -> None:
+        (self.output / "organization.json").unlink()
+        report = self.render_all()
+        self.assertNotIn('class="view-tabs"', report)
+        self.assertEqual(11, report.count('class="tc-template"'))
+
+    def test_markdown_execution_plan_references_cases_once_per_membership(self) -> None:
+        organization = json.loads((self.output / "organization.json").read_text(encoding="utf-8"))
+        index = json.loads((self.output / "test-cases.json").read_text(encoding="utf-8"))
+        plan = render.render_execution_plan(organization, index)
+        self.assertLess(plan.index("[TC-004]"), plan.index("[TC-002]"))
+        self.assertEqual(2, plan.count("[TC-003]"))  # functional group + load view, a link each
+        self.assertIn("CH-001 (chaos-001)", plan)
+
+
 if __name__ == "__main__":
     unittest.main()

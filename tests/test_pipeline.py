@@ -277,5 +277,29 @@ class FrozenRunTests(unittest.TestCase):
             self.second_run(run, "revision", supersedes="does-not-exist")
 
 
+
+class PublicationOrganizationTests(unittest.TestCase):
+    """The published organization references the canonical cases; it never repeats them."""
+
+    def test_organization_and_execution_plan_are_published_without_cloning(self) -> None:
+        run = PackRun("saas-accounts")
+        self.addCleanup(run.close)
+        run.finalize()
+        index = run.output("test-cases.json")
+        organization = run.output("organization.json")
+        ids = {entry["id"] for entry in index["test_cases"]}
+        self.assertEqual(ids, set(organization["memberships"]))
+        self.assertEqual(0, organization["diagnostics"]["cloned_cases"])
+        members = [m["case"] for g in organization["groups"] for m in g["members"] if m["origin"] == "CANONICAL"]
+        self.assertLessEqual(set(members), ids)
+        for group in organization["groups"]:
+            self.assertNotIn("steps", json.dumps(group["members"]))
+        plan = (run.artifacts / "output" / "execution-plan.md").read_text(encoding="utf-8")
+        for case_id in ids:
+            self.assertIn(f"[{case_id}]", plan)
+        self.assertIn('class="view-tabs"', (run.artifacts / "output" / "report.html").read_text(encoding="utf-8"))
+        pipeline.verify_manifest(run.run_dir)
+
+
 if __name__ == "__main__":
     unittest.main()

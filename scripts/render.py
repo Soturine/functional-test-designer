@@ -49,6 +49,10 @@ LABELS = {
         "no_results": "Nenhum Test Case corresponde aos filtros.", "expand_all": "Expandir todos",
         "collapse_all": "Recolher todos", "collapse": "Recolher", "expand": "Expandir",
         "open_group": "Ver Test Cases", "modal_prev": "Anterior", "modal_next": "Próximo", "requirement_filter": "Requisito",
+        "view_functional": "Por requisito", "view_all": "Todos", "view_families": "Famílias", "modal_page": "Visão", "notes": "Notas", "post_suite": "Pós-suíte", "post_suite_rationale": "Motivação",
+        "post_suite_related": "Test Cases relacionados", "post_suite_lineage": "Origem (execução pós-suíte · run)",
+        "order_use_case_main_flow": "ordem do fluxo principal", "order_canonical_order": "ordem canônica",
+        "order_execution_order": "ordem de execução",
         "modal_of": " de ", "glossary_title": "Legenda e termos do relatório", "modal_close": "Fechar",
         "tc_alerts": "Atenções da análise", "finding_singular": "Finding", "question_singular": "Pergunta",
         "no_filter_results": "Nenhum Test Case corresponde aos filtros ativos.",
@@ -97,6 +101,10 @@ LABELS = {
         "no_results": "No Test Case matches the filters.", "expand_all": "Expand all",
         "collapse_all": "Collapse all", "collapse": "Collapse", "expand": "Expand",
         "open_group": "View Test Cases", "modal_prev": "Previous", "modal_next": "Next", "requirement_filter": "Requirement",
+        "view_functional": "By requirement", "view_all": "All", "view_families": "Families", "modal_page": "View", "notes": "Notes", "post_suite": "Post-suite", "post_suite_rationale": "Rationale",
+        "post_suite_related": "Related Test Cases", "post_suite_lineage": "Origin (post-suite run · run)",
+        "order_use_case_main_flow": "main-flow order", "order_canonical_order": "canonical order",
+        "order_execution_order": "execution order",
         "modal_of": " of ", "glossary_title": "Report legend and terminology", "modal_close": "Close",
         "tc_alerts": "Analysis alerts", "finding_singular": "Finding", "question_singular": "Question",
         "no_filter_results": "No Test Case matches the active filters.",
@@ -733,21 +741,137 @@ def _case_requirement_keys(case: dict[str, Any], requirements: dict[str, dict[st
 
 
 def render_requirement_page(group_id: str, key: str, title: str, members: list[dict[str, Any]],
-                            labels: dict[str, str], *, scope: str = "requirement") -> str:
+                            labels: dict[str, str], *, scope: str = "requirement", rows: str | None = None,
+                            count: int | None = None) -> str:
     """One `<template>` per modal page of a family/group. The first page (scope "all")
     lists every unique Test Case the family card counts; the following pages refine it
     by authoritative identifier, where a multi-identifier TC appears on each of its pages.
     Pages never paginate individual Test Cases. Reading `.content` (to find which TC ids
     live on a page, or to filter them) never materializes or lays this out."""
-    rows = "".join(_case_row(case, labels) for case in members)
+    rows = rows if rows is not None else "".join(_case_row(case, labels) for case in members)
+    count = len(members) if count is None else count
     return (
         f'<template class="req-template" data-family="{esc(group_id)}" data-key="{esc(key)}" '
         f'data-scope="{esc(scope)}" data-title="{esc(title)}"><div class="req-page-head"><h4>{esc(title)}</h4>'
-        f'<p class="muted req-page-count"><span class="req-page-count-value">{len(members)}</span> '
+        f'<p class="muted req-page-count"><span class="req-page-count-value">{count}</span> '
         f'{esc(labels["tc_count_suffix"])}</p></div>'
         f'<ul class="tc-row-list">{rows}</ul>'
         f'<p class="empty req-page-empty" hidden>{esc(labels["no_filter_results"])}</p></template>'
     )
+
+
+def _post_suite_row(case: dict[str, Any], labels: dict[str, str]) -> str:
+    """A post-suite (chaos) case row: same accordion as a TC row, its own CH identity."""
+    body_id = f"tc-row-body-{esc(case['key'])}"
+    tags = "".join(f'<span class="badge">{esc(tag)}</span>' for tag in case.get("execution_tags", []))
+    return (
+        f'<li class="tc-row" data-id="{esc(case["key"])}">'
+        f'<button type="button" class="tc-row-toggle" aria-expanded="false" aria-controls="{body_id}">'
+        f'<span class="tc-row-chevron" aria-hidden="true">&#9656;</span>'
+        f'<span class="tc-row-id">{esc(case["id"])}</span><span class="tc-row-title">{esc(case["title"])}</span>'
+        f'<span class="badges"><span class="badge post-suite">{esc(labels["post_suite"])}</span>{tags}</span></button>'
+        f'<div class="tc-row-body" id="{body_id}" hidden></div></li>'
+    )
+
+
+def render_post_suite_template(case: dict[str, Any], labels: dict[str, str]) -> str:
+    """The full body of a post-suite case, shown in the same modal as canonical cases.
+    Its content comes from its own finalized run; the canonical suite is not touched."""
+    def listing(items: list[str]) -> str:
+        return "<ul>" + "".join(f"<li>{esc(item)}</li>" for item in items) + "</ul>" if items else ""
+    data = "".join(f"<tr><th>{esc(row.get('name'))}</th><td>{esc(row.get('description'))}</td></tr>"
+                   for row in case.get("test_data", []))
+    steps = "".join(f"<li><strong>{esc(step.get('action'))}</strong><br>{esc(step.get('expected_result') or '')}</li>"
+                    for step in case.get("steps", []))
+    unknowns = [f"{u.get('kind')}: {u.get('detail')}" for u in case.get("unknowns", [])]
+    sections = [
+        (labels["post_suite_rationale"], f"<p>{esc(case.get('rationale', ''))}</p>"),
+        (labels["preconditions"], listing(case.get("preconditions", []))),
+        (labels["test_data"], f"<table class='data'>{data}</table>" if data else ""),
+        (labels["steps"], f"<ol>{steps}</ol>" if steps else ""),
+        (labels["postconditions"], listing(case.get("postconditions", []))),
+        (labels["blockers"], listing(unknowns)),
+        (labels["notes"], listing(case.get("notes", []))),
+        (labels["post_suite_related"], esc(", ".join(case.get("related_test_cases", [])))),
+        (labels["post_suite_lineage"], esc(f"{case.get('chaos_run_id')} · {case.get('parent_run_id')}")),
+    ]
+    body = "".join(f"<h4>{esc(title)}</h4>{content}" for title, content in sections if content)
+    search = " ".join([case["id"], case["title"], case.get("rationale", ""), " ".join(case.get("execution_tags", []))]).casefold()
+    return (
+        f'<template class="tc-template" id="tc-tpl-{esc(case["key"])}" data-id="{esc(case["key"])}" '
+        f'data-title="{esc(case["title"])}" data-status="" data-priority="{esc(case.get("priority") or "")}" '
+        f'data-family="post-suite" data-features="post-suite" data-search="{esc(search)}">'
+        f'<article class="tc-content post-suite-case"><h3>{esc(case["id"])} · {esc(case["title"])}</h3>{body}</article></template>'
+    )
+
+
+def render_execution_plan(organization: dict[str, Any], index: dict[str, Any]) -> str:
+    """Markdown view of the organization: every group with its cases in execution order.
+    Cases are referenced, never repeated in full."""
+    titles = {entry["id"]: entry.get("title", "") for entry in index.get("test_cases", [])}
+    post = {case["key"]: case for case in organization.get("post_suite_cases", [])}
+    lines = ["# Execution plan", ""]
+    for group in organization["groups"]:
+        lines += [f"## {group['label']}", ""]
+        if group.get("flow_reference"):
+            lines += [f"_Order: {group['order_source']} ({group['flow_reference']})_", ""]
+        for member in group["members"]:
+            if member["origin"] == "CANONICAL":
+                lines.append(f"{member['order']}. [{member['case']}](test-cases-md/{member['case']}.md) — {titles.get(member['case'], '')}")
+            else:
+                key = f"{member['chaos_run_id']}:{member['case']}"
+                lines.append(f"{member['order']}. {member['case']} ({member['chaos_run_id']}) — {post.get(key, {}).get('title', '')}")
+        lines.append("")
+    return "\n".join(lines)
+
+
+def _organization_views(organization: dict[str, Any], cases: list[dict[str, Any]], labels: dict[str, str],
+                        requirements: dict[str, dict[str, Any]]) -> tuple[list[tuple[str, str, str]], str]:
+    """Cards for every organization group, grouped into views; plus the post-suite templates.
+    Each card's modal opens on the group's ordered 'all' page."""
+    by_id = {case["id"]: case for case in cases}
+    post = {case["key"]: case for case in organization.get("post_suite_cases", [])}
+
+    def card(view: str, group: dict[str, Any]) -> str:
+        key = f"{view}:{group['id']}"
+        rows, canonical_members = [], []
+        for member in group["members"]:
+            if member["origin"] == "CANONICAL" and member["case"] in by_id:
+                rows.append(_case_row(by_id[member["case"]], labels))
+                canonical_members.append(by_id[member["case"]])
+            elif member["origin"] != "CANONICAL":
+                entry = post.get(f"{member['chaos_run_id']}:{member['case']}")
+                if entry:
+                    rows.append(_post_suite_row(entry, labels))
+        pages = render_requirement_page(key, labels["all"], group["label"], [], labels, scope="all", rows="".join(rows),
+                                        count=len(rows))
+        if group["kind"] == "FUNCTIONAL":
+            refined: dict[str, dict[str, Any]] = {}
+            for case in canonical_members:
+                for ident, page_title in _case_requirement_keys(case, requirements):
+                    refined.setdefault(ident, {"title": page_title, "cases": []})["cases"].append(case)
+            pages += "".join(render_requirement_page(key, ident, page["title"], page["cases"], labels)
+                             for ident, page in refined.items())
+        detail = labels["order_" + group["order_source"].lower()] if f"order_{group['order_source'].lower()}" in labels else ""
+        return (
+            f'<section class="tc-group" data-family="{esc(key)}"><div class="tc-group-card">'
+            f'<div><h3>{esc(group["label"])}</h3><span><span class="tc-count">{len(rows)}</span> TCs'
+            f'{" &middot; " + esc(detail) if detail else ""}</span></div>'
+            f'<button type="button" class="open-group" data-family="{esc(key)}">{esc(labels["open_group"])}</button>'
+            f'</div>{pages}</section>'
+        )
+
+    functional = [g for g in organization["groups"] if g["kind"] in {"FUNCTIONAL", "TRANSVERSAL"}]
+    views = [("functional", labels["view_functional"], "".join(card("functional", g) for g in functional))]
+    for group in organization["groups"]:
+        if group["kind"] == "EXECUTION_VIEW":
+            views.append((group["id"].lower(), group["label"], card(group["id"].lower(), group)))
+    everything = {"id": "ALL", "kind": "ALL", "label": labels["view_all"], "order_source": "CANONICAL_ORDER",
+                  "members": [{"case": case["id"], "origin": "CANONICAL"} for case in cases]
+                  + [{"case": c["id"], "origin": "POST_SUITE", "chaos_run_id": c["chaos_run_id"]} for c in post.values()]}
+    views.append(("all", labels["view_all"], card("all", everything)))
+    templates = "".join(render_post_suite_template(case, labels) for case in post.values())
+    return views, templates
 
 
 GLOSSARY: dict[str, list[tuple[str, list[tuple[str, str]]]]] = {
@@ -933,6 +1057,29 @@ def render_report(output_dir: Path, destination: Path | None = None, artifact_fo
             f'</div>{templates}{req_pages_html}</section>'
         )
 
+    # With a publication organization, the case list offers views over the same Test Cases:
+    # functional (default, placement order), families, each execution view, and all.
+    # Every view references the single global template of each case; nothing is cloned.
+    organization_path = output_dir / "organization.json"
+    if organization_path.is_file():
+        organization = read_json(organization_path)
+        post_suite = organization.get("post_suite_cases", [])
+        if post_suite and "rationale" not in post_suite[0]:  # published refs only: no bodies to show
+            organization = {**organization, "post_suite_cases": []}
+        views, post_templates = _organization_views(organization, cases, labels, requirements)
+        views.insert(1, ("families", labels["view_families"], "".join(groups_html)))
+        tabs = "".join(
+            f'<button type="button" class="view-tab" role="tab" data-view="{esc(view)}" '
+            f'aria-selected="{"true" if position == 0 else "false"}">{esc(title)}</button>'
+            for position, (view, title, _) in enumerate(views))
+        case_list_html = (
+            f'<div class="view-tabs" role="tablist">{tabs}</div>'
+            + "".join(f'<div class="case-view" data-view="{esc(view)}"{"" if position == 0 else " hidden"}>{body}</div>'
+                      for position, (view, _, body) in enumerate(views))
+            + post_templates)
+    else:
+        case_list_html = "".join(groups_html)
+
     status = Counter(case["status"] for case in cases)
     basis = Counter(case.get("test_basis", "ACCEPTANCE") for case in cases)
     ledger = index.get("identifier_dispositions", [])
@@ -1082,6 +1229,10 @@ button {{ border:1px solid #aeb7bc; border-radius:6px; background:#fff; padding:
 button:hover:not(:disabled) {{ background:var(--soft); }} button:disabled {{ opacity:.5; cursor:not-allowed; }}
 input,select {{ width:100%; min-height:38px; border:1px solid #aeb7bc; border-radius:6px; padding:7px 9px; font:inherit; background:#fff; margin-top:4px; }}
 .tc-group {{ margin:16px 0; }}
+.view-tabs {{ display:flex; flex-wrap:wrap; gap:6px; margin:16px 0 4px; }}
+.view-tab {{ border:1px solid var(--line); background:#fff; border-radius:999px; padding:6px 14px; cursor:pointer; font:inherit; font-size:13px; }}
+.view-tab[aria-selected="true"] {{ background:var(--accent); border-color:var(--accent); color:#fff; }}
+.badge.post-suite {{ border-style:dashed; }}
 .tc-group-card {{ display:flex; align-items:center; gap:14px; padding:16px; border:1px solid var(--line); border-left:4px solid var(--accent); border-radius:var(--radius); background:#fff; box-shadow:var(--shadow); transition:box-shadow .15s; }}
 .tc-group-card:hover {{ box-shadow:var(--shadow-lift); }}
 .tc-group-card h3 {{ margin:0 0 3px; font-size:16.5px; }} .tc-group-card span {{ color:var(--muted); font-size:12.5px; line-height:1.5; }}
@@ -1174,7 +1325,7 @@ dialog::backdrop {{ background:rgba(20,29,34,.72); }}
 <label>{esc(labels['priority'])}<select id="priority-filter"><option value="">{esc(labels['all'])}</option><option>CRITICAL</option><option>HIGH</option><option>MEDIUM</option><option>LOW</option></select></label>
 <label>{esc(labels['family'])}<select id="family-filter"><option value="">{esc(labels['all'])}</option>{family_options}</select></label>
 <label>{esc(labels['feature'])}<select id="feature-filter"><option value="">{esc(labels['all'])}</option>{feature_options}</select></label>
-</div></div><div id="case-list">{''.join(groups_html)}</div><p id="no-results" hidden>{esc(labels['no_results'])}</p></section>
+</div></div><div id="case-list">{case_list_html}</div><p id="no-results" hidden>{esc(labels['no_results'])}</p></section>
 <section id="merge"><h2>{esc(labels['merge'])}</h2>{merge_html or f'<p class="empty">{esc(labels["no_merge"])}</p>'}</section>
 <section id="findings"><h2>{esc(labels['findings'])}</h2>{finding_html or f'<p class="empty">{esc(labels["no_findings"])}</p>'}</section>
 <section id="questions"><h2>{esc(labels['questions'])}</h2>{question_html or f'<p class="empty">{esc(labels["no_questions"])}</p>'}</section>
@@ -1208,6 +1359,7 @@ const tcTemplateById={{}};
 tcTemplates.forEach(t=>tcTemplateById[t.dataset.id]=t);
 const reqTemplates=[...document.querySelectorAll('template.req-template')];
 const POS_OF={json.dumps(labels["modal_of"])};
+const PAGE_LABEL={json.dumps(labels["modal_page"])};
 const TC_COUNT_SUFFIX={json.dumps(labels["tc_count_suffix"])};
 
 function matchesTemplate(tpl){{
@@ -1222,23 +1374,33 @@ function matchesTemplate(tpl){{
 function matchesId(id){{const tpl=tcTemplateById[id];return tpl?matchesTemplate(tpl):false;}}
 function reqPageTcIds(reqTpl){{return [...reqTpl.content.querySelectorAll('.tc-row')].map(li=>li.dataset.id);}}
 
+// A card counts the unique cases on its whole-group page, whatever view it belongs to.
+function groupCaseIds(familyId){{
+  const all=reqTemplates.find(t=>t.dataset.family===familyId&&t.dataset.scope==='all');
+  return all?reqPageTcIds(all):[];
+}}
+function activeView(){{return document.querySelector('.case-view:not([hidden])');}}
 function applyFilters(){{
   let visibleGroups=0;
+  const view=activeView();
   groupEls.forEach(group=>{{
-    const familyId=group.dataset.family;
-    const own=tcTemplates.filter(t=>t.dataset.family===familyId);
-    const matched=own.filter(matchesTemplate);
+    const matched=groupCaseIds(group.dataset.family).filter(matchesId);
     const countEl=group.querySelector('.tc-count');
     if(countEl)countEl.textContent=matched.length;
     const show=matched.length>0;
     group.hidden=!show;
-    if(show)visibleGroups+=1;
+    if(show&&(!view||view.contains(group)))visibleGroups+=1;
     const openBtn=group.querySelector('.open-group');
     if(openBtn)openBtn.disabled=matched.length===0;
   }});
   q('no-results').hidden=visibleGroups!==0;
 }}
 controls.forEach(control=>control.addEventListener(control.id==='search'?'input':'change',applyFilters));
+document.querySelectorAll('.view-tab').forEach(tab=>tab.addEventListener('click',()=>{{
+  document.querySelectorAll('.view-tab').forEach(t=>t.setAttribute('aria-selected',String(t===tab)));
+  document.querySelectorAll('.case-view').forEach(v=>{{v.hidden=v.dataset.view!==tab.dataset.view;}});
+  applyFilters();
+}}));
 
 const flowModal=q('flow-modal');const flowCanvas=q('flow-modal-canvas');
 function closeFlowModal(){{if(flowModal.open)flowModal.close();flowCanvas.replaceChildren();document.body.classList.remove('modal-open');}}
@@ -1291,7 +1453,7 @@ function renderCurrentPage(){{
   q('tc-position').hidden=single;q('tc-prev').hidden=single;q('tc-next').hidden=single;
   q('tc-page-select').parentElement.hidden=single;
   q('tc-page-select').value=String(tcState.index);
-  if(!single)q('tc-position').textContent=page.key+' · '+(tcState.index+1)+POS_OF+tcState.pages.length;
+  if(!single)q('tc-position').textContent=PAGE_LABEL+' '+(tcState.index+1)+POS_OF+tcState.pages.length;
   q('tc-prev').disabled=tcState.index===0;
   q('tc-next').disabled=tcState.index===tcState.pages.length-1;
 }}
