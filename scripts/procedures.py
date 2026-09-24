@@ -52,19 +52,7 @@ GENERIC_PRECONDITION = re.compile(
     re.IGNORECASE,
 )
 PLACEHOLDER = re.compile(r"<[^>]+>|\bTBD\b|\bXXX\b|\?\?\?|\ba definir\b", re.IGNORECASE)
-ABSTRACT_ACTION = re.compile(
-    r"\b(?:execute|perform|carry out|complete) (?:the )?(?:action|operation|process|flow|scenario) "
-    r"(?:described|indicated|applicable|appropriate|under test|in the objective)\b|"
-    r"\b(?:proceed|continue) (?:as|when) applicable\b|\buse the (?:appropriate|correct) (?:item|record|option)\b|"
-    r"\b(?:executar|realizar|acionar|efetuar) (?:a|o) (?:a[cç][aã]o|opera[cç][aã]o|processo|fluxo|cen[aá]rio) "
-    r"(?:descrit[oa]|indicad[oa]|aplic[aá]vel|adequad[oa]|em teste|do objetivo)\b|"
-    r"\b(?:prosseguir|continuar) conforme (?:necess[aá]rio|aplic[aá]vel)\b|"
-    r"\bvalidar que funcionou\b|\bvalidate that it worked\b|"
-    # A whole step that names no actor, target or observable: "access the system",
-    # "perform the operation", "validate it", "check if it worked", "continue the flow",
-    # "do everything required". Anchored to the full step, so concrete steps that merely
-    # start with the same verb are untouched.
-    r"^\s*(?:"
+_VAGUE_CLAUSE = (
     r"(?:access|open|enter|log into) the (?:system|application|app|platform)|"
     r"(?:perform|execute|do|complete) the (?:operation|action|process|procedure|task)|"
     r"(?:validate|verify|check|confirm) (?:it|this|that|everything|the result)|"
@@ -77,7 +65,22 @@ ABSTRACT_ACTION = re.compile(
     r"verifi(?:car|que) se (?:funcionou|deu certo)|"
     r"(?:continu|sig)(?:ar|e|a) o fluxo|"
     r"fa(?:zer|[cç]a) tudo (?:o )?que (?:for )?(?:necess[aá]rio|preciso)"
-    r")\s*[.!]?\s*$",
+)
+ABSTRACT_ACTION = re.compile(
+    r"\b(?:execute|perform|carry out|complete) (?:the )?(?:action|operation|process|flow|scenario) "
+    r"(?:described|indicated|applicable|appropriate|under test|in the objective)\b|"
+    r"\b(?:proceed|continue) (?:as|when) applicable\b|\buse the (?:appropriate|correct) (?:item|record|option)\b|"
+    r"\b(?:executar|realizar|acionar|efetuar) (?:a|o) (?:a[cç][aã]o|opera[cç][aã]o|processo|fluxo|cen[aá]rio) "
+    r"(?:descrit[oa]|indicad[oa]|aplic[aá]vel|adequad[oa]|em teste|do objetivo)\b|"
+    r"\b(?:prosseguir|continuar) conforme (?:necess[aá]rio|aplic[aá]vel)\b|"
+    r"\bvalidar que funcionou\b|\bvalidate that it worked\b|"
+    # A whole step made only of clauses that name no actor, target or observable:
+    # "access the system", "perform the operation", "validate it", "check if it worked",
+    # "continue the flow", "do everything required" — alone or chained ("access the
+    # system and perform the operation"). Anchored to the full step, so concrete steps
+    # that merely start with the same verb are untouched.
+    r"^\s*(?:" + _VAGUE_CLAUSE + r")(?:(?:\s*(?:,|;|\band\b|\bthen\b|\bdepois\b|\bent[aã]o\b|\be\b|\by\b|\bluego\b)\s*)+(?:"
+    + _VAGUE_CLAUSE + r"))*\s*[.!]?\s*$",
     re.IGNORECASE,
 )
 ABSTRACT_OBSERVATION = re.compile(
@@ -105,6 +108,41 @@ AUTH_ONLY = re.compile(
     re.IGNORECASE,
 )
 AUTH_WORDS = re.compile(r"\b(?:login|autentic|authentic|sign in|senha|password|credencia|credential|sess[aã]o|session)", re.IGNORECASE)
+# A step that deliberately changes the environment or suppresses a physical signal to
+# create a test condition. How to do that is never invented: the step needs evidence that
+# supports it (an evidence_ref whose `supports` lists the step), or the procedure keeps
+# the scenario and declares UNKNOWN_SETUP_PATH / MISSING_EXECUTION_SURFACE.
+ENVIRONMENT_CONTROL = re.compile(
+    r"\b(?:restart|reboot|stop|kill|shut\s*down|power\s*(?:off|down|cycle)|unplug|disconnect|interrupt|"
+    r"take\s+down|bring\s+down|throttle|cover|shield|obstruct|block|suppress|jam|"
+    r"reinici\w*|deslig\w*|derrub\w*|desconect\w*|interromp\w*|par(?:ar|e)|mat(?:ar|e)|"
+    r"cobr(?:ir|a)|blind\w*|obstru\w*|bloque\w*|suprim\w*|impe[cç]\w*|deten\w*|apag(?:ar|ue|a)|cubr\w*|tap(?:ar|e))\b"
+    r"[^.;:]{0,50}?\b(?:service|server|process|daemon|worker|container|database|db|broker|queue|network|"
+    r"connection|link|power|device|hardware|sensor|reader|antenna|scanner|printer|terminal|signal|tag|label|"
+    r"servi[cç]o|servidor|processo|cont[eê]iner|banco(?: de dados)?|fila|rede|conex[aã]o|liga[cç][aã]o|energia|"
+    r"dispositivo|equipamento|sensor|leitor|antena|impressora|terminal|sinal|etiqueta|"
+    r"servicio|red|conexi[oó]n|equipo|lector|se[nñ]al|base de datos|cola)s?\b",
+    re.IGNORECASE,
+)
+_COMPARATOR = (
+    r"(?:<=|>=|<|>|≤|≥|at most|at least|up to|within|under|below|above|less than|more than|no more than|"
+    r"em at[eé]|at[eé]|no m[aá]ximo|no m[ií]nimo|pelo menos|menos de|mais de|dentro de|inferior a|superior a|"
+    r"abaixo de|acima de|hasta|en menos de|como m[aá]ximo|como m[ií]nimo|al menos|m[aá]s de|por debajo de|por encima de)"
+)
+_LOAD_UNIT = (
+    r"(?:ms|milliseconds?|milissegundos?|s|sec|seconds?|seg|segundos?|min|minutes?|minutos?|"
+    r"(?:requests?|req|requisi[cç][oõ]es|events?|eventos|messages?|mensagens|reads?|readings?|leituras|"
+    r"transactions?|transa[cç][oõ]es|transacciones|operations?|opera[cç][oõ]es|operaciones|calls?|chamadas|"
+    r"llamadas|solicitudes|peticiones)\s*(?:/|per|por)\s*"
+    r"(?:s|sec|second|segundo|min|minute|minuto)|rps|tps|qps|"
+    r"(?:concurrent|simultaneous) (?:users?|sessions?|connections?)|"
+    r"(?:usu[aá]rios|sess[oõ]es|conex[oõ]es|sesiones|conexiones) (?:simult[aâ]ne[oa]s|concorrentes|concurrentes))"
+)
+# A pass/fail load, latency or capacity threshold asserted in an expected result.
+LOAD_THRESHOLD = re.compile(
+    _COMPARATOR + r"\s*(?P<number>\d+(?:[.,]\d+)?)\s*" + _LOAD_UNIT + r"(?![\w/])",
+    re.IGNORECASE,
+)
 INDEPENDENT_VARIANTS = re.compile(
     r"\b(?:separately|execute separately|valid and invalid|each variant|repeat for each|"
     r"cada variante|v[aá]lido e inv[aá]lido|separadamente|repetir para cada)\b",
@@ -209,6 +247,11 @@ def validate_procedures(payload: dict[str, Any], context: dict[str, Any]) -> dic
             unknowns.append({"kind": kind, "detail": _text(unknown.get("detail")), "question": question})
         missing_oracle = any(unknown["kind"] == "MISSING_ORACLE" for unknown in unknowns)
         evidence_refs = [dict(ref) for ref in item.get("evidence_refs", []) or [] if isinstance(ref, dict)]
+        supported_steps = {int(n) for ref in evidence_refs for n in ref.get("supports", []) or []
+                           if str(n).isdigit()}
+        path_unknown = any(unknown["kind"] in PATH_UNKNOWNS for unknown in unknowns)
+        designed = " ".join(str(test.get(field, "")) for field in ("title", "objective", "trigger", "expected"))
+        designed_numbers = {n.replace(",", ".") for n in re.findall(r"\d+(?:[.,]\d+)?", designed)}
         if not evidence_refs and not any(unknown["kind"] in PATH_UNKNOWNS for unknown in unknowns):
             errors.append(
                 f"{label} is not grounded in selected evidence; cite evidence_refs for the execution path "
@@ -235,6 +278,19 @@ def validate_procedures(payload: dict[str, Any], context: dict[str, Any]) -> dic
                 )
             if hidden_subtest(action):
                 errors.append(f"{label} step {number} hides independent variants; they belong to separate Test Cases")
+            if ENVIRONMENT_CONTROL.search(action) and number not in supported_steps and not path_unknown:
+                errors.append(
+                    f"{label} step {number} changes the environment or suppresses a signal to create the test "
+                    "condition; cite the evidence that says how (an evidence_ref whose `supports` lists this step) "
+                    "or keep the scenario and declare UNKNOWN_SETUP_PATH / MISSING_EXECUTION_SURFACE — never invent "
+                    "the technique")
+            for threshold in LOAD_THRESHOLD.finditer(expected):
+                if threshold.group("number").replace(",", ".") not in designed_numbers:
+                    errors.append(
+                        f"{label} step {number} asserts the threshold {threshold.group(0)!r}, which the designed "
+                        "Test Case does not state; an undefined SLA stays undefined — record the observed values "
+                        "(rate, latency, errors) as the result and link the Question that asks for the threshold. "
+                        "Load schedules belong in the action or test_data as experiment configuration")
             check_locale(f"{label} step {number} action", action, locale, errors)
             check_locale(f"{label} step {number} expected_result", expected, locale, errors)
             normalized_steps.append({

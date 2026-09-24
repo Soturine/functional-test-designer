@@ -8,7 +8,7 @@ import unittest
 from support import PackRun, procedure
 
 from common import StageError
-from procedures import classify
+from procedures import ABSTRACT_ACTION, ENVIRONMENT_CONTROL, classify
 
 
 class ProcedureStageTests(unittest.TestCase):
@@ -193,6 +193,105 @@ class UbiquitousProcedureTests(unittest.TestCase):
             case = run.output(f"test-cases/{entry['id']}.json")
             text = " ".join([*case["preconditions"], *(s["action"] + " " + (s["expected_result"] or "") for s in case["steps"])])
             self.assertIsNone(tool_syntax.search(text), entry["id"])
+
+
+class ExecutableProcedureTests(unittest.TestCase):
+    """Semantic weaknesses a passing procedure must not hide: vague chained steps,
+    invented environment/physical techniques and invented performance thresholds."""
+
+    def reach(self, name, mutate=None):
+        run = PackRun(name, mutate)
+        self.addCleanup(run.close)
+        run.through("expansion")
+        return run
+
+    def test_chained_vague_clauses_are_rejected(self) -> None:
+        for vague in ("Access the system and perform the operation.",
+                      "Open the application, then validate the result.",
+                      "Acessar o sistema e realizar a operação."):
+            with self.subTest(action=vague):
+                self.assertIsNotNone(ABSTRACT_ACTION.search(vague))
+        for concrete in ("Access the billing page of ACCOUNT_A and open INVOICE_A.",
+                         "Open the application settings and select the Language tab."):
+            self.assertIsNone(ABSTRACT_ACTION.search(concrete), concrete)
+
+    def test_environment_and_physical_manipulation_is_recognized_across_domains(self) -> None:
+        for action in ("Restart the application service in the test environment.",
+                       "Disconnect the network of the payment gateway.",
+                       "Cover the label of PACKAGE_A so the scanner cannot read it.",
+                       "Power off the infusion pump device during the transfer.",
+                       "Reiniciar o serviço de integração do ambiente de teste.",
+                       "Detener el servicio de facturación."):
+            self.assertIsNotNone(ENVIRONMENT_CONTROL.search(action), action)
+        for action in ("Block the user account of CUSTOMER_A.", "Stop editing and save ORDER_A.",
+                       "Cancel the order of CUSTOMER_B.", "Print the label of PACKAGE_A."):
+            self.assertIsNone(ENVIRONMENT_CONTROL.search(action), action)
+
+    def test_an_ungrounded_restart_is_rejected(self) -> None:
+        def restart(pack):
+            procedure(pack, "T1")["steps"].insert(0, {
+                "action": "Restart the application service in the test environment.",
+                "expected_result": "The application answers requests again."})
+        run = self.reach("saas-accounts", restart)
+        with self.assertRaisesRegex(StageError, "never invent the technique"):
+            run.submit("procedures")
+
+    def test_an_unknown_restart_path_keeps_the_scenario_but_is_not_ready(self) -> None:
+        def restart(pack):
+            proc = procedure(pack, "T1")
+            proc["steps"].insert(0, {"action": "Restart the application service in the test environment.",
+                                     "expected_result": "The application answers requests again."})
+            proc["oracle_step"] = len(proc["steps"])
+            proc["unknowns"] = [{"kind": "UNKNOWN_SETUP_PATH",
+                                 "detail": "the selected sources do not say which service or how it restarts"}]
+        run = self.reach("saas-accounts", restart)
+        run.submit("procedures")
+        import pipeline
+        pipeline.finalize_run(run.run_dir, ["JSON"])
+        case = run.output("test-cases/TC-001.json")
+        self.assertEqual("NEEDS_REVIEW", case["status"])
+
+    def test_a_restart_supported_by_cited_evidence_is_accepted(self) -> None:
+        def restart(pack):
+            proc = procedure(pack, "T1")
+            proc["steps"].insert(0, {"action": "Restart the application service in the test environment.",
+                                     "expected_result": "The application answers requests again."})
+            proc["oracle_step"] = len(proc["steps"])
+            proc["evidence_refs"] = [*proc.get("evidence_refs", []),
+                                     {"source": "src/invitations.py", "reference": "service entry point", "supports": [1]}]
+        run = self.reach("saas-accounts", restart)
+        run.submit("procedures")
+
+    def test_an_invented_physical_suppression_technique_is_rejected_in_another_language(self) -> None:
+        def suppress(pack):
+            procedure(pack, "T1")["steps"].insert(0, {
+                "action": "Cubrir la etiqueta del PEDIDO_BORRADOR_A para que el lector no la lea.",
+                "expected_result": "El lector no registra la etiqueta."})
+        run = self.reach("erp-sales-orders", suppress)
+        with self.assertRaisesRegex(StageError, "suppresses a signal"):
+            run.submit("procedures")
+
+    def test_an_undefined_sla_cannot_become_a_pass_fail_threshold(self) -> None:
+        def threshold(pack):
+            procedure(pack, "T1")["steps"][-1]["expected_result"] += " The response arrives in under 200 ms."
+        run = self.reach("saas-accounts", threshold)
+        with self.assertRaisesRegex(StageError, "undefined SLA stays undefined"):
+            run.submit("procedures")
+
+    def test_a_load_ramp_is_experiment_configuration_not_an_oracle(self) -> None:
+        def ramp(pack):
+            proc = procedure(pack, "T1")
+            proc["steps"][0]["action"] += " Repeat with 10, 20 and 40 requests per second."
+        run = self.reach("saas-accounts", ramp)
+        run.submit("procedures")  # numbers in the action are the declared experiment, not a pass/fail rule
+
+    def test_a_threshold_the_design_states_is_accepted(self) -> None:
+        def stated(pack):
+            test = next(t for t in pack["stages"]["design"]["tests"] if t["key"] == "T1")
+            test["objective"] += " within 5 seconds"
+            procedure(pack, "T1")["steps"][-1]["expected_result"] += " within 5 seconds"
+        run = self.reach("saas-accounts", stated)
+        run.submit("procedures")
 
 
 if __name__ == "__main__":

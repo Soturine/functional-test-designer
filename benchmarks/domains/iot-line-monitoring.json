@@ -811,6 +811,10 @@
       {
        "kind": "EXTERNAL_DEPENDENCY_UNAVAILABLE",
        "detail": "a physical furnace sensor bench is required"
+      },
+      {
+       "kind": "UNKNOWN_SETUP_PATH",
+       "detail": "the selected sources do not say how the gateway network is interrupted on the bench"
       }
      ],
      "evidence_refs": [
