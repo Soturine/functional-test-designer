@@ -412,6 +412,136 @@ class SelectorReaderTests(unittest.TestCase):
         self.assertEqual("SELECTOR_OWNERSHIP_ATTACHED", upgraded["history"][0]["event"])
 
 
+class ResumeIntegrityTests(unittest.TestCase):
+    """A run resumes only when it still means the same thing; reuse stays per file."""
+
+    SELECTED = SelectorReaderTests.SELECTED
+
+    def setUp(self) -> None:
+        SelectorReaderTests.setUp(self)
+
+    start = SelectorReaderTests.start
+    selector_result = SelectorReaderTests.selector_result
+
+    def read_all(self, run_dir, plan):
+        results = []
+        for s in plan["selectors"]:
+            r = self.selector_result(plan, s["selector_id"])
+            for f in r["files"]:
+                f.update(status="CATALOGED", catalog={"headings": ["h"]})
+            results.append(r)
+        pipeline.submit_reading(run_dir, results)
+        pipeline.reconcile_reading(run_dir)
+
+    def state(self, run_dir):
+        return json.loads((run_dir / "run-state.json").read_text(encoding="utf-8"))
+
+    def test_same_bytes_with_a_changed_role_is_not_resumed_as_equivalent(self) -> None:
+        _, run_dir, plan = self.start(self.SELECTED)
+        self.read_all(run_dir, plan)
+        promoted = [dict(s) for s in self.SELECTED]
+        promoted[2]["role"] = "FUNCTIONAL_AUTHORITY"  # manual.md: same path, same digest, new authority
+        result, _, second = self.start(promoted)
+        self.assertFalse(result["resumed"])
+        self.assertEqual("SOURCE_ROLE_CHANGED", self.state(run_dir)["events"][0]["reason"])
+        self.assertNotIn("SOURCE_HASH_CHANGED", self.state(run_dir)["events"][0]["reasons"])
+        states = {t["path"]: t["state"] for t in second["tasks"]}
+        self.assertEqual("PLANNED", states["docs/manual.md"])  # a catalog read under another role is not reused
+        self.assertEqual("REUSED", states["docs/requirements.md"])
+
+    def test_same_corpus_with_a_changed_selector_structure_is_replanned_and_reuses_files(self) -> None:
+        _, run_dir, plan = self.start(self.SELECTED)
+        self.read_all(run_dir, plan)
+        split = self.SELECTED + [{"path": "src/core", "role": "IMPLEMENTATION_EVIDENCE"}]
+        result, _, second = self.start(split)
+        self.assertFalse(result["resumed"])
+        self.assertEqual(["SELECTOR_STRUCTURE_CHANGED"], self.state(run_dir)["events"][0]["reasons"])
+        self.assertEqual(5, len(second["selectors"]))
+        d = next(t for t in second["tasks"] if t["path"] == "src/core/d.py")
+        self.assertEqual(next(s["selector_id"] for s in second["selectors"] if s["path"] == "src/core"), d["selector_id"])
+        self.assertEqual({"REUSED"}, {t["state"] for t in second["tasks"]})  # nothing is read again
+
+    def test_unchanged_selection_resumes_and_keeps_its_evidence(self) -> None:
+        _, run_dir, plan = self.start(self.SELECTED)
+        self.read_all(run_dir, plan)
+        result, _, again = self.start(self.SELECTED)
+        self.assertTrue(result["resumed"])
+        self.assertEqual({"CATALOGED"}, {t["state"] for t in again["tasks"]})
+
+    def test_a_run_without_a_stored_fingerprint_is_checked_from_its_own_records(self) -> None:
+        _, run_dir, _ = self.start(self.SELECTED)
+        run = json.loads((run_dir / "run.json").read_text(encoding="utf-8"))
+        run.pop("selection_fingerprint")
+        (run_dir / "run.json").write_text(json.dumps(run), encoding="utf-8")
+        self.assertTrue(self.start(self.SELECTED)[0]["resumed"])
+        promoted = [dict(s) for s in self.SELECTED]
+        promoted[2]["role"] = "FUNCTIONAL_AUTHORITY"
+        self.assertFalse(self.start(promoted)[0]["resumed"])
+
+    def test_semantic_request_changes_invalidate_but_presentation_does_not(self) -> None:
+        def request(guidance, formats):
+            return {"guidance": guidance, "seeds": [], "source_order": [], "effective": {"formats": formats}}
+        base = dict(workspace=self.workspace, sources_selected=self.SELECTED, artifact_root=self.artifacts, run_id="q")
+        pipeline.start_run(**base, normalized_request=request(["Focus on data retention"], ["JSON"]))
+        self.assertTrue(pipeline.start_run(**base, normalized_request=request(["Focus on data retention"], ["HTML"]))["resumed"])
+        changed = pipeline.start_run(**base, normalized_request=request(["Focus on concurrency"], ["HTML"]))
+        self.assertFalse(changed["resumed"])
+
+    def test_a_frozen_run_is_never_deleted_by_a_changed_selection(self) -> None:
+        run = PackRun("saas-accounts")
+        self.addCleanup(run.close)
+        run.finalize(("JSON",))
+        before = file_digest(run.run_dir / "canonical-suite.json")
+        path = next(p for p, item in run.pack["sources"].items() if item["role"] == "IMPLEMENTATION_EVIDENCE")
+        with self.assertRaisesRegex(pipeline.IntegrityError, "frozen"):
+            start(run, roles={path: "TECHNICAL_CONTEXT"})
+        self.assertEqual(before, file_digest(run.run_dir / "canonical-suite.json"))
+        pipeline.verify_manifest(run.run_dir)
+
+    def test_current_reading_preferences_win_on_resume_with_provenance(self) -> None:
+        _, run_dir, plan = self.start(self.SELECTED, worker_model="model-a")
+        self.assertEqual(reading.DEFAULT_CONCURRENCY, plan["concurrency"])
+        pipeline.start_run(workspace=self.workspace, sources_selected=self.SELECTED, artifact_root=self.artifacts,
+                           run_id="r", reading={"concurrency": 4, "worker_model": "model-b", "strategy": None})
+        resumed = json.loads((run_dir / "reading" / "task-plan.json").read_text(encoding="utf-8"))
+        self.assertEqual(4, resumed["concurrency"])
+        self.assertEqual("model-b", resumed["worker_model"])
+        event = resumed["history"][-1]
+        self.assertEqual("READING_PREFERENCES_APPLIED", event["event"])
+        self.assertEqual({"from": reading.DEFAULT_CONCURRENCY, "to": 4, "provenance": "EXPLICIT"}, event["changes"]["concurrency"])
+        self.assertEqual(4, json.loads((run_dir / "run.json").read_text(encoding="utf-8"))["reading"]["concurrency"])
+        order = json.loads((run_dir / "work-order.json").read_text(encoding="utf-8"))
+        self.assertEqual(1, max(a["wave"] for a in order["reader_assignments"]))
+
+    def test_provenance_from_the_normalized_request_is_recorded(self) -> None:
+        request = {"guidance": [], "seeds": [], "source_order": [],
+                   "effective": {"provenance": {"reading.concurrency": "INSTRUCTIONS"}}}
+        base = dict(workspace=self.workspace, sources_selected=self.SELECTED, artifact_root=self.artifacts, run_id="p")
+        result = pipeline.start_run(**base, normalized_request=request)
+        pipeline.start_run(**base, normalized_request=request, reading={"concurrency": 2})
+        plan = json.loads((Path(result["run_dir"]) / "reading" / "task-plan.json").read_text(encoding="utf-8"))
+        self.assertEqual("INSTRUCTIONS", plan["history"][-1]["changes"]["concurrency"]["provenance"])
+
+    def test_switching_to_sequential_mid_reading_is_refused_not_silently_ignored(self) -> None:
+        self.start(self.SELECTED)
+        with self.assertRaisesRegex(StageError, "new run id"):
+            self.start(self.SELECTED, strategy="SEQUENTIAL")
+
+    def test_a_contract_1_plan_migrates_to_the_current_contract_and_keeps_its_history(self) -> None:
+        _, run_dir, plan = self.start(self.SELECTED)
+        legacy = {k: v for k, v in plan.items() if k != "selectors"}
+        legacy["contract_version"] = "1"
+        for t in legacy["tasks"]:
+            t.pop("selector_id")
+        (run_dir / "reading" / "task-plan.json").write_text(json.dumps(legacy), encoding="utf-8")
+        self.start(self.SELECTED)
+        upgraded = json.loads((run_dir / "reading" / "task-plan.json").read_text(encoding="utf-8"))
+        self.assertEqual(reading.CONTRACT_VERSION, upgraded["contract_version"])
+        event = upgraded["history"][0]
+        self.assertEqual(("SELECTOR_OWNERSHIP_ATTACHED", "1", reading.CONTRACT_VERSION),
+                         (event["event"], event["initial_contract_version"], event["contract_version"]))
+
+
 class HostFileTests(unittest.TestCase):
     def test_json_written_with_a_utf8_bom_is_accepted(self) -> None:
         from common import read_json

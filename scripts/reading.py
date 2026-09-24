@@ -114,6 +114,12 @@ def _selector_view(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
             | {"files": [source_key(p) for p in e["files"]]} for e in entries]
 
 
+def selector_view(records: list[dict[str, Any]], selectors: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
+    """The deterministic selector structure (path, role, order, owned file keys) a plan
+    records; comparing it tells whether a resumed request still reads the same way."""
+    return _selector_view(_selector_entries(records, selectors))
+
+
 def plan(
     records: list[dict[str, Any]], artifact_root: Path, run_dir: Path, *,
     selectors: list[dict[str, Any]] | None = None,
@@ -174,15 +180,53 @@ def attach_selectors(run_dir: Path, records: list[dict[str, Any]], selectors: li
     for task in task_plan["tasks"]:
         task["selector_id"] = owner[task["path"]]
     task_plan["selectors"] = _selector_view(entries)
+    # The plan now carries selector ownership, so it is a current-contract plan. The
+    # contract it was written under stays in the history; its per-file results keep the
+    # same shape and stay valid.
     task_plan.setdefault("history", []).append({
         "event": "SELECTOR_OWNERSHIP_ATTACHED", "at": now(), "initial_strategy": task_plan["strategy"],
+        "initial_contract_version": task_plan.get("contract_version"), "contract_version": CONTRACT_VERSION,
         "states_at_migration": summary(task_plan),
     })
+    task_plan["contract_version"] = CONTRACT_VERSION
     if strategy:
         task_plan["strategy"] = strategy
     if task_plan.get("strategy") != "SEQUENTIAL" and not task_plan.get("concurrency"):
         task_plan["concurrency"] = DEFAULT_CONCURRENCY
     write_json(path, task_plan)
+    return task_plan
+
+
+def apply_preferences(run_dir: Path, reading: dict[str, Any] | None,
+                      provenance: dict[str, str] | None = None) -> dict[str, Any]:
+    """Apply the current request's reading preferences (strategy, worker_model,
+    concurrency) to a resumed plan that still has reading to do. A stated current value
+    wins over the stored plan; unstated values keep the plan's. Every change is recorded
+    in the history with its provenance. Switching to or from SEQUENTIAL mid-reading is
+    refused: it changes who reads, which needs a new run."""
+    path = run_dir / "reading" / "task-plan.json"
+    task_plan = read_json(path)
+    wanted = {key: value for key, value in (reading or {}).items()
+              if key in {"strategy", "worker_model", "concurrency"} and value not in (None, "")}
+    if "strategy" in wanted and wanted["strategy"] not in STRATEGIES:
+        raise ValueError(f"unknown reading strategy {wanted['strategy']!r}; expected one of {STRATEGIES}")
+    if "concurrency" in wanted:
+        if int(wanted["concurrency"]) < 1:
+            raise ValueError("reading concurrency must be a positive integer")
+        wanted["concurrency"] = int(wanted["concurrency"])
+    current = task_plan.get("strategy")
+    if "strategy" in wanted and wanted["strategy"] != current and "SEQUENTIAL" in {wanted["strategy"], current}:
+        raise StageError("reading", [
+            f"this run reads with {current}; switching to {wanted['strategy']} while reading changes who reads — "
+            "start a new run id (compatible file catalogs are reused)"])
+    changes = {key: {"from": task_plan.get(key), "to": value, "provenance": (provenance or {}).get(f"reading.{key}", "EXPLICIT")}
+               for key, value in wanted.items() if task_plan.get(key) != value}
+    if changes:
+        for key, change in changes.items():
+            task_plan[key] = change["to"]
+        task_plan.setdefault("history", []).append({"event": "READING_PREFERENCES_APPLIED", "at": now(),
+                                                    "changes": changes})
+        write_json(path, task_plan)
     return task_plan
 
 

@@ -21,6 +21,7 @@ detected by `verify_manifest`.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import shutil
@@ -160,6 +161,59 @@ def _check_sources_unchanged(run: dict[str, Any], records: list[dict[str, Any]])
             raise IntegrityError(f"selected source changed after the run started: {record['path']}")
 
 
+_FINGERPRINT_REASONS = {
+    "corpus": "SOURCE_HASH_CHANGED", "roles": "SOURCE_ROLE_CHANGED",
+    "selectors": "SELECTOR_STRUCTURE_CHANGED", "request": "REQUEST_CHANGED", "locale": "LOCALE_CHANGED",
+}
+
+
+def _digest(value: Any) -> str:
+    return hashlib.sha256(json.dumps(value, sort_keys=True, ensure_ascii=False).encode("utf-8")).hexdigest()
+
+
+def selection_fingerprint(
+    records: list[dict[str, Any]], selectors: list[dict[str, Any]] | None,
+    normalized_request: dict[str, Any] | None, locale: str | None,
+) -> dict[str, Any]:
+    """What a run means, beyond which bytes it read: the corpus (path + digest), each
+    file's role, the selector structure (path, role, order, owned files), the semantic
+    part of the normalized request (guidance, seeds, source order) and the requested
+    locale. Presentation choices (formats, output directory, diagnostics) and reading
+    preferences are deliberately excluded: they never change what a run means. A
+    component that could not be known (None) is not compared."""
+    components = {
+        "corpus": _digest([(r["path"], r["content_digest"]) for r in records]),
+        "roles": _digest([(r["path"], r["role"]) for r in records]),
+        "selectors": _digest([(s["path"], s["role"], s["order"], s["files"]) for s in selectors]) if selectors else None,
+        "request": _digest({k: normalized_request.get(k) for k in ("guidance", "seeds", "source_order")})
+        if normalized_request is not None else None,
+        "locale": locale or "INFERRED",
+    }
+    return {"digest": _digest(components), "components": components}
+
+
+def _stored_fingerprint(run_dir: Path) -> dict[str, Any]:
+    """The fingerprint of an existing run; runs written before it was stored are
+    fingerprinted from their own persisted records, plan and normalized request."""
+    run = read_json(run_dir / "run.json")
+    if run.get("selection_fingerprint"):
+        return run["selection_fingerprint"]
+    records = read_json(run_dir / "sources.json")["records"]
+    plan_path = run_dir / "reading" / "task-plan.json"
+    selectors = read_json(plan_path).get("selectors") if plan_path.is_file() else None
+    request_path = run_dir / "normalized-request.json"
+    request = read_json(request_path) if request_path.is_file() else None
+    fingerprint = selection_fingerprint(records, selectors, request, None)
+    fingerprint["components"]["locale"] = None  # not recorded by older runs
+    return fingerprint
+
+
+def selection_changes(previous: dict[str, Any], current: dict[str, Any]) -> list[str]:
+    before, after = previous.get("components", {}), current.get("components", {})
+    return [reason for key, reason in _FINGERPRINT_REASONS.items()
+            if before.get(key) is not None and after.get(key) is not None and before[key] != after[key]]
+
+
 def _load(run_dir: Path) -> tuple[dict[str, Any], dict[str, Any]]:
     run_dir = Path(run_dir).resolve()
     if not (run_dir / "run.json").is_file():
@@ -216,26 +270,37 @@ def start_run(
     records, texts = sources.build_source_records(
         workspace, selection["roles"], transcripts, text_cache=root / ".ftd" / "text-cache",
     )
+    ownership = sources.selector_ownership(workspace, sources_selected)
+    fingerprint = selection_fingerprint(records, reading_stage.selector_view(records, ownership),
+                                        normalized_request, locale)
     events = []
     if (run_dir / "run.json").is_file():
-        previous = read_json(run_dir / "sources.json")
-        same = [(r["path"], r["content_digest"]) for r in previous["records"]] == [
-            (r["path"], r["content_digest"]) for r in records
-        ]
-        if same:
-            state = _state(run_dir)
+        # A run resumes only when it still means the same thing: same bytes, same roles,
+        # same selector structure, same semantic request. Same (path, digest) alone is
+        # not enough — the same file promoted to authority is a different run.
+        changes = selection_changes(_stored_fingerprint(run_dir), fingerprint)
+        state = _state(run_dir)
+        if not changes:
             if (run_dir / "reading" / "task-plan.json").is_file():
                 # Plans written before selector ownership existed are upgraded in place:
                 # every recorded state and reader result is kept, nothing is re-read.
-                strategy = (reading or {}).get("strategy")
-                reading_stage.attach_selectors(run_dir, records, sources.selector_ownership(workspace, sources_selected),
-                                               strategy=strategy)
+                reading_stage.attach_selectors(run_dir, records, ownership, strategy=(reading or {}).get("strategy"))
                 if state.get("next_stage") == "reading":
+                    # The current request's reading preferences win over the stored plan.
+                    provenance = ((normalized_request or {}).get("effective") or {}).get("provenance")
+                    task_plan = reading_stage.apply_preferences(run_dir, reading, provenance)
+                    run = read_json(run_dir / "run.json")
+                    run["reading"] = {k: task_plan.get(k) for k in ("strategy", "worker_model", "concurrency")}
+                    write_json(run_dir / "run.json", run)
                     _work_order(run_dir)
             return {"run_dir": str(run_dir), "resumed": True, "state": state,
                     "work_order": str(run_dir / "work-order.json")}
+        if state.get("status") in {"VALIDATED", "SUPERSEDED"}:
+            raise IntegrityError(
+                f"run {run_id} is frozen ({state['status']}) and its selection changed ({', '.join(changes)}); "
+                "start a new run id — compatible file catalogs are reused, the frozen run stays evidence")
         shutil.rmtree(run_dir)
-        events.append({"event": "invalidated", "reason": "SOURCE_HASH_CHANGED"})
+        events.append({"event": "invalidated", "reason": changes[0], "reasons": changes})
     run_dir.mkdir(parents=True, exist_ok=True)
     authority_texts = [texts[r["path"]] for r in records if r["role"] == "FUNCTIONAL_AUTHORITY"]
     locale_info = sources.infer_locale(locale, authority_texts, request_text)
@@ -265,7 +330,7 @@ def start_run(
     write_json(run_dir / "evidence" / "source-catalog.json", {"sources": catalog})
     reading_request = dict(reading or {})
     reading_plan = reading_stage.plan(
-        records, root, run_dir, selectors=sources.selector_ownership(workspace, sources_selected),
+        records, root, run_dir, selectors=ownership,
         strategy=reading_request.get("strategy"),
         worker_model=reading_request.get("worker_model"), concurrency=reading_request.get("concurrency"),
     )
@@ -278,6 +343,7 @@ def start_run(
         "clarifications": [dict(item) for item in clarifications or []],
         "reading": {"strategy": reading_plan["strategy"], "worker_model": reading_plan["worker_model"],
                     "concurrency": reading_plan["concurrency"]},
+        "selection_fingerprint": fingerprint,
         **locale_info,
     }
     write_json(run_dir / "run.json", run)
