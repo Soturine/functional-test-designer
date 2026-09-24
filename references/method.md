@@ -30,7 +30,7 @@ The same method yields "wrong pallet into a storage position" in a logistics pro
 
 ## Expansion
 
-After the baseline is frozen, go looking for failure. For each dimension record what you considered, not only what you kept. Derived tests need an authority invariant as oracle; characterization tests record current implementation behavior as such; exploratory tests use only safe invariants and ask a Question. Existing tests challenge the suite: each business-relevant test is either semantically covered, promoted, questioned, or explained. E2E journeys compose real atomic stages.
+After the baseline is frozen, go looking for failure. For each dimension record what you considered, not only what you kept. Derived tests need an authority invariant as oracle; characterization tests record current implementation behavior as such; exploratory tests use only safe invariants and ask a Question. Existing tests challenge the suite: each business-relevant test is either semantically covered, promoted, questioned, or explained. They come from explicit `TEST_ASSET` selections and from conventional test files inside selected implementation trees — a facet of the file, never a change of its role, and never authority. E2E journeys compose real atomic stages.
 
 ## Procedures
 
@@ -92,6 +92,19 @@ The canonical Test Case stays tool-agnostic and maps naturally to any automation
 | Unknowns / blockers | automation gap |
 
 No Playwright selectors, TestSprite syntax or load-tool scripts belong in a canonical Test Case. A load or performance idea without a normative threshold becomes an exploratory characterization scenario plus a Question asking for the acceptance threshold.
+
+### Self-contained at execution time
+
+During generation the selected evidence grounds the procedure. After generation the procedure carries the meaning: a tester or automation agent executing it reads only the Test Case, never the requirements, source code or FTD internals. So each procedure states, when evidence supports it:
+
+- **Resources and fixtures:** who `ACTOR_A` is (role, session, tenant or account), which properties `ENTITY_A` has, how fixtures relate to each other, which device or environment takes part.
+- **Starting state:** the state each resource is in before the first step.
+- **Steps:** who, where, what, target, data, expected — plus what evidence to collect when the observation is physical or asynchronous (timestamp, device identity, observed identifier, resulting state).
+- **Postconditions and cleanup:** the resulting state and how the environment returns to a reusable state.
+
+**Controlled conditions are grounded or declared.** Restarting a service, cutting a connection, powering off a device or keeping a tag or label from being read needs evidence that says how (the step is listed in an `evidence_ref`'s `supports`). Otherwise keep the scenario's intent — "a traversal in which the identifier is not captured" — and declare `UNKNOWN_SETUP_PATH` or `MISSING_EXECUTION_SURFACE`; never guess a technique (covering, shielding, distance, orientation, a command). Such a case is honestly not READY. Manual, physical and hardware cases stay in the suite, written for a human.
+
+**Capacity is characterized, not invented.** An expected result asserts a load, latency or capacity number only when the designed Test Case states it. Otherwise separate the *experiment configuration* (a declared, progressively increasing load and the stop rule, in the action or test data) from the *result*: record request count and rate, throughput, latency, errors and timeouts, lost or duplicated operations and integrity failures, and report the observed saturation or degradation point, linking the Question that asks for the threshold.
 
 ## Scenario Families and merge candidates
 

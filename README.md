@@ -66,7 +66,7 @@ python scripts/pipeline.py verify --run <run>
 ## Princípios
 
 - **Escopo:** somente fontes selecionadas. Um diretório é recursivo apenas dentro dele. Imports, links e vizinhos não ampliam o escopo.
-- **Papéis:** `FUNCTIONAL_AUTHORITY` define o que deve acontecer. `IMPLEMENTATION_EVIDENCE` mostra o que existe, `TECHNICAL_CONTEXT` mostra como chegar lá, e `TEST_ASSET` (testes existentes) é um conjunto de desafio, nunca autoridade.
+- **Papéis:** `FUNCTIONAL_AUTHORITY` define o que deve acontecer. `IMPLEMENTATION_EVIDENCE` mostra o que existe, `TECHNICAL_CONTEXT` mostra como chegar lá, e `TEST_ASSET` (testes existentes) é um conjunto de desafio, nunca autoridade. Arquivos de teste convencionais dentro de uma seleção `IMPLEMENTATION_EVIDENCE` também desafiam a suíte, sem mudar de papel.
 - **Nada inventado:** oracle, rota, rótulo, campo, mensagem, credencial ou estado sem evidência vira Question ou unknown do procedimento. Divergência entre autoridade e implementação vira Finding.
 - **Idioma:** todo texto humano sai no `output_locale` da execução (pedido explícito > idioma da autoridade > idioma do pedido). Símbolos de código, endpoints e ids ficam literais.
 - **Títulos oficiais:** o título de um TC descreve o comportamento testado, nunca "REQ-A — cabeçalho". Os identificadores ficam em `source_identifiers` e aparecem como chips no card do HTML: `TC-001 Comportamento atômico [REQ-A] [POLICY-B] [FLOW-C]`.

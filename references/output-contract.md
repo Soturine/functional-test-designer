@@ -35,6 +35,7 @@ v2.3 additions:
 - `sources[]`: one record per physical source — `path`, `role`, `authority`, `status` (`READ`, `TRANSCRIBED`, `METADATA_ONLY`, `UNSUPPORTED`, `FAILED`), `reason`, `content_digest`.
 - `requirements[]`: `source_identifier`, `source_title` (exactly as the authority states it), `source_statement`, `kind`.
 - `identifier_dispositions[]`: every authority identifier with `disposition` in `COVERED_BY_ATOMIC_TC`, `COVERED_BY_MULTIPLE_ATOMIC_TCS`, `QUESTION_REQUIRED`, `BLOCKED_EXTERNAL_DEPENDENCY`, `NOT_TESTABLE_WITH_REASON`, `SUPERSEDED_BY_AUTHORITY`, plus `claim_refs`, `test_refs`, `requirement_refs`, `question_refs`, `reason`.
+- `findings[]`: `id`, `type`, `statement`, `requirement_refs`, `source_refs`, `related_test_cases`, `coverage_disposition` and, since 2.4 (optional, additive), `question_refs` — the Questions that must resolve a `QUESTION` Finding.
 - `expansion_summary[]`: per dimension `candidates_considered`, `materialized`, `already_covered`, `question_required`, `not_applicable`.
 - `gap_metrics`: the six honest gap dimensions.
 - `baseline_comparison`: `{"status": "NOT_APPLIED"}` unless a benchmark baseline was applied.

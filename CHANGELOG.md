@@ -73,6 +73,17 @@ Source-selector reader round, still targeting 2.4.0:
 - **Semantic barrier.** Documented: an authority-only skeleton may be prepared while readers run, while Design is decided and submitted only after reconciliation. Readers use ordinary file tools and never generate helper scripts to automate cataloging.
 - **Bug fixes.** A zero-byte selected file gets the `EMPTY` state instead of an unreachable reader task, and submitted JSON written with a UTF-8 BOM is accepted.
 
+Corrective round after the benchmark audit, still targeting 2.4.0:
+
+- **Report family review.** "View Test Cases" on a family card opens on every unique Test Case the card counts ("All (N)"), not on its first identifier. Identifier pages remain as refinements through previous/next and a page selector, and a Test Case linked to several identifiers appears once in the family view.
+- **Existing tests inside implementation trees.** Conventional test files (by ecosystem naming, in several languages) inside an `IMPLEMENTATION_EVIDENCE` selection are discovered as test assets and challenge the suite. The file keeps its role (`source_role`), never becomes authority, and an unparseable implementation-side test file is a warning.
+- **Safe resume.** A run resumes only when its `selection_fingerprint` (corpus, per-file roles, selector structure, semantic request, locale) is unchanged. The same file under another role, or a changed selector structure, is re-planned with explicit reasons while compatible file catalogs are reused. A `VALIDATED` or `SUPERSEDED` run is refused instead of deleted.
+- **Current reading preferences on resume.** Strategy, worker model and concurrency from the current request win over the stored plan and are recorded with their provenance. A contract 1 plan migrates to the current contract version, keeping the initial version in its history.
+- **Cleaner reconciliation.** Exact restatements of a fact appear once per selector catalog. Identifier conflicts need an official identifier stated in disagreeing ways by two defining sources; implementation and test mentions become `identifier_references`.
+- **Finding → Question.** A Finding with coverage disposition `QUESTION` must link the real Question(s) that ask what must be resolved; the canonical Finding carries optional `question_refs`.
+- **Executable procedures.** Chained vague steps are rejected. A step that changes the environment or suppresses a signal needs supporting evidence or an honest `UNKNOWN_SETUP_PATH`/`MISSING_EXECUTION_SURFACE`, and a load, latency or capacity threshold may be asserted only when the designed Test Case states it. The guidance asks for self-contained procedures and a characterization shape for capacity questions without an SLA.
+- **CI.** The test suite runs on Linux and Windows.
+
 ## 2.3.0
 
 Simplification, quality recovery and model-first design.

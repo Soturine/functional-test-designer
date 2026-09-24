@@ -12,7 +12,7 @@ This works for any project: logistics, ERP, SaaS, APIs, IoT, industrial, aerospa
 ## Boundaries
 
 - A selected file authorizes only that file; a selected directory is recursive only below itself. Never follow imports, links or neighbours outside the selection.
-- Every selected source has an explicit role: `FUNCTIONAL_AUTHORITY` (what must happen), `IMPLEMENTATION_EVIDENCE` (what exists), `TECHNICAL_CONTEXT` (how to reach it), `TEST_ASSET` (existing tests: a challenge set, never authority).
+- Every selected source has an explicit role: `FUNCTIONAL_AUTHORITY` (what must happen), `IMPLEMENTATION_EVIDENCE` (what exists), `TECHNICAL_CONTEXT` (how to reach it), `TEST_ASSET` (existing tests: a challenge set, never authority). Conventional test files inside an `IMPLEMENTATION_EVIDENCE` selection are challenged too, keeping their role.
 - Never invent an oracle, route, label, field, message, credential, id format or state. Unknowns become Questions or procedure unknowns.
 - Write every human-readable text in the run's `output_locale` (explicit request > authority language > request language). Keep code symbols, endpoints, constants, enums, fields, ids and filenames verbatim.
 - The artifact root must be an explicit user destination, never the skill root or the source root.
