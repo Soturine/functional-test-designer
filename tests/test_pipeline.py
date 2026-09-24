@@ -13,7 +13,7 @@ import benchmark
 import pipeline
 import validation
 import workflow
-from common import StageError
+from common import StageError, file_digest
 
 
 class IntegrityTests(unittest.TestCase):
@@ -226,6 +226,55 @@ class WorkflowTests(unittest.TestCase):
         codes = set(result["findings"][0]["reason_codes"])
         self.assertTrue({"GENERIC_PRECONDITION", "PATH_COMPRESSION", "ABSTRACT_OBSERVATION"} <= codes)
         self.assertEqual(0, result["source_reads"])
+
+
+class FrozenRunTests(unittest.TestCase):
+    """A validated run is byte-immutable; a newer run may only declare that it supersedes it."""
+
+    @staticmethod
+    def snapshot(run_dir: Path) -> dict[str, str]:
+        return {p.relative_to(run_dir).as_posix(): file_digest(p) for p in sorted(run_dir.rglob("*")) if p.is_file()}
+
+    def second_run(self, run: PackRun, run_id: str, **extra) -> Path:
+        result = pipeline.start_run(
+            workspace=run.workspace, artifact_root=run.artifacts, run_id=run_id,
+            sources_selected=[{"path": path, "role": item["role"]} for path, item in run.pack["sources"].items()],
+            locale=run.pack.get("locale"), request_text=run.pack.get("request", ""), reading={"strategy": "SEQUENTIAL"},
+            **extra)
+        run_dir = Path(result["run_dir"])
+        for stage in ("design", "expansion", "procedures"):
+            pipeline.submit_stage(run_dir, stage, run.pack["stages"][stage])
+        return run_dir
+
+    def test_finalizing_another_run_leaves_a_validated_run_byte_identical(self) -> None:
+        run = PackRun("saas-accounts")
+        self.addCleanup(run.close)
+        run.finalize(("JSON",))
+        before = self.snapshot(run.run_dir)
+        other = self.second_run(run, "independent")
+        result = pipeline.finalize_run(other, ["JSON"])
+        self.assertEqual(before, self.snapshot(run.run_dir))
+        self.assertEqual("VALIDATED", json.loads((run.run_dir / "run-state.json").read_text(encoding="utf-8"))["status"])
+        self.assertIsNone(result["supersedes"])  # independent runs never supersede each other
+        pipeline.verify_manifest(run.run_dir / "run-manifest.json", require_publication=False)
+
+    def test_an_explicit_revision_records_what_it_supersedes_without_touching_it(self) -> None:
+        run = PackRun("saas-accounts")
+        self.addCleanup(run.close)
+        run.finalize(("JSON",))
+        before = self.snapshot(run.run_dir)
+        revision = self.second_run(run, "revision", supersedes=run.run_dir.name)
+        result = pipeline.finalize_run(revision, ["JSON"])
+        self.assertEqual(run.run_dir.name, result["supersedes"])
+        self.assertEqual(run.run_dir.name, json.loads((revision / "run.json").read_text(encoding="utf-8"))["supersedes"])
+        self.assertEqual(before, self.snapshot(run.run_dir))
+
+    def test_supersedes_must_name_another_existing_run(self) -> None:
+        run = PackRun("saas-accounts")
+        self.addCleanup(run.close)
+        run.finalize(("JSON",))
+        with self.assertRaises(pipeline.IntegrityError):
+            self.second_run(run, "revision", supersedes="does-not-exist")
 
 
 if __name__ == "__main__":

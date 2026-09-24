@@ -234,7 +234,7 @@ def start_run(
     id_pattern: str | None = None, allow_source_root: bool = False, formats: Any = None,
     diagnostics: bool = False, source_order: list[list[str]] | None = None,
     clarifications: list[dict[str, Any]] | None = None, reading: dict[str, Any] | None = None,
-    normalized_request: dict[str, Any] | None = None,
+    normalized_request: dict[str, Any] | None = None, supersedes: str | None = None,
 ) -> dict[str, Any]:
     """Lock scope, read sources, index authority and issue the design work order.
 
@@ -251,6 +251,9 @@ def start_run(
     `normalized_request` is the host's semantic reading of the instructions file merged with
     explicit overrides (see instructions.py). It is persisted as normalized-request.json
     and its guidance/seeds reach every model work order — as guidance, never authority.
+
+    `supersedes` names an earlier run in the same artifact root that this run explicitly
+    revises. The relation is recorded on this run only; the earlier run is never modified.
     """
     began = now()
     requested = _normalize_formats(formats, diagnostics)
@@ -260,6 +263,9 @@ def start_run(
         allow_source_root=allow_source_root,
     )
     run_dir = run_directory(root, run_id)
+    if supersedes is not None:
+        if supersedes == run_id or not (run_dir.parent / supersedes / "run.json").is_file():
+            raise IntegrityError(f"supersedes must name another existing run in {run_dir.parent}: {supersedes!r}")
     selection = sources.assign_roles(workspace, sources_selected)
     selectors = {str(item.get("path", "")).strip() for item in sources_selected}
     for group in source_order or []:
@@ -345,6 +351,7 @@ def start_run(
         "reading": {"strategy": reading_plan["strategy"], "worker_model": reading_plan["worker_model"],
                     "concurrency": reading_plan["concurrency"]},
         "selection_fingerprint": fingerprint,
+        **({"supersedes": supersedes} if supersedes else {}),
         **locale_info,
     }
     write_json(run_dir / "run.json", run)
@@ -1291,9 +1298,10 @@ def finalize_run(run_dir: Path, formats: Any = None, baseline: dict[str, Any] | 
             outputs=_manifest(run_dir)["publication"])
     verify_manifest(run_dir / "run-manifest.json")
     _save_state(run_dir, status="VALIDATED", next_stage=None)
-    superseded = _supersede_others(run_dir)
+    # A validated run is frozen: a newer publication never edits it. Supersession is an
+    # explicit relation recorded by the newer run (run.json "supersedes"), nothing more.
     return {"run_dir": str(run_dir), "canonical_path": str(canonical_path), "render": rendered,
-            "metrics": metrics, "superseded_runs": superseded}
+            "metrics": metrics, "supersedes": run.get("supersedes")}
 
 
 def _publish(run_dir: Path, artifact_root: Path, files: list[str]) -> None:
@@ -1303,19 +1311,6 @@ def _publish(run_dir: Path, artifact_root: Path, files: list[str]) -> None:
         "files": [{"path": Path(path).resolve().relative_to(root).as_posix(), "sha256": file_digest(Path(path))}
                   for path in sorted(files)],
     })
-
-
-def _supersede_others(run_dir: Path) -> list[str]:
-    changed = []
-    for state_path in run_dir.parent.glob("*/run-state.json"):
-        if state_path.parent == run_dir:
-            continue
-        document = read_json(state_path)
-        if document.get("status") == "VALIDATED":
-            document.update(status="SUPERSEDED", superseded_by=run_dir.name)
-            write_json(state_path, document)
-            changed.append(state_path.parent.name)
-    return sorted(changed)
 
 
 def render_run(run_dir: Path, formats: Any = None) -> dict[str, Any]:
@@ -1503,6 +1498,7 @@ def main(argv: list[str] | None = None) -> int:
                        help="default MULTI_AGENT_PER_SOURCE; SEQUENTIAL disables the default multi-agent reading plan")
     start.add_argument("--reading-model", help="preferred lightweight worker model, e.g. haiku")
     start.add_argument("--reading-concurrency", type=int, help="bounded concurrent reading tasks")
+    start.add_argument("--supersedes", help="an earlier run id this run explicitly revises (never modified)")
     submit = commands.add_parser("submit", help="submit one model stage payload")
     submit.add_argument("--run", required=True, type=Path)
     submit.add_argument("--stage", required=True, choices=sorted(MODEL_STAGES))
@@ -1532,7 +1528,7 @@ def main(argv: list[str] | None = None) -> int:
                 id_pattern=args.id_pattern, formats=args.formats, diagnostics=args.diagnostics,
                 source_order=[group.split(",") for group in args.order],
                 reading={"strategy": args.reading_strategy, "worker_model": args.reading_model,
-                        "concurrency": args.reading_concurrency},
+                        "concurrency": args.reading_concurrency}, supersedes=args.supersedes,
             )
         elif args.command == "submit":
             result = submit_stage(args.run, args.stage, merge_payloads([read_json(path) for path in args.file]))
