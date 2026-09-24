@@ -66,12 +66,14 @@ Unreadable authority (a scanned PDF) needs `--transcription <source>=<text file>
 ## Design stage — normative baseline
 
 - **Reading comes first** (`next_stage: reading`). Read sources in parallel by default; decide semantics centrally.
-  - Spawn one lightweight reader sub-agent per `PLANNED` task in the work order (`reading_tasks`). Prefer Haiku on Claude, and treat `concurrency` as an upper bound, not a burst.
-  - Each reader returns only a factual catalog in the `reader_result_contract` shape and reports the model that actually ran. If it fails, it returns `FAILED` with an error.
-  - Submit every result with `pipeline.py reading-submit`, then run `pipeline.py reading-reconcile`. Design is refused until reconciliation.
-  - Honor explicit user preferences: a worker count, a model, or "sequential" / "no subagents". For no subagents, restart with `--reading-strategy SEQUENTIAL` and read the sources yourself.
-  - Never claim a model or mode you did not use.
-  - Unchanged sources reuse cached catalogs (`REUSED`) with no reader at all.
+  - **Reader unit.** Each source selector the user declared (a file or a whole directory) is one logical lightweight-reader responsibility: one entry in the work order's `reader_assignments`. A directory stays one semantic source even though the runtime inventories and accounts for every physical file beneath it.
+  - **Concurrency.** On Claude, prefer Haiku and run at most `concurrency` readers at once (default 8); later `wave`s wait for a free slot.
+  - **How readers work.** Each reader uses ordinary file and navigation tools and returns one selector result: provenance-preserving facts that cite their `file`, plus a `files` entry (CATALOGED, INSPECTED or FAILED) for every pending file it owns. It reports the model that actually ran. It never writes helper scripts to automate cataloging and never makes Test Design decisions.
+  - **Sharding.** Split an oversized selector into internal shards only when real context limits require it. Shards are submitted with the same `selector_id` and reconcile back into one selector catalog.
+  - **Submission.** Submit with `pipeline.py reading-submit`, then run `pipeline.py reading-reconcile`, which refuses while any physical file is unaccounted.
+  - **User preferences win.** Honor a worker count, a model, or "sequential" / "no subagents". For no subagents, restart with `--reading-strategy SEQUENTIAL` and read the sources yourself. Never claim a model or mode you did not use.
+  - **Reuse.** Unchanged files reuse cached catalogs (`REUSED`); only changed files under a selector are read again.
+  - **Semantic barrier.** While readers finish, you may prepare an authority-only normative skeleton: identifiers, titles and candidate obligations. The domain model, claims, Test Cases, Findings and Questions are decided, and Design is submitted, only after reconciliation.
 - **You alone own the semantic synthesis**, working from the reconciled catalog, the evidence snapshots and `authority-text/`:
   - decomposing requirements into claims and deciding oracles;
   - judging the conflicts listed in the reconciliation;

@@ -61,6 +61,18 @@ Final rework round, still targeting 2.4.0 (unified commands):
   - It selects chaos runs with `--chaos-id` or `--canonical-only`.
   - No Azure call is ever made. `azure_devops.py` remains the single Azure owner.
 
+Source-selector reader round, still targeting 2.4.0:
+
+- **Reader unit.** The reader unit is now the source selector the user declared. A selected directory is one reader responsibility, not one reader per physical file, and the runtime still keeps a per-file ledger (digest, role, state) for every file beneath it.
+  - Overlapping selectors never double-own a file: the most specific selector wins.
+- **Waves.** The work order lists `reader_assignments` with a `wave` number bounded by the concurrency limit (default 8, a host execution default).
+- **Selector results.** A selector result accounts for every assigned file (`CATALOGED`, `INSPECTED` or `FAILED`). Facts must cite files the selector owns, and a result that references a file outside its selector is rejected.
+- **Sharding.** Internal shards are optional, only for real capacity limits, and reconcile back into one selector catalog.
+- **Reconciliation.** It refuses while any physical file is unaccounted. It writes one provenance-preserving catalog per selector and a telemetry block that separates the requested, reported and host-verified reader model.
+- **Reuse.** File catalogs remain the cache unit, so only changed files under a selector are read again. A plan written before selector ownership is upgraded in place on resume, without re-reading.
+- **Semantic barrier.** Documented: an authority-only skeleton may be prepared while readers run, while Design is decided and submitted only after reconciliation. Readers use ordinary file tools and never generate helper scripts to automate cataloging.
+- **Bug fixes.** A zero-byte selected file gets the `EMPTY` state instead of an unreachable reader task, and submitted JSON written with a UTF-8 BOM is accepted.
+
 ## 2.3.0
 
 Simplification, quality recovery and model-first design.

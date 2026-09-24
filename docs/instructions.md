@@ -18,6 +18,7 @@ Read these, in this order:
 2. `path/to/docs/`: product and user documentation.
 3. `path/to/src/`: implementation code (evidence, not authority).
 4. `path/to/config/`: configuration.
+5. `path/to/tests/`: existing tests (a challenge set, never authority).
 
 Do not read anything else.
 
@@ -42,6 +43,10 @@ A first idea of the main business flow. Reconstruct the real flow from the requi
 ## Performance focus
 
 - many users doing the same thing at once (never invent a threshold; ask for one)
+
+## Other guidance
+
+Add anything else that matters to this project here: business concerns, actors, environments, integrations, known risks, unusual workflows, review priorities or other context.
 
 ## Output
 

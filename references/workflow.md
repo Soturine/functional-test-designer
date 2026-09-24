@@ -63,20 +63,28 @@ The direct form `dispatch("ftd-gen", workspace=..., sources=[{path, role}], ...)
 
 Many lightweight readers read faster; one main model decides.
 
-- **Planning.** `start_run` plans one reading task per eligible source in `<run>/reading/task-plan.json`. The default strategy is `MULTI_AGENT_PER_SOURCE`.
-- **Readers.** The host spawns one reader per `PLANNED` source, preferring Haiku on a Claude host, with `concurrency` as an upper bound. The core role name is `LIGHTWEIGHT_SOURCE_READER`, and no model name appears in the contract.
+- **Planning.** `start_run` plans the reading in `<run>/reading/task-plan.json`.
+  - **User source selector:** what the user selected, a file or a directory. It is the reader unit.
+  - **Physical source file:** every file resolved under a selector. Each is owned by exactly one selector; when selectors overlap, the most specific one owns the file, and no file is read twice.
+  - **File ledger:** one entry per physical file, with digest, role and state. The file is also the cache/reuse unit.
+  - The default strategy is `MULTI_AGENT_PER_SOURCE`, where a "source" is a user selector.
+- **Readers.** The work order lists `reader_assignments`: one per selector that still has unaccounted files. The host spawns one reader per assignment, preferring Haiku on a Claude host.
+  - At most `concurrency` readers run at once (default 8). Assignments carry a `wave` number, and later waves wait.
+  - Readers use ordinary file and navigation tools; they never generate helper scripts, parsers or crawlers to automate cataloging.
+  - An oversized selector may be split into internal shards only when real context limits require it. Shards reconcile back into one selector catalog, and their use is reported in the telemetry.
+  - The core role name is `LIGHTWEIGHT_SOURCE_READER`, and no model name appears in the contract.
   - The user can override the worker count, the model or the strategy, including `SEQUENTIAL`, which means no subagents.
   - If the requested model is unavailable, the host says what it actually used.
-- **Reader output.** Each reader returns a factual catalog:
+- **Reader output.** Each reader returns one selector result (`selector_id`, `reader`, `catalog`, `files`). `files` accounts for every file it was assigned: `CATALOGED` with that file's own catalog, `INSPECTED` (read, nothing to add) or `FAILED` with an error. Selector-level facts cite the owned `file` they come from, and excerpts must. The catalog sections are:
   - headings, identifiers, actors, entities, states, operations, integrations;
   - config facts, candidate rules, flows, test assets, excerpts with line ranges, references and ambiguities.
 
   Claims, oracles, tests, Findings, Questions, coverage and authority decisions are rejected.
 - **Submission.** `pipeline.py reading-submit` validates results as all-or-nothing: the digest matches, the role is unchanged, the catalog is non-empty and excerpt lines exist. A worker failure is submitted as `FAILED` with an error.
-- **Reconciliation.** `pipeline.py reading-reconcile` refuses while any source lacks a result. It preserves conflicting identifier statements and cross-references with no majority vote, writes `reading/source-catalog.json` and `reading/reconciliation.json`, and binds the reconciliation into the `TEST_DESIGN` manifest record. Design cannot start before reconciliation.
+- **Reconciliation.** `pipeline.py reading-reconcile` refuses while any physical file under any selector lacks a disposition. It writes one provenance-preserving catalog per selector under `reading/selector-catalogs/`, and a `telemetry` block that separates the requested reader model, the reported one and host verification (always `null`). Plans written before selector ownership are upgraded in place on resume, keeping every recorded result. It preserves conflicting identifier statements and cross-references with no majority vote, writes `reading/source-catalog.json` and `reading/reconciliation.json`, and binds the reconciliation into the `TEST_DESIGN` manifest record. Design cannot start before reconciliation.
 - **States:** `PLANNED`, `CATALOGED` (only with a validated reader result), `REUSED`, `FAILED_WORKER`, `FAILED_TO_READ`, `UNSUPPORTED`, `EMPTY` (a zero-byte file, accounted for with no reader) and `MAIN_MODEL` (sequential).
 - **Reuse.** Validated catalogs are cached under `<artifact-root>/.ftd/catalog-cache/`. The key is a collision-safe source key (a digest of the normalized path plus a readable suffix) together with the content digest, the role and the contract version.
-  - A later run reuses them without rerunning any reader. A changed source, or a changed role, invalidates only that entry.
+  - A later run reuses them without rerunning any reader. A changed file, or a changed role, invalidates only that file, so its selector's reader reads just the changed files.
   - Extracted text is cached by digest, so an unchanged large PDF is not re-extracted.
   - Frozen runs are never touched.
 
