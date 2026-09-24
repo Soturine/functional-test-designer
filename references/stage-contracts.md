@@ -115,6 +115,9 @@ Resuming a run id (`start` again with the same `--run-id`) is allowed only when 
   "single_step_reason": "required when there is one step",
   "unknowns": [{"kind": "MISSING_FIXTURE", "detail": "", "question": "Q key"}],
   "evidence_refs": [{"source": "selected path", "reference": "section, function or screen"}],
+  "execution_variants": [{"kind": "PHYSICAL_DEVICE | SIMULATED_DEVICE | MANUAL_FIELD", "description": "how that run differs"}],
+  "request_contract": {"method": "", "endpoint": "", "parameters": [], "body": "", "fixture_pool": "",
+                       "varies": [], "measurements": []},
   "automation": {"suitability": "HIGH | MEDIUM | LOW | MANUAL_ONLY",
                  "layer": "UI | API | SERVICE | INTEGRATION | HARDWARE | MIXED",
                  "tool_hint": "PLAYWRIGHT | API_TEST | TESTSPRITE | PYTEST | OTHER | NONE"}
@@ -128,6 +131,10 @@ Resuming a run id (`start` again with the same `--run-id`) is allowed only when 
 - A step that changes the environment or suppresses a signal to create the test condition (restart or stop a service, cut a connection, power off or shield a device, keep a tag or label from being read) must be supported by evidence — an `evidence_ref` whose `supports` lists the step number (`"supports": [1]`; kept in the stage record, not in the public Test Case) — or the procedure keeps the scenario and declares `UNKNOWN_SETUP_PATH` / `MISSING_EXECUTION_SURFACE`, which makes it NEEDS_REVIEW. The technique is never invented.
 - An expected result may assert a load, latency or capacity threshold (`under 200 ms`, `at least 50 requests/s`, `20 concurrent users`) only when the designed Test Case states that number. Without an SLA, the procedure characterizes: a declared, progressively increasing load (experiment configuration in the action or test data), recording rate, throughput, latency, errors/timeouts, lost or duplicated operations and integrity failures up to the observed saturation point, and links the Question that asks for the threshold.
 - Chained vague clauses ("access the system and perform the operation") are rejected like a single vague step.
+- A step performed as a fixture actor ("As USER_A, …") needs that actor's starting context — an open session, a configured credential or client, a device in hand — in a precondition or an earlier step.
+- A load, concurrency or race experiment on the `API`/`INTEGRATION` layer whose steps name a request (an HTTP method or a resource path) carries `request_contract`: method, endpoint, parameters, body, fixture pool, what varies between requests and what is measured. It describes the request, not a tool invocation, and its measurements assert no threshold the design does not state; fixtures it names are described in `test_data`.
+- `execution_variants` (optional) records other ways to run the same case, for example through a real device instead of a simulated call; the case joins that execution view without being cloned.
+- The published case derives `state_contract` from `cleanup`: `SELF_CLEANING`, or `REQUIRES_FIXTURE_RESET` when the harness must reset the described fixtures.
 - An expected result states what becomes observable; one that only says the action happened ("the request is sent", "the response is received", "the submission is processed") is rejected, and so is one offering alternative outcomes ("the record is shown or access is denied") — declare the unresolved policy instead.
 - Every semantic fixture used in preconditions, steps, postconditions or cleanup (UPPER_SNAKE names such as `USER_OWNER_A`) is described in `test_data`. Codes and constants the selected sources themselves use (for example an error code) are vocabulary, not fixtures.
 - Manipulation phrased object-first ("with the label covered", "with the connection disconnected") counts as a controlled condition too.

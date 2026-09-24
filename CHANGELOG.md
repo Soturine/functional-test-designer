@@ -87,6 +87,14 @@ Corrective round after the benchmark audit, still targeting 2.4.0:
 - **Reuse.** Facts a selector reader reported only at selector level are folded into the reusable file catalog of the file they cite. Expansion tests cite each evidence reference once.
 - **CI.** The test suite and domain packs run on Linux and Windows; CI installs the optional PDF reader, and PDF-dependent tests skip with a stated reason without it.
 
+Execution views round, still targeting 2.4.0:
+
+- **Organization.** Publication adds `organization.json` and `execution-plan.md`: functional groups ordered by the use-case main flow (alternative flows after the step they branch from, canonical order as fallback), transversal rules, and execution views (E2E, load/concurrency, physical/devices, chaos/resilience, manual/field) derived from each case's semantic category. One case can belong to several groups; nothing is cloned, and chaos cases join their related case's group with their own `CH-*` identity.
+- **Report.** View tabs (by requirement — the default, in placement order — families, each execution view, all); chaos cases open in the same modal; a card counts the unique cases of its group; the modal position reads "View 1 of N". The case body now also shows postconditions, cleanup, the state contract, the request contract and execution variants.
+- **Azure input.** Suites follow the organization instead of one suite per identifier (identifiers stay as traceability), membership keeps the operational order, and the mapped payload keeps test data, postconditions, cleanup, readiness blockers, layer, tool hint, resources, environment, source kind, related cases, variants, request contract and `state_contract`.
+- **Execution contracts.** Procedures may carry `execution_variants` and `request_contract`. A step performed as a fixture actor needs that actor's starting context; a load/concurrency experiment on a request its steps name must describe that request (no tool syntax, no undeclared threshold). Published cases state `state_contract` (`SELF_CLEANING` or `REQUIRES_FIXTURE_RESET`).
+- **Frozen runs.** Finalizing a run never edits another run. A revision is a new run started with `--supersedes <run-id>`, recorded on the new run only; it inherits the earlier run's finalized chaos runs by reference.
+
 ## 2.3.0
 
 Simplification, quality recovery and model-first design.

@@ -10,6 +10,8 @@ v2.3 publishes schema `2.2` with additive optional fields. Schema `1.2` suites r
 |   |-- report.html            offline, no external runtime
 |   |-- test-cases/TC-XXX.json
 |   |-- test-cases-md/TC-XXX.md (Mermaid flow last, identical to the HTML flow)
+|   |-- organization.json      groups, memberships and order (references, never case copies)
+|   |-- execution-plan.md      every group with its cases in execution order (MARKDOWN)
 |   `-- operational-scenarios.md (only with OPERATIONAL)
 |   |-- chaos/<chaos-id>/      (/ftd-chaos) chaos-cases.json, seed-dispositions.json,
 |   |                          chaos-plan.md, chaos-plan.html (per requested format)
@@ -49,7 +51,26 @@ Core fields as in 2.2: `id`, `title`, `status`, `priority`, `type`, `objective`,
 
 v2.3 additions: `automation_suitability` (`HIGH`, `MEDIUM`, `LOW`, `MANUAL_ONLY`), `automation_readiness` (`READY`, `NEEDS_FIXTURE`, `NEEDS_SELECTOR`, `NEEDS_ENVIRONMENT`, `NEEDS_POLICY`, `BLOCKED_EXTERNAL_DEPENDENCY`, `NOT_APPLICABLE`), `readiness_blockers`, `failure_domain`, `source_identifiers`, `expansion_dimension`, `expansion_checklist_item`, `single_step_reason`. `automation_blocker` is no longer emitted.
 
+v2.4 additions (optional, additive):
+
+- `state_contract`: `SELF_CLEANING` when `cleanup` restores state, otherwise `REQUIRES_FIXTURE_RESET` — the executor (or harness) resets the fixtures described in `test_data` before the next case.
+- `execution_variants[{kind, description}]`: other ways to run the same case (`PHYSICAL_DEVICE`, `SIMULATED_DEVICE`, `MANUAL_FIELD`). A variant adds the case to an execution view; it never creates a second Test Case.
+- `request_contract{method, endpoint, parameters, body, fixture_pool, varies, measurements}`: the request a load or concurrency experiment repeats, described without tool syntax and without thresholds the design does not state.
+
 There are never `subtests`: independent variants are separate Test Cases; dependent actions are steps.
+
+## Organization (`organization.json`)
+
+How the same cases are grouped for execution. Nothing here copies a case; `diagnostics.cloned_cases` is always 0.
+
+- `groups[]`: `id`, `kind` (`FUNCTIONAL`, `TRANSVERSAL`, `EXECUTION_VIEW`), `label` (run locale), `identifier`, `flow_reference`, `order_source` and ordered `members[{case, origin, via, order, chaos_run_id?}]`.
+  - A `FUNCTIONAL` group holds the cases of one functional requirement. Its order follows explicit guidance, then the main flow of the use case the requirement is exercised with (`USE_CASE_MAIN_FLOW`); an alternative-flow case sits right after the step it branches from; otherwise the canonical order (`CANONICAL_ORDER`) is kept.
+  - `TRANSVERSAL` holds rule-only cases. Execution views (`E2E`, `LOAD_CONCURRENCY`, `PHYSICAL_DEVICE`, `CHAOS_RESILIENCE`, `MANUAL_FIELD`) are derived from each case's semantic category (primary type, automation layer, execution variants, chaos execution tags), never from where it came from. `MANUAL_FIELD` is omitted when it would repeat the physical view.
+  - `origin` is `CANONICAL` or `POST_SUITE`. A finalized chaos case joins its related case's group right after it, and its execution views; it keeps its `CH-*` identity.
+- `memberships`: case key (`TC-001` or `<chaos-id>:CH-001`) → `[{group, order}]`.
+- `post_suite_cases[]`: references (`key`, `id`, `chaos_run_id`, `parent_run_id`, `title`) only.
+
+The HTML report shows the same organization as views: by requirement (default, in placement order), families, each execution view and all. A card counts the unique cases of its group, and chaos cases open in the same modal with their own body.
 
 ## Questions (`questions.json`)
 

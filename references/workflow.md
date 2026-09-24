@@ -57,6 +57,8 @@ Natural language stays first-class, but Python does not interpret it.
 6. `finalize` in the requested formats, including diagnostics when asked;
 7. `verify`.
 
+A `VALIDATED` run is frozen: nothing later edits its files. To publish a revision, start a new run id with `--supersedes <earlier-run-id>`; the relation is recorded in the new run's `run.json` only. With unchanged sources every file catalog is reused, so a revision needs no reader, and accepted stage payloads can be resubmitted through the normal validators.
+
 The direct form `dispatch("ftd-gen", workspace=..., sources=[{path, role}], ...)` still exists for programmatic callers. A pre-v2.3 request carrying `scenario_profiles`, `evidence_packs`, `risk_conditions` or similar pre-authored semantics is rejected.
 
 ### Multi-agent source reading
@@ -141,12 +143,14 @@ python scripts/challenge.py verify --run <run> --challenge-id <id>
 
 `/ftd-azure` converts a finalized run's validated state into **local** JSON. It never authenticates, never reads tokens and never calls Azure.
 
-- **Input:** `canonical-suite.json` plus finalized chaos runs. The default is all of them; `--chaos-id` selects specific ones and `--canonical-only` excludes them. It never reads project sources or globs repository JSON. An unfinished chaos run that is named explicitly is rejected.
+- **Input:** `canonical-suite.json` plus finalized chaos runs — the run's own and, when the run explicitly `supersedes` an earlier one, that run's (they keep their parent). The default is all of them; `--chaos-id` selects specific ones and `--canonical-only` excludes them. It never reads project sources or globs repository JSON. An unfinished chaos run that is named explicitly is rejected.
 - **Output:** `<artifact-root>/output/azure/`.
-  - `azure-export-package.json` holds requirement groups, each with `identifier`, `title`, `suite_name` = `identifier — official title`, an `external_id` only when a mapping is supplied, and `test_case_refs`, plus an `Unassigned` group last. It also holds one record per case: export key, local id, source kind, title, priority, status, preconditions, test data, steps and expected results, postconditions, requirement refs, related TCs, execution tags, automation suitability/readiness, environment/resources and chaos run id.
+  - `azure-export-package.json` holds `suites`, one per group of the publication organization (see [output-contract.md](output-contract.md#organization-organizationjson)): functional groups in operational order (`REQUIREMENT_BASED`), transversal rules and each execution view (`STATIC`), with `test_case_refs` in placement order, plus an `Unassigned` suite only when some case has no group. Requirement groups (`identifier`, `title`, `suite_name` = `identifier — official title`, `external_id` only when a mapping is supplied, `test_case_refs`) stay as traceability. It also holds one record per case: export key, local id, source kind, title, priority, status, preconditions, test data, steps and expected results, postconditions, cleanup, `state_contract`, requirement refs, related TCs, execution tags, automation suitability/readiness/readiness blockers/layer/tool hint, execution variants, request contract, environment/resources and chaos run id.
+  - Every field an executor needs survives into the mapped payload (`map_test_case`): `test_data`, `postconditions`, `cleanup`, `automation.{suitability, readiness, readiness_blockers, layer, tool_hint}`, `execution.{state_contract, required_resources, environment_requirements, variants, request_contract}`, `source_kind` and `trace_refs.related_test_cases`.
   - `azure-preview.json` (`operation: LOCAL_PREVIEW_ONLY`) holds create/update/unchanged/skipped/conflicts and the Suite placements, diffed against local integration state.
 - **Keys:** `canonical:TC-001` and `chaos:<chaos-id>:CH-001`. `CH-017` stays `CH-017` locally, and only its export key marks it as a Test Case work item. Integration state keyed `challenge:<id>:CH-nnn` by earlier versions is migrated deterministically (`migrate_integration_state`).
-- **Grouping:**
+- **Suites:** one work item per case, placed in every suite of its organization groups (a functional group and, for example, the load view), never cloned; suite membership keeps the organization's order.
+- **Requirement trace grouping:**
   - A canonical TC goes under its `source_identifiers`.
   - A CH with `related_source_identifiers` is placed directly (`DIRECT`).
   - A CH with only `related_test_cases` inherits the placement of those TCs (`INHERITED_FROM_RELATED_TC`). This is organizational, never authority.
