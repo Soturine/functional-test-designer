@@ -116,6 +116,10 @@ ALTERNATIVE_OUTCOMES = re.compile(
 )
 # Semantic fixtures (ACTOR_A, ENTITY_ACTIVE_A, DEVICE_B) must be described in test_data.
 FIXTURE_NAME = re.compile(r"\b[A-Z][A-Z0-9]*_[A-Z0-9_]*[A-Z0-9]\b")
+# The fixture naming convention: a role or entity plus a short instance suffix
+# (USER_A, ORDER_B, DEVICE_1, PAYMENT_CAPTURED_100, EMAIL_NEW). Such a name is always a
+# fixture, even when the same token happens to appear in code or existing tests.
+FIXTURE_SHAPE = re.compile(r"_(?:[A-Z]|\d{1,4}|NEW|NOVO|NOVA|NUEVO|NUEVA)$")
 ACTION_VERB = re.compile(
     r"\b(?:access|open|search|locate|select|enter|provide|scan|read|confirm|submit|consult|click|"
     r"verify|review|choose|cancel|finalize|save|filter|export|move|pass|start|log in|"
@@ -405,8 +409,11 @@ def validate_procedures(payload: dict[str, Any], context: dict[str, Any]) -> dic
 
 
 def source_vocabulary(texts: Any) -> set[str]:
-    """UPPER_SNAKE tokens the selected sources use (error codes, constants): not fixtures."""
-    return {token for text in texts for token in FIXTURE_NAME.findall(text or "")}
+    """Codes and constants the selected sources use (error codes, settings names): not
+    fixtures. Fixture-shaped names are never vocabulary, so a fixture used in a procedure
+    must be described in its test data even if the token also occurs in the sources."""
+    return {token for text in texts for token in FIXTURE_NAME.findall(text or "")
+            if not FIXTURE_SHAPE.search(token)}
 
 
 def _template(action: str) -> str:

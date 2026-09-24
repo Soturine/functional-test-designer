@@ -315,6 +315,22 @@ class ExecutableProcedureTests(unittest.TestCase):
         self.addCleanup(run.close)
         run.finalize(("JSON",))
 
+    def test_a_fixture_named_in_the_sources_still_needs_a_description(self) -> None:
+        from procedures import source_vocabulary
+        vocabulary = source_vocabulary(["raise Error('TOO_MANY_REFUNDS')", "user = USER_OWNER_A  # test helper",
+                                        "PAYMENT_CAPTURED_100 = make_payment()", "EPC_LENGTH = 24"])
+        self.assertEqual({"TOO_MANY_REFUNDS", "EPC_LENGTH"}, vocabulary)
+
+        def undescribed(pack):
+            # the same token also appears in the selected existing tests
+            tests_file = next(source for source in pack["sources"].values() if source["role"] == "TEST_ASSET")
+            tests_file["text"] += "\n# USER_OWNER_A is the fixture owner used above\n"
+            proc = procedure(pack, "T1")
+            proc["test_data"] = [row for row in proc["test_data"] if row["name"] != "USER_OWNER_A"]
+        run = self.reach("saas-accounts", undescribed)
+        with self.assertRaisesRegex(StageError, r"uses fixtures \['USER_OWNER_A'\]"):
+            run.submit("procedures")
+
     def test_object_first_physical_manipulation_is_recognized(self) -> None:
         for action in ("Pass CRATE_A through the gate with the label covered.",
                        "Passar CAIXA_A pelo leitor com a etiqueta coberta.",

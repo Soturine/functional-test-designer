@@ -9,6 +9,7 @@ Nothing here edits the frozen normative baseline; expansion is additive.
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from common import StageError, jaccard, normalize, normalize_identifier, similarity
@@ -109,6 +110,18 @@ def _happy_path(target: dict[str, Any]) -> bool:
     return target["basis"] == "ACCEPTANCE" and target["primary_type"] in {"FUNCTIONAL", "FIELD", "PERFORMANCE"}
 
 
+def unique_refs(refs: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Evidence references once each, in first-cited order (a claim, an oracle and a
+    promoted asset often cite the same source and locator)."""
+    seen, out = set(), []
+    for ref in refs:
+        key = json.dumps(ref, sort_keys=True, ensure_ascii=False)
+        if key not in seen:
+            seen.add(key)
+            out.append(ref)
+    return out
+
+
 def _resolve_test(ref: str, tests_by_ref: dict[str, dict[str, Any]]) -> dict[str, Any] | None:
     return tests_by_ref.get(ref)
 
@@ -185,8 +198,8 @@ def validate_expansion(payload: dict[str, Any], context: dict[str, Any]) -> dict
             "claims": [claim["id"] for claim in anchored], "claim_keys": anchors,
             **traceability(anchored, raw.get("related_identifiers"), label, context["authority"],
                            context["authority_texts"], design["requirements"], errors),
-            "source_refs": [ref for claim in anchored for ref in claim["source_refs"]]
-            + ([dict(oracle)] if isinstance(oracle, dict) else []),
+            "source_refs": unique_refs([ref for claim in anchored for ref in claim["source_refs"]]
+                                       + ([dict(oracle)] if isinstance(oracle, dict) else [])),
             **{field: _text(raw.get(field)) for field in (
                 "title", "objective", "family", "actor", "state", "trigger", "expected",
                 "failure_domain", "priority_reason",
@@ -329,7 +342,8 @@ def validate_expansion(payload: dict[str, Any], context: dict[str, Any]) -> dict
             test = build_test(raw, label, str(item.get("dimension") or "DATA_INTEGRITY"), basis)
             if test:
                 test["basis"] = basis
-                test["source_refs"].append({"source": assets[asset]["source"], "reference": assets[asset]["reference"]})
+                test["source_refs"] = unique_refs(
+                    [*test["source_refs"], {"source": assets[asset]["source"], "reference": assets[asset]["reference"]}])
                 record["test_ref"] = test["key"]
         elif disposition == "QUESTION_REQUIRED":
             record["question"] = _text(item.get("question"))
@@ -434,7 +448,7 @@ def validate_expansion(payload: dict[str, Any], context: dict[str, Any]) -> dict
         test["claims"] = list(dict.fromkeys(c for target in atomics for c in target["claims"]))
         test["requirement_refs"] = list(dict.fromkeys(r for target in atomics for r in target["requirement_refs"]))
         test["identifiers"] = list(dict.fromkeys(i for target in atomics for i in target["identifiers"]))
-        test["source_refs"] = [ref for target in atomics for ref in target["source_refs"]]
+        test["source_refs"] = unique_refs([ref for target in atomics for ref in target["source_refs"]])
 
     journeys = _journeys(context["authority_index"], candidates, errors)
     if errors:

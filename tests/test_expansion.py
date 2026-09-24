@@ -171,6 +171,22 @@ class ImplementationTestAssetTests(unittest.TestCase):
     def test_refund_api_tests_inside_implementation_are_challenged(self) -> None:
         self.check("api-refunds")
 
+    def test_expansion_tests_cite_each_evidence_reference_once(self) -> None:
+        # A promotion without its own oracle_source uses the asset itself as oracle; the
+        # asset reference must then be cited once, not twice.
+        def asset_as_oracle(pack):
+            for item in pack["stages"]["expansion"]["test_assets"]:
+                if item["disposition"] == "PROMOTE_CHARACTERIZATION":
+                    item["test"].pop("oracle_source", None)
+        run = PackRun("api-refunds", asset_as_oracle)
+        self.addCleanup(run.close)
+        run.through("expansion")
+        result = json.loads((run.run_dir / "stages" / "expansion.result.json").read_text(encoding="utf-8"))
+        for test in result["tests"]:
+            keys = [json.dumps(ref, sort_keys=True) for ref in test["source_refs"]]
+            self.assertEqual(len(keys), len(set(keys)), test["key"])
+        self.assertTrue(any(item["disposition"].startswith("PROMOTE") for item in result["test_asset_challenge"]))
+
     def test_undispositioned_implementation_side_test_is_rejected(self) -> None:
         def mutate(pack):
             self.as_implementation(pack)
