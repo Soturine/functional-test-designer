@@ -102,6 +102,10 @@ During generation the selected evidence grounds the procedure. After generation 
 - **Steps:** who, where, what, target, data, expected — plus what evidence to collect when the observation is physical or asynchronous (timestamp, device identity, observed identifier, resulting state).
 - **Postconditions and cleanup:** the resulting state and how the environment returns to a reusable state.
 
+**One observable outcome per step.** An expected result says what becomes observable — a status, a counter, a state, a message, a record — never only that the request was sent or processed, and never "X or Y": when the policy could go either way, the unknown is declared instead.
+
+**Fixtures are defined where they are used.** Every fixture a procedure names appears in its test data with the same role and properties everywhere in that procedure.
+
 **Controlled conditions are grounded or declared.** Restarting a service, cutting a connection, powering off a device or keeping a tag or label from being read needs evidence that says how (the step is listed in an `evidence_ref`'s `supports`). Otherwise keep the scenario's intent — "a traversal in which the identifier is not captured" — and declare `UNKNOWN_SETUP_PATH` or `MISSING_EXECUTION_SURFACE`; never guess a technique (covering, shielding, distance, orientation, a command). Such a case is honestly not READY. Manual, physical and hardware cases stay in the suite, written for a human.
 
 **Capacity is characterized, not invented.** An expected result asserts a load, latency or capacity number only when the designed Test Case states it. Otherwise separate the *experiment configuration* (a declared, progressively increasing load and the stop rule, in the action or test data) from the *result*: record request count and rate, throughput, latency, errors and timeouts, lost or duplicated operations and integrity failures, and report the observed saturation or degradation point, linking the Question that asks for the threshold.

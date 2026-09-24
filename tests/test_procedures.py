@@ -271,6 +271,59 @@ class ExecutableProcedureTests(unittest.TestCase):
         with self.assertRaisesRegex(StageError, "suppresses a signal"):
             run.submit("procedures")
 
+    def test_an_expected_result_that_only_echoes_the_action_is_rejected(self) -> None:
+        from procedures import ACTION_ECHO
+        for echo in ("The request is sent.", "A resposta é recebida.", "O envio é processado.",
+                     "As duas solicitações chegam juntas.", "La respuesta es recibida.", "O formulário processa a tentativa."):
+            self.assertIsNotNone(ACTION_ECHO.search(echo), echo)
+        for observable in ("The response is 422 with code AMOUNT_EXCEEDS_CAPTURE.",
+                           "A resposta contabiliza a leitura como rejeitada.", "The request is rejected with 401."):
+            self.assertIsNone(ACTION_ECHO.search(observable), observable)
+
+        def echo(pack):
+            procedure(pack, "T1")["steps"][0]["expected_result"] = "The request is sent."
+        run = self.reach("saas-accounts", echo)
+        with self.assertRaisesRegex(StageError, "only says the action happened"):
+            run.submit("procedures")
+
+    def test_alternative_outcomes_are_not_an_oracle(self) -> None:
+        from procedures import ALTERNATIVE_OUTCOMES
+        for either in ("The record is shown or access is denied.", "O registro é exibido ou o acesso é negado.",
+                       "O formulário aceita o envio ou exibe a validação da transição."):
+            self.assertIsNotNone(ALTERNATIVE_OUTCOMES.search(either), either)
+        for single in ("The order is finalized without error or exception.", "A caixa é associada à ordem e o status é Separada.",
+                       "The status is Active or Suspended in the list filter."):
+            self.assertIsNone(ALTERNATIVE_OUTCOMES.search(single), single)
+
+        def either(pack):
+            procedure(pack, "T1")["steps"][0]["expected_result"] = "The page is shown or access is denied."
+        run = self.reach("saas-accounts", either)
+        with self.assertRaisesRegex(StageError, "offers alternative outcomes"):
+            run.submit("procedures")
+
+    def test_every_fixture_used_is_described_in_test_data(self) -> None:
+        def undescribed(pack):
+            procedure(pack, "T1")["preconditions"].append("USER_AUDITOR_B watches the account.")
+        run = self.reach("saas-accounts", undescribed)
+        with self.assertRaisesRegex(StageError, r"uses fixtures \['USER_AUDITOR_B'\] that test_data does not describe"):
+            run.submit("procedures")
+
+    def test_codes_from_the_selected_sources_are_vocabulary_not_fixtures(self) -> None:
+        # api-refunds steps quote error codes (AMOUNT_EXCEEDS_CAPTURE, TOO_MANY_REFUNDS) that the
+        # selected specification and service use; they need no test_data row.
+        run = PackRun("api-refunds")
+        self.addCleanup(run.close)
+        run.finalize(("JSON",))
+
+    def test_object_first_physical_manipulation_is_recognized(self) -> None:
+        for action in ("Pass CRATE_A through the gate with the label covered.",
+                       "Passar CAIXA_A pelo leitor com a etiqueta coberta.",
+                       "Run the export with the database connection disconnected.",
+                       "Pasar la caja con la etiqueta cubierta."):
+            self.assertIsNotNone(ENVIRONMENT_CONTROL.search(action), action)
+        for action in ("Print the label of PACKAGE_A.", "Open the covered-items report.", "Scan the label of CRATE_A."):
+            self.assertIsNone(ENVIRONMENT_CONTROL.search(action), action)
+
     def test_an_undefined_sla_cannot_become_a_pass_fail_threshold(self) -> None:
         def threshold(pack):
             procedure(pack, "T1")["steps"][-1]["expected_result"] += " The response arrives in under 200 ms."

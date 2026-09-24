@@ -622,6 +622,10 @@
       {
        "name": "SENSOR_A",
        "description": "furnace sensor registered for FURNACE_A"
+      },
+      {
+       "name": "FURNACE_A",
+       "description": "furnace whose temperature SENSOR_A reports"
       }
      ],
      "steps": [
@@ -654,6 +658,10 @@
       {
        "name": "SENSOR_A",
        "description": "furnace sensor registered for FURNACE_A"
+      },
+      {
+       "name": "FURNACE_A",
+       "description": "furnace whose temperature SENSOR_A reports"
       }
      ],
      "steps": [
@@ -686,6 +694,10 @@
       {
        "name": "USER_OPERATOR_A",
        "description": "user without the shift supervisor role"
+      },
+      {
+       "name": "FURNACE_A",
+       "description": "furnace whose temperature SENSOR_A reports"
       }
      ],
      "steps": [
@@ -718,6 +730,10 @@
       {
        "name": "SENSOR_A",
        "description": "furnace sensor registered for FURNACE_A"
+      },
+      {
+       "name": "FURNACE_A",
+       "description": "furnace whose temperature SENSOR_A reports"
       }
      ],
      "steps": [
@@ -750,6 +766,10 @@
       {
        "name": "SENSOR_A",
        "description": "furnace sensor registered for FURNACE_A"
+      },
+      {
+       "name": "FURNACE_A",
+       "description": "furnace whose temperature SENSOR_A reports"
       }
      ],
      "steps": [
@@ -786,6 +806,10 @@
       {
        "name": "SENSOR_A",
        "description": "furnace sensor registered for FURNACE_A"
+      },
+      {
+       "name": "FURNACE_A",
+       "description": "furnace whose temperature SENSOR_A reports"
       }
      ],
      "steps": [
@@ -833,6 +857,10 @@
       {
        "name": "SENSOR_A",
        "description": "furnace sensor registered for FURNACE_A"
+      },
+      {
+       "name": "FURNACE_A",
+       "description": "furnace whose temperature SENSOR_A reports"
       }
      ],
      "steps": [

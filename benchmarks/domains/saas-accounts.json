@@ -685,6 +685,10 @@
       {
        "name": "EMAIL_NEW",
        "description": "an email address not yet invited to ACCOUNT_A"
+      },
+      {
+       "name": "ACCOUNT_A",
+       "description": "account owned by USER_OWNER_A with free seats below its seat limit"
       }
      ],
      "steps": [
@@ -717,6 +721,10 @@
       {
        "name": "EMAIL_OLD",
        "description": "invited address whose invitation is older than seven days"
+      },
+      {
+       "name": "ACCOUNT_A",
+       "description": "account owned by USER_OWNER_A with free seats below its seat limit"
       }
      ],
      "steps": [
@@ -755,6 +763,10 @@
       {
        "name": "EMAIL_NEW",
        "description": "invited address with a valid pending invitation"
+      },
+      {
+       "name": "ACCOUNT_A",
+       "description": "account owned by USER_OWNER_A with free seats below its seat limit"
       }
      ],
      "steps": [
@@ -787,6 +799,10 @@
       {
        "name": "EMAIL_OLD",
        "description": "invited address whose invitation expired"
+      },
+      {
+       "name": "ACCOUNT_A",
+       "description": "account owned by USER_OWNER_A with free seats below its seat limit"
       }
      ],
      "steps": [
@@ -819,6 +835,14 @@
       {
        "name": "ACCOUNT_FULL",
        "description": "account whose active members equal the plan seat limit"
+      },
+      {
+       "name": "EMAIL_NEW",
+       "description": "an email address not yet invited to ACCOUNT_A"
+      },
+      {
+       "name": "USER_OWNER_A",
+       "description": "user with the Owner role in ACCOUNT_A"
       }
      ],
      "steps": [
@@ -851,6 +875,14 @@
       {
        "name": "USER_MEMBER_A",
        "description": "user with the Member role in ACCOUNT_A"
+      },
+      {
+       "name": "ACCOUNT_A",
+       "description": "account owned by USER_OWNER_A with free seats below its seat limit"
+      },
+      {
+       "name": "EMAIL_NEW",
+       "description": "an email address not yet invited to ACCOUNT_A"
       }
      ],
      "steps": [
@@ -880,6 +912,14 @@
       {
        "name": "USER_MEMBER_B",
        "description": "second member of ACCOUNT_A"
+      },
+      {
+       "name": "ACCOUNT_A",
+       "description": "account owned by USER_OWNER_A with free seats below its seat limit"
+      },
+      {
+       "name": "USER_MEMBER_A",
+       "description": "user with the Member role in ACCOUNT_A"
       }
      ],
      "steps": [
@@ -909,6 +949,14 @@
       {
        "name": "USER_OWNER_A",
        "description": "user with the Owner role in ACCOUNT_A"
+      },
+      {
+       "name": "ACCOUNT_A",
+       "description": "account owned by USER_OWNER_A with free seats below its seat limit"
+      },
+      {
+       "name": "EMAIL_NEW",
+       "description": "an email address not yet invited to ACCOUNT_A"
       }
      ],
      "steps": [
@@ -941,6 +989,10 @@
       {
        "name": "ACCOUNT_ONE_LEFT",
        "description": "account with active members equal to the seat limit minus one"
+      },
+      {
+       "name": "EMAIL_NEW",
+       "description": "an email address not yet invited to ACCOUNT_A"
       }
      ],
      "steps": [
@@ -977,6 +1029,10 @@
       {
        "name": "EMAIL_Y",
        "description": "second pending invitee"
+      },
+      {
+       "name": "ACCOUNT_ONE_LEFT",
+       "description": "account with active members equal to the seat limit minus one"
       }
      ],
      "steps": [
@@ -1014,6 +1070,10 @@
       {
        "name": "USER_OWNER_A",
        "description": "user with the Owner role in ACCOUNT_A"
+      },
+      {
+       "name": "EMAIL_NEW",
+       "description": "an email address not yet invited to ACCOUNT_A"
       }
      ],
      "steps": [
@@ -1057,6 +1117,10 @@
       {
        "name": "EMAIL_NEW",
        "description": "address of the teammate"
+      },
+      {
+       "name": "ACCOUNT_A",
+       "description": "account owned by USER_OWNER_A with free seats below its seat limit"
       }
      ],
      "steps": [

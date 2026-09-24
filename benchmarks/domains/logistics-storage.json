@@ -653,6 +653,10 @@
       {
        "name": "POSICAO_DESTINO",
        "description": "posição livre"
+      },
+      {
+       "name": "POSICAO_ORIGEM",
+       "description": "posição ocupada por PALETE_A"
       }
      ],
      "steps": [
@@ -685,6 +689,14 @@
       {
        "name": "POSICAO_ORIGEM",
        "description": "posição ocupada por PALETE_A"
+      },
+      {
+       "name": "PALETE_A",
+       "description": "palete Armazenado"
+      },
+      {
+       "name": "POSICAO_DESTINO",
+       "description": "posição livre"
       }
      ],
      "steps": [
@@ -721,6 +733,10 @@
       {
        "name": "PALETE_NOVO_A",
        "description": "palete ainda não registrado"
+      },
+      {
+       "name": "PALETE_B",
+       "description": "palete Armazenado que ocupa POSICAO_OCUPADA"
       }
      ],
      "steps": [
@@ -753,6 +769,18 @@
       {
        "name": "POSICAO_OCUPADA",
        "description": "posição com PALETE_B"
+      },
+      {
+       "name": "PALETE_A",
+       "description": "palete Armazenado"
+      },
+      {
+       "name": "PALETE_B",
+       "description": "palete Armazenado que ocupa POSICAO_OCUPADA"
+      },
+      {
+       "name": "POSICAO_ORIGEM",
+       "description": "posição ocupada por PALETE_A"
       }
      ],
      "steps": [
@@ -785,6 +813,14 @@
       {
        "name": "OPERADOR_A",
        "description": "usuário com perfil de operador de armazém"
+      },
+      {
+       "name": "PALETE_NOVO_A",
+       "description": "palete ainda não registrado no armazém"
+      },
+      {
+       "name": "POSICAO_LIVRE_A",
+       "description": "posição de armazenagem livre"
       }
      ],
      "steps": [
@@ -817,6 +853,18 @@
       {
        "name": "OPERADOR_A",
        "description": "usuário com perfil de operador de armazém"
+      },
+      {
+       "name": "PALETE_A",
+       "description": "palete Armazenado"
+      },
+      {
+       "name": "POSICAO_DESTINO",
+       "description": "posição livre"
+      },
+      {
+       "name": "POSICAO_ORIGEM",
+       "description": "posição ocupada por PALETE_A"
       }
      ],
      "steps": [
@@ -853,6 +901,10 @@
       {
        "name": "POSICAO_DEFINITIVA",
        "description": "posição final"
+      },
+      {
+       "name": "PALETE_A",
+       "description": "palete Armazenado"
       }
      ],
      "steps": [
@@ -882,6 +934,10 @@
       {
        "name": "PALETE_A",
        "description": "palete já registrado"
+      },
+      {
+       "name": "POSICAO_OCUPADA",
+       "description": "posição com PALETE_B"
       }
      ],
      "steps": [
@@ -918,6 +974,10 @@
       {
        "name": "PALETE_Y",
        "description": "segundo palete"
+      },
+      {
+       "name": "POSICAO_LIVRE_A",
+       "description": "posição de armazenagem livre"
       }
      ],
      "steps": [
@@ -954,6 +1014,14 @@
       {
        "name": "PALETE_NOVO_A",
        "description": "palete recebido"
+      },
+      {
+       "name": "POSICAO_DEFINITIVA",
+       "description": "posição final"
+      },
+      {
+       "name": "POSICAO_RECEBIMENTO",
+       "description": "posição usada na entrada"
       }
      ],
      "steps": [

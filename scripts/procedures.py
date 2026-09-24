@@ -90,6 +90,32 @@ ABSTRACT_OBSERVATION = re.compile(
     r"^\s*(?:it works|it worked|success(?:ful)?|ok|done|funciona|funcionou|deu certo|sucesso)\s*[.!]?\s*$",
     re.IGNORECASE,
 )
+# An expected result that only restates that the action happened observes nothing:
+# "the request is sent", "a resposta é recebida", "o envio é processado".
+ACTION_ECHO = re.compile(
+    r"^\s*(?:(?:the|a|o|os|as|la|el|las|los|both|all|as duas|os dois|todas as|todos os)\s+)?"
+    r"(?:\w+\s+)?(?:request|response|submission|query|call|message|attempt|save|write|"
+    r"requisi[cç][aã]o|requisi[cç][oõ]es|resposta|respostas|solicita[cç][aã]o|solicita[cç][oõ]es|envio|consulta|"
+    r"grava[cç][aã]o|tentativa|mensagem|chamada|petici[oó]n|respuesta|solicitud|consulta)s?\s+"
+    r"(?:is |are |was |were |é |são |foi |foram |fica |ficam |es |son |fue )?"
+    r"(?:sent|received|processed|submitted|executed|attempted|made|done|answered|delivered|"
+    r"arrives?(?: together)?|enviad[oa]s?|recebid[oa]s?|processad[oa]s?|submetid[oa]s?|executad[oa]s?|"
+    r"tentad[oa]s?|feit[oa]s?|respondid[oa]s?|entregue?s?|cheg(?:a|am)(?: junt[oa]s)?|recibid[oa]s?|"
+    r"procesad[oa]s?|enviad[oa]s?)\b[^.;]{0,25}[.!]?\s*$|"
+    r"^\s*(?:the |o |a )?(?:form|system|formul[aá]rio|sistema)\s+(?:processes|receives|processa|recebe)\s+"
+    r"(?:the |a |o )?(?:attempt|submission|request|tentativa|envio|requisi[cç][aã]o)\s*[.!]?\s*$",
+    re.IGNORECASE,
+)
+# "X is shown or access is denied": two different outcomes offered as the oracle.
+ALTERNATIVE_OUTCOMES = re.compile(
+    r"\b(?:is|are|becomes?|shows?|displays?|accepts?|opens?|é|são|fica|ficam|exibe|mostra|aceita|abre)\b"
+    r"[^.;]{0,60}?\s(?:or|ou)\s+(?:(?:the|a|o|os|as)\s+)?[^.;]{0,30}?\b"
+    r"(?:is|are|shows?|displays?|denies|denied|rejects?|rejected|opens?|é|são|fica|ficam|exibe|mostra|"
+    r"nega|negad[oa]|recusa|recusad[oa]|abre)\b",
+    re.IGNORECASE,
+)
+# Semantic fixtures (ACTOR_A, ENTITY_ACTIVE_A, DEVICE_B) must be described in test_data.
+FIXTURE_NAME = re.compile(r"\b[A-Z][A-Z0-9]*_[A-Z0-9_]*[A-Z0-9]\b")
 ACTION_VERB = re.compile(
     r"\b(?:access|open|search|locate|select|enter|provide|scan|read|confirm|submit|consult|click|"
     r"verify|review|choose|cancel|finalize|save|filter|export|move|pass|start|log in|"
@@ -121,7 +147,14 @@ ENVIRONMENT_CONTROL = re.compile(
     r"connection|link|power|device|hardware|sensor|reader|antenna|scanner|printer|terminal|signal|tag|label|"
     r"servi[cç]o|servidor|processo|cont[eê]iner|banco(?: de dados)?|fila|rede|conex[aã]o|liga[cç][aã]o|energia|"
     r"dispositivo|equipamento|sensor|leitor|antena|impressora|terminal|sinal|etiqueta|"
-    r"servicio|red|conexi[oó]n|equipo|lector|se[nñ]al|base de datos|cola)s?\b",
+    r"servicio|red|conexi[oó]n|equipo|lector|se[nñ]al|base de datos|cola)s?\b|"
+    # the same manipulation phrased object-first: "with the label covered", "rede desconectada"
+    r"\b(?:service|server|process|container|database|network|connection|power|device|sensor|reader|antenna|"
+    r"scanner|signal|tag|label|servi[cç]o|servidor|processo|banco|rede|conex[aã]o|energia|dispositivo|"
+    r"equipamento|leitor|antena|sinal|etiqueta|servicio|red|lector|se[nñ]al)s?\b[^.;:]{0,20}?\b"
+    r"(?:covered|shielded|blocked|obstructed|disconnected|unplugged|powered (?:off|down)|stopped|killed|"
+    r"cobert[oa]s?|blindad[oa]s?|obstru[ií]d[oa]s?|bloquead[oa]s?|desconectad[oa]s?|desligad[oa]s?|"
+    r"parad[oa]s?|derrubad[oa]s?|cubiert[oa]s?|apagad[oa]s?|detenid[oa]s?)\b",
     re.IGNORECASE,
 )
 _COMPARATOR = (
@@ -203,6 +236,7 @@ def validate_procedures(payload: dict[str, Any], context: dict[str, Any]) -> dic
     question_keys = set(context["question_keys"])
     blocking_by_test = context.get("blocking_by_test", {})
     blocking_questions = set(context.get("blocking_questions", set()))
+    source_tokens = set(context.get("source_tokens", set()))
     procedures: dict[str, dict[str, Any]] = {}
     for item in payload.get("procedures", []) or []:
         ref = _text(item.get("test"))
@@ -271,6 +305,15 @@ def validate_procedures(payload: dict[str, Any], context: dict[str, Any]) -> dic
                 errors.append(f"{label} step {number} action is abstract; say who does which atomic action to which target (and where, with which semantic data) as the evidence supports, or keep the known intent and declare MISSING_EXECUTION_SURFACE / UNKNOWN_SETUP_PATH")
             if expected and ABSTRACT_OBSERVATION.search(expected):
                 errors.append(f"{label} step {number} expected result is not observable")
+            if expected and ACTION_ECHO.search(expected):
+                errors.append(
+                    f"{label} step {number} expected result only says the action happened; state what becomes "
+                    "observable (status, counter, state, message, record)")
+            if expected and ALTERNATIVE_OUTCOMES.search(expected):
+                errors.append(
+                    f"{label} step {number} expected result offers alternative outcomes; the oracle must be one "
+                    "deterministic result — when the policy is unknown, declare it (UNRESOLVED_PERMISSION, "
+                    "AMBIGUOUS_POLICY) instead of accepting either")
             if AUTH_ONLY.search(action) and not about_auth:
                 errors.append(
                     f"{label} step {number} only authenticates; put the signed-in actor in preconditions and "
@@ -297,6 +340,16 @@ def validate_procedures(payload: dict[str, Any], context: dict[str, Any]) -> dic
                 "step": number, "action": action, "expected_result": expected or None,
                 "needs_clarification": not expected,
             })
+        defined = {row["name"] for row in normalized_data}
+        used_text = " ".join([*preconditions, *(s["action"] + " " + (s["expected_result"] or "") for s in normalized_steps),
+                              *[_text(v) for v in item.get("postconditions", []) or []],
+                              *[_text(v) for v in item.get("cleanup", []) or []]])
+        # Codes and constants the selected sources themselves use are vocabulary, not fixtures.
+        undefined = sorted(set(FIXTURE_NAME.findall(used_text)) - defined - source_tokens)
+        if undefined:
+            errors.append(
+                f"{label} uses fixtures {undefined} that test_data does not describe; a reader of this Test Case "
+                "alone must know who or what each fixture is")
         if len(normalized_steps) == 1:
             action = normalized_steps[0]["action"]
             if len(_text(item.get("single_step_reason")).split()) < 3:
@@ -349,6 +402,11 @@ def validate_procedures(payload: dict[str, Any], context: dict[str, Any]) -> dic
     if errors:
         raise StageError("procedures", errors)
     return {"procedures": procedures, "warnings": procedure_warnings(procedures), "metrics": procedure_metrics(procedures)}
+
+
+def source_vocabulary(texts: Any) -> set[str]:
+    """UPPER_SNAKE tokens the selected sources use (error codes, constants): not fixtures."""
+    return {token for text in texts for token in FIXTURE_NAME.findall(text or "")}
 
 
 def _template(action: str) -> str:

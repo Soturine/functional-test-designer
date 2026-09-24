@@ -723,6 +723,10 @@
       {
        "name": "KEY_A",
        "description": "idempotency key already used by CLIENT_A"
+      },
+      {
+       "name": "PAYMENT_CAPTURED_100",
+       "description": "payment captured for 100.00 owned by CLIENT_A"
       }
      ],
      "steps": [
@@ -760,6 +764,10 @@
       {
        "name": "CLIENT_A",
        "description": "API client with valid credentials"
+      },
+      {
+       "name": "PAYMENT_CAPTURED_100",
+       "description": "payment captured for 100.00 owned by CLIENT_A"
       }
      ],
      "steps": [
@@ -802,6 +810,14 @@
       {
        "name": "REFUND_B",
        "description": "refund created by CLIENT_B"
+      },
+      {
+       "name": "CLIENT_A",
+       "description": "API client with valid credentials"
+      },
+      {
+       "name": "CLIENT_B",
+       "description": "second API client with valid credentials that owns REFUND_B"
       }
      ],
      "steps": [
@@ -835,6 +851,10 @@
       {
        "name": "PAYMENT_CAPTURED_100",
        "description": "payment captured for 100.00 owned by CLIENT_A"
+      },
+      {
+       "name": "CLIENT_A",
+       "description": "API client with valid credentials"
       }
      ],
      "steps": [
@@ -868,6 +888,10 @@
       {
        "name": "PAYMENT_CAPTURED_100",
        "description": "payment captured for 100.00 owned by CLIENT_A"
+      },
+      {
+       "name": "CLIENT_A",
+       "description": "API client with valid credentials"
       }
      ],
      "steps": [
@@ -904,6 +928,10 @@
       {
        "name": "PAYMENT_WITH_THREE_REFUNDS",
        "description": "captured payment already refunded three times"
+      },
+      {
+       "name": "CLIENT_A",
+       "description": "API client with valid credentials"
       }
      ],
      "steps": [

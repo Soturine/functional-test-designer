@@ -649,6 +649,10 @@
       {
        "name": "INSPETOR_VENCIDO",
        "description": "inspetor com certificação vencida antes da data atual"
+      },
+      {
+       "name": "COMPONENTE_A",
+       "description": "componente aguardando inspeção"
       }
      ],
      "steps": [
@@ -681,6 +685,14 @@
       {
        "name": "FERRAMENTA_CAL_A",
        "description": "ferramenta calibrada com número de série conhecido"
+      },
+      {
+       "name": "COMPONENTE_A",
+       "description": "componente aguardando inspeção"
+      },
+      {
+       "name": "INSPETOR_CERT_A",
+       "description": "inspetor com certificação válida"
       }
      ],
      "steps": [
@@ -781,6 +793,10 @@
       {
        "name": "INSPETOR_ULTIMO_DIA",
        "description": "inspetor cuja certificação vence hoje"
+      },
+      {
+       "name": "COMPONENTE_A",
+       "description": "componente aguardando inspeção"
       }
      ],
      "steps": [
@@ -819,6 +835,10 @@
       {
        "name": "INSPETOR_CERT_A",
        "description": "inspetor com certificação válida"
+      },
+      {
+       "name": "COMPONENTE_APROVADO",
+       "description": "componente com última inspeção Aprovada"
       }
      ],
      "steps": [

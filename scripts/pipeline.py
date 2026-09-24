@@ -468,8 +468,11 @@ def submit_stage(run_dir: Path, stage: str, payload: dict[str, Any]) -> dict[str
             design, expanded = _result(run_dir, "design"), _result(run_dir, "expansion")
             tests = [*design["tests"], *expanded["tests"]]
             questions = [*design["questions"], *expanded["questions"]]
+            snapshots = sorted((run_dir / "evidence" / "text").glob("*.txt"))
             result = procedure_stage.validate_procedures(payload, {
                 **base, "tests": tests, "question_keys": [q["key"] for q in questions],
+                "source_tokens": procedure_stage.source_vocabulary(
+                    path.read_text(encoding="utf-8") for path in snapshots),
                 "blocking_by_test": _blocking_by_test(tests, questions),
                 "blocking_questions": {q["key"] for q in questions if q["blocking"]},
             })
@@ -1025,6 +1028,7 @@ STAGE_GUIDE = {
         "The oracle_step (default: last) must observe the designed expected result.",
         "A procedure must stand alone at execution time: a tester or an automation agent reading only the Test Case must not need the requirements, source code or FTD internals to understand what it means and how to run it. State the resources and their relationships (who ACTOR_A is, which properties ENTITY_A has, which device or environment is involved), the starting state, what evidence to collect, the resulting state (postconditions) and, when evidence supports it, how to return the environment to a reusable state (cleanup).",
         "A step that changes the environment or suppresses a signal to create the test condition (restart or stop a service, cut a connection, power off or shield a device, keep a tag or label from being read) needs evidence that says how: list the step number in an evidence_ref's `supports`. Without it, keep the scenario (its intent, e.g. 'a traversal in which the identifier is not captured') and declare UNKNOWN_SETUP_PATH or MISSING_EXECUTION_SURFACE — never invent the technique, and such a case is not READY.",
+        "Every expected result states what becomes observable (a status, counter, state, message or record) — never only that the request was sent, received or processed — and names one outcome: when the policy could go either way, declare the unknown instead of writing 'X or Y'. Every semantic fixture used (ACTOR_A, ENTITY_A, DEVICE_B) is described in test_data with its role, properties and relationships, consistently across preconditions and steps.",
         "Load, latency and capacity: an expected result may assert a numeric threshold only when the designed Test Case states it. When the sources define no SLA, write a characterization: apply a declared, progressively increasing load (experiment configuration, in the action or test_data), record rate, throughput, latency, errors/timeouts, lost or duplicated operations and integrity failures, stop by the declared method, and report the observed saturation or degradation point — linking the Question that asks for the threshold.",
         "Record only material unknowns (MISSING_ORACLE, AMBIGUOUS_POLICY, UNRESOLVED_PERMISSION, MISSING_EXECUTION_SURFACE, UNKNOWN_SETUP_PATH, EXTERNAL_DEPENDENCY_UNAVAILABLE) or automation-only unknowns (MISSING_FIXTURE, MISSING_SELECTOR, MISSING_ENVIRONMENT). Status and automation readiness are derived from them.",
         "Classify automation.suitability (HIGH, MEDIUM, LOW, MANUAL_ONLY) and automation.layer independently of readiness.",

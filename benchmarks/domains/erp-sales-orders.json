@@ -599,6 +599,10 @@
       {
        "name": "PEDIDO_CARO",
        "description": "pedido Borrador con total mayor que el crédito"
+      },
+      {
+       "name": "CLIENTE_SIN_CREDITO",
+       "description": "cliente cuyo crédito disponible es menor que el total de PEDIDO_CARO"
       }
      ],
      "steps": [
@@ -663,6 +667,14 @@
       {
        "name": "SUPERVISOR_A",
        "description": "usuario con perfil de supervisor"
+      },
+      {
+       "name": "PEDIDO_DESC_15",
+       "description": "pedido Borrador con descuento del 15 %"
+      },
+      {
+       "name": "VENDEDOR_A",
+       "description": "usuario con perfil de vendedor"
       }
      ],
      "steps": [
@@ -759,6 +771,10 @@
       {
        "name": "VENDEDOR_A",
        "description": "usuario con perfil de vendedor"
+      },
+      {
+       "name": "PEDIDO_DESC_15",
+       "description": "pedido Borrador con descuento del 15 %"
       }
      ],
      "steps": [
@@ -795,6 +811,10 @@
       {
        "name": "SUPERVISOR_A",
        "description": "usuario con perfil de supervisor"
+      },
+      {
+       "name": "PEDIDO_DESC_15",
+       "description": "pedido Borrador con descuento del 15 %"
       }
      ],
      "steps": [
