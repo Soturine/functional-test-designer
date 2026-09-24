@@ -88,6 +88,7 @@ class CanonicalImmutabilityTests(unittest.TestCase):
             preconditions=["A line sensor is actively streaming readings."],
             steps=[{"action": "Power off the sensor mid-reading.",
                     "expected_result": "The reading is marked incomplete."}],
+            unknowns=[{"kind": "UNKNOWN_SETUP_PATH", "detail": "the sources do not say how the sensor is powered off on the bench"}],
         )], "seed_dispositions": []}
         ch.submit_challenge(run.run_dir, "run", payload)
         ch.finalize_challenge(run.run_dir, "run")
@@ -95,6 +96,26 @@ class CanonicalImmutabilityTests(unittest.TestCase):
         self.assertEqual(canonical_before, file_digest(run.run_dir / "canonical-suite.json"))
         self.assertEqual(manifest_before, (run.run_dir / "run-manifest.json").read_text(encoding="utf-8"))
         self.assertEqual(tc_count_before, len(run.output("test-cases.json")["test_cases"]))
+
+    def test_challenge_cases_follow_the_canonical_step_rules(self) -> None:
+        run = PackRun("iot-line-monitoring")
+        self.addCleanup(run.close)
+        run.finalize()
+        ch.start_challenge(run.run_dir, "run", seeds=[])
+        source = next(iter(run.pack["sources"]))
+        payload = {"cases": [_case(
+            evidence_refs=[{"source": source, "reference": "n/a"}],
+            preconditions=["SENSOR_A is streaming readings."],
+            steps=[{"action": "Power off the sensor mid-reading.", "expected_result": "The request is sent."},
+                   {"action": "Open the alarm list.", "expected_result": "The alarm is shown or the list is empty."},
+                   {"action": "Send readings in a burst.", "expected_result": "All readings are stored within 200 ms."}],
+        )], "seed_dispositions": []}
+        with self.assertRaises(StageError) as caught:
+            ch.submit_challenge(run.run_dir, "run", payload)
+        text = str(caught.exception)
+        for fragment in ("never invent the technique", "only says the action happened", "alternative outcomes",
+                         "no related canonical Test Case states", "uses fixtures ['SENSOR_A']"):
+            self.assertIn(fragment, text)
 
     def test_a_failing_submit_leaves_the_parent_and_the_challenge_run_untouched(self) -> None:
         run = PackRun("erp-sales-orders")

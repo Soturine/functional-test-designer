@@ -29,9 +29,9 @@ if str(SCRIPT_DIR) not in sys.path:
 from common import StageError, file_digest, normalize_identifier, now, read_json, write_json
 from design import check_locale, unknown_keys
 from procedures import (
-    ABSTRACT_ACTION, ABSTRACT_OBSERVATION, AUTH_ONLY, GENERIC_PRECONDITION, PLACEHOLDER,
-    SUITABILITY, MATERIAL_UNKNOWNS, AUTOMATION_UNKNOWNS, PATH_UNKNOWNS,
-    compressed_action, hidden_subtest,
+    ABSTRACT_ACTION, ABSTRACT_OBSERVATION, ACTION_ECHO, ALTERNATIVE_OUTCOMES, AUTH_ONLY, ENVIRONMENT_CONTROL,
+    FIXTURE_NAME, GENERIC_PRECONDITION, LOAD_THRESHOLD, PLACEHOLDER, SUITABILITY, MATERIAL_UNKNOWNS,
+    AUTOMATION_UNKNOWNS, PATH_UNKNOWNS, compressed_action, hidden_subtest, source_vocabulary,
 )
 import pipeline
 
@@ -302,6 +302,10 @@ def _validate_steps(steps: list[dict[str, Any]], label: str, locale: str, errors
             errors.append(f"{label} step {number} action is abstract; say who does which atomic action to which target (and where, with which semantic data) as the evidence supports, or keep the known intent and declare MISSING_EXECUTION_SURFACE / UNKNOWN_SETUP_PATH")
         if expected and ABSTRACT_OBSERVATION.search(expected):
             errors.append(f"{label} step {number} expected result is not observable")
+        if expected and ACTION_ECHO.search(expected):
+            errors.append(f"{label} step {number} expected result only says the action happened; state what becomes observable")
+        if expected and ALTERNATIVE_OUTCOMES.search(expected):
+            errors.append(f"{label} step {number} expected result offers alternative outcomes; state one result or declare the unknown")
         if AUTH_ONLY.search(action):
             errors.append(f"{label} step {number} only authenticates; describe the real execution path")
         if hidden_subtest(action):
@@ -434,6 +438,28 @@ def validate_challenge_payload(payload: dict[str, Any], context: dict[str, Any])
                     "MISSING_EXECUTION_SURFACE / UNKNOWN_SETUP_PATH"
                 )
             normalized_steps = _validate_steps(steps, label, locale, errors)
+            # The same execution rules as canonical procedures: no invented technique for a
+            # controlled condition, no invented threshold, every fixture described.
+            supported = {int(n) for ref in evidence_refs for n in ref.get("supports", []) or [] if str(n).isdigit()}
+            path_unknown = any(u["kind"] in PATH_UNKNOWNS for u in unknowns)
+            stated = " ".join(context.get("case_texts", {}).get(ref, "") for ref in related_tests)
+            stated_numbers = {n.replace(",", ".") for n in re.findall(r"\d+(?:[.,]\d+)?", stated)}
+            for step in normalized_steps:
+                if ENVIRONMENT_CONTROL.search(step["action"]) and step["step"] not in supported and not path_unknown:
+                    errors.append(
+                        f"{label} step {step['step']} changes the environment or suppresses a signal; cite the "
+                        "evidence that says how (evidence_ref supports) or declare UNKNOWN_SETUP_PATH / "
+                        "MISSING_EXECUTION_SURFACE — never invent the technique")
+                for threshold in LOAD_THRESHOLD.finditer(step["expected_result"] or ""):
+                    if threshold.group("number").replace(",", ".") not in stated_numbers:
+                        errors.append(
+                            f"{label} step {step['step']} asserts the threshold {threshold.group(0)!r}, which no related "
+                            "canonical Test Case states; record observed values instead")
+            used = " ".join([*preconditions, *(s["action"] + " " + (s["expected_result"] or "") for s in normalized_steps)])
+            undefined = sorted(set(FIXTURE_NAME.findall(used)) - {row["name"] for row in test_data}
+                               - set(context.get("source_tokens", set())))
+            if undefined:
+                errors.append(f"{label} uses fixtures {undefined} that test_data does not describe")
         cases.append({
             "key": key, "title": title, "discovery": discovery, "inspired_by": inspired_by,
             "related_test_cases": related_tests,
@@ -522,6 +548,11 @@ def submit_challenge(run_dir: Path, challenge_id: str, payload: dict[str, Any]) 
         "known_sources": {record["path"] for record in sources_state["records"]},
         "source_lines": {e["path"]: e["line_count"] for e in evidence_catalog if e["line_count"]},
         "seed_items": set(lineage["seed_items"]),
+        "case_texts": {case["id"]: " ".join([case.get("title", ""), case.get("objective", ""),
+                                             *(s.get("expected_result") or "" for s in case.get("steps", []))])
+                       for case in canonical["cases"]},
+        "source_tokens": source_vocabulary(path.read_text(encoding="utf-8")
+                                           for path in sorted((run_dir / "evidence" / "text").glob("*.txt"))),
     }
     result = validate_challenge_payload(payload, context)
     lookups_path = challenge_dir / "lookups.json"
