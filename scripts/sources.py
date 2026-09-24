@@ -164,6 +164,26 @@ def resolve_artifact_root(
     return resolved
 
 
+def selector_ownership(workspace: Path, sources: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Each user-declared selector with the physical files it owns. One physical file has
+    exactly one owner: when selectors overlap, the most specific (deepest) root wins, then
+    the first declared; a file is never owned — or read — twice."""
+    workspace = Path(workspace).resolve()
+    declared = []
+    for order, item in enumerate(sources):
+        selector = str(item.get("path", "")).strip()
+        scope = resolve_selected_scope(workspace, [selector])
+        depth = max((len(Path(root).parts) for root in scope["selected_scope_roots"]), default=0)
+        declared.append({"order": order, "path": selector, "role": str(item.get("role", "")).strip().upper(),
+                         "depth": depth, "candidates": scope["resolved_scope_paths"]})
+    owner: dict[str, dict[str, Any]] = {}
+    for entry in sorted(declared, key=lambda e: (-e["depth"], e["order"])):
+        for path in entry["candidates"]:
+            owner.setdefault(path, entry)
+    return [{"path": e["path"], "role": e["role"], "order": e["order"],
+             "files": sorted(p for p, o in owner.items() if o is e)} for e in declared]
+
+
 def assign_roles(workspace: Path, sources: list[dict[str, Any]]) -> dict[str, Any]:
     """Resolve each role-tagged selector; one physical file keeps exactly one role."""
     if not sources:

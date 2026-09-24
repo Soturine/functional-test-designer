@@ -224,6 +224,14 @@ def start_run(
         ]
         if same:
             state = _state(run_dir)
+            if (run_dir / "reading" / "task-plan.json").is_file():
+                # Plans written before selector ownership existed are upgraded in place:
+                # every recorded state and reader result is kept, nothing is re-read.
+                strategy = (reading or {}).get("strategy")
+                reading_stage.attach_selectors(run_dir, records, sources.selector_ownership(workspace, sources_selected),
+                                               strategy=strategy)
+                if state.get("next_stage") == "reading":
+                    _work_order(run_dir)
             return {"run_dir": str(run_dir), "resumed": True, "state": state,
                     "work_order": str(run_dir / "work-order.json")}
         shutil.rmtree(run_dir)
@@ -256,7 +264,8 @@ def start_run(
     write_json(run_dir / "evidence" / "source-catalog.json", {"sources": catalog})
     reading_request = dict(reading or {})
     reading_plan = reading_stage.plan(
-        records, root, run_dir, strategy=reading_request.get("strategy"),
+        records, root, run_dir, selectors=sources.selector_ownership(workspace, sources_selected),
+        strategy=reading_request.get("strategy"),
         worker_model=reading_request.get("worker_model"), concurrency=reading_request.get("concurrency"),
     )
     reading_states = reading_stage.summary(reading_plan)
@@ -914,9 +923,10 @@ def status(run_dir: Path) -> dict[str, Any]:
 
 STAGE_GUIDE = {
     "reading": [
-        "Spawn one lightweight source-reader task per PLANNED source in `reading_tasks` (prefer the lightweight model this host offers, e.g. Haiku on Claude), honoring `concurrency` as an upper bound and any explicit user preference recorded in `reading`.",
-        "Give each reader only its own source (the evidence snapshot path) and the catalog contract; readers catalog facts — headings, identifiers with their stated titles, actors, entities, states, operations, integrations, config_facts, candidate_rules, flows, test_assets, excerpts with line spans, references to other selected sources, ambiguities. They never decide claims, oracles, Test Cases, Findings, Questions, coverage or authority.",
-        "Submit every reader result (CATALOGED, or FAILED with an error — never omit a source) with `pipeline.py reading-submit`, then run `pipeline.py reading-reconcile`. If sub-agents are unavailable, restart the run with --reading-strategy SEQUENTIAL and read the sources yourself; say which mode actually ran.",
+        "One lightweight reader per entry in `reader_assignments`: each entry is one source selector the user declared (a file or a whole directory), never one reader per physical file. Prefer the lightweight model this host offers (e.g. Haiku on Claude). Run at most `concurrency` readers at once; later `wave`s wait for a free slot. Honor any explicit user preference recorded in `reading`.",
+        "Each reader reads its selector's files with ordinary file/navigation tools (list, open, read ranges, search) — it must not write or run helper scripts, parsers or crawlers to automate cataloging. It returns one selector result: facts (headings, identifiers with their stated titles, actors, entities, states, operations, integrations, config_facts, candidate_rules, flows, test_assets, excerpts with file and line spans, references, ambiguities), each citing its `file`, plus a `files` entry for EVERY pending file: CATALOGED with that file's own catalog, INSPECTED (read, nothing to add), or FAILED with an error. Readers never decide claims, oracles, Test Cases, Findings, Questions, coverage or authority.",
+        "Split a selector into internal shards only when it cannot fit the reader's real context limit; submit each shard's result separately (same `selector_id`, a `shard` label) — they reconcile back into one selector catalog.",
+        "Submit results with `pipeline.py reading-submit`, then run `pipeline.py reading-reconcile`, which refuses while any physical file is unaccounted. You may prepare an authority-only skeleton while readers run, but Design is decided and submitted only after reconciliation. If sub-agents are unavailable, restart with --reading-strategy SEQUENTIAL and read the sources yourself; say which mode actually ran.",
     ],
     "design": [
         "Use the reconciled reader catalog (reading/source-catalog.json and reconciliation.json) as your index of the corpus, then read what you need from the evidence snapshots or authority-text/. Conflicts listed in reconciliation are for you to judge — nothing was majority-voted. You own the QA reasoning; the runtime only validates.",
@@ -978,15 +988,21 @@ def _work_order(run_dir: Path) -> Path:
         task_plan = read_json(run_dir / "reading" / "task-plan.json")
         catalog = {e["path"]: e for e in read_json(run_dir / "evidence" / "source-catalog.json")["sources"]}
         order["reading"] = {k: task_plan[k] for k in ("strategy", "worker_model", "concurrency", "reader_role")}
-        order["reading_tasks"] = [{
-            **{k: t[k] for k in ("source_key", "path", "role", "content_digest")},
-            "snapshot": str(run_dir / "evidence" / catalog[t["path"]]["text_ref"]) if catalog[t["path"]]["text_ref"] else None,
-            "line_count": catalog[t["path"]]["line_count"],
-        } for t in reading_stage.pending(task_plan)]
+        order["reader_assignments"] = [{
+            **{k: a[k] for k in ("selector_id", "selector_path", "role", "wave", "files_total", "files_already_accounted")},
+            "files_pending": [{
+                **{k: t[k] for k in ("source_key", "path", "content_digest")},
+                "snapshot": str(run_dir / "evidence" / catalog[t["path"]]["text_ref"]) if catalog[t["path"]]["text_ref"] else None,
+                "line_count": catalog[t["path"]]["line_count"],
+            } for t in a["files_pending"]],
+        } for a in reading_stage.assignments(task_plan)]
         order["reader_result_contract"] = {
-            "fields": sorted(reading_stage.RESULT_FIELDS), "status": ["CATALOGED", "FAILED"],
+            "selector_result_fields": sorted(reading_stage.SELECTOR_RESULT_FIELDS),
+            "file_entry": {"fields": ["source_key", "path", "content_digest", "status", "catalog", "error"],
+                           "status": list(reading_stage.FILE_STATUSES)},
             "catalog_sections": sorted(reading_stage.CATALOG_FIELDS),
             "forbidden_catalog_sections": sorted(reading_stage.FORBIDDEN_FIELDS),
+            "provenance": "every selector-level fact may cite `file` (an owned path); excerpts must",
             "reader": {"role": reading_stage.READER_ROLE, "model": "the model that actually ran"},
         }
     if stage == "design":

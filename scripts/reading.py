@@ -1,20 +1,28 @@
 #!/usr/bin/env python3
 """Default multi-agent source reading: plan, reader results, reconciliation, reuse.
 
-Many lightweight readers read faster; one main model decides. This module owns only
-the deterministic half: one logical reading task per eligible selected source, the
-validation of each reader's factual catalog, the reconciliation of all catalogs
-before Design, and digest-bound reuse of catalogs across runs. It never reads for
-meaning and never lets a reader decide claims, oracles, Test Cases, Findings or
-Questions.
+Many lightweight readers read faster; one main model decides. Terms:
 
-Task states:
-    PLANNED        eligible source waiting for a reader result
-    REUSED         a compatible catalog (same key, digest, role, contract) was reused
-    CATALOGED      a validated reader result exists for this run
-    FAILED_WORKER  a reader ran and reported failure; the source stays visible
+    USER SOURCE SELECTOR   what the user selected (a file or a directory)
+    PHYSICAL SOURCE FILE   a resolved file owned by exactly one selector
+    READER RESPONSIBILITY  one logical reading assignment per selector
+    FILE CATALOG           factual evidence for one file (the cache/reuse unit)
+    SELECTOR CATALOG       the reconciled factual view of one selector, with file provenance
+    GLOBAL RECONCILIATION  cross-selector accounting, conflicts and references
+
+This module owns only the deterministic half: the per-file ledger under every selector,
+reader assignments (one per selector, in waves bounded by the concurrency limit), the
+validation of reader results, reconciliation before Design, and digest-bound reuse of
+file catalogs across runs. It never reads for meaning and never lets a reader decide
+claims, oracles, Test Cases, Findings or Questions.
+
+File task states:
+    PLANNED        waiting for its selector's reader to account for it
+    REUSED         a compatible file catalog (same key, digest, role, contract) was reused
+    CATALOGED      a validated reader result exists (a catalog, or INSPECTED with nothing to add)
+    FAILED_WORKER  a reader reported failure for this file; it stays visible
     FAILED_TO_READ the runtime could not extract text (needs transcription/failed)
-    UNSUPPORTED    binary/metadata-only source; nothing to read
+    UNSUPPORTED    binary/metadata-only file; nothing to read
     EMPTY          readable but zero bytes; nothing to catalog, still accounted for
     MAIN_MODEL     SEQUENTIAL strategy: the main model reads it directly, no reader
 """
@@ -28,11 +36,13 @@ from typing import Any
 
 from common import StageError, now, read_json, write_json
 
-CONTRACT_VERSION = "1"
+CONTRACT_VERSION = "2"
 READER_ROLE = "LIGHTWEIGHT_SOURCE_READER"
 STRATEGIES = ("MULTI_AGENT_PER_SOURCE", "MULTI_AGENT_BATCHED", "SEQUENTIAL")
+DEFAULT_CONCURRENCY = 8  # host execution default, never business data
 TASK_STATES = ("PLANNED", "REUSED", "CATALOGED", "FAILED_WORKER", "FAILED_TO_READ", "UNSUPPORTED", "EMPTY",
                "MAIN_MODEL")
+ACCOUNTED = set(TASK_STATES) - {"PLANNED"}
 EMPTY_DIGEST = hashlib.sha256(b"").hexdigest()
 # Factual catalog sections a reader may fill; all optional, all lists.
 CATALOG_FIELDS = {
@@ -45,6 +55,8 @@ FORBIDDEN_FIELDS = {
     "coverage", "dispositions", "authority", "role_override", "completeness",
 }
 RESULT_FIELDS = {"source_key", "path", "content_digest", "role", "status", "reader", "catalog", "error"}
+SELECTOR_RESULT_FIELDS = {"selector_id", "selector_path", "role", "reader", "catalog", "files", "shard", "error"}
+FILE_STATUSES = ("CATALOGED", "INSPECTED", "FAILED")
 
 
 def source_key(path: str) -> str:
@@ -56,16 +68,17 @@ def source_key(path: str) -> str:
     return f"{digest}-{readable}"
 
 
-def _cache_dir(artifact_root: Path) -> Path:
-    return Path(artifact_root) / ".ftd" / "catalog-cache"
+def selector_id(path: str) -> str:
+    return "S" + source_key(path)
 
 
 def _cache_path(artifact_root: Path, key: str) -> Path:
-    return _cache_dir(artifact_root) / f"{key}.json"
+    return Path(artifact_root) / ".ftd" / "catalog-cache" / f"{key}.json"
 
 
 def cached_catalog(artifact_root: Path, record: dict[str, Any]) -> dict[str, Any] | None:
-    """A reusable catalog must match key, digest, role and contract version exactly."""
+    """A reusable file catalog must match key, digest, role and contract version exactly.
+    Contract 1 file results are the same per-file shape and stay reusable."""
     path = _cache_path(artifact_root, source_key(record["path"]))
     if not path.is_file():
         return None
@@ -74,28 +87,53 @@ def cached_catalog(artifact_root: Path, record: dict[str, Any]) -> dict[str, Any
     except Exception:
         return None
     if (entry.get("content_digest") == record["content_digest"] and entry.get("role") == record["role"]
-            and entry.get("contract_version") == CONTRACT_VERSION and entry.get("status") == "CATALOGED"):
+            and entry.get("contract_version") in {CONTRACT_VERSION, "1"} and entry.get("status") == "CATALOGED"):
         return entry
     return None
 
 
+def _selector_entries(records: list[dict[str, Any]], selectors: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
+    """Selectors with ids and their owned files; without selectors each file is its own."""
+    if not selectors:
+        selectors = [{"path": r["path"], "role": r["role"], "files": [r["path"]]} for r in records]
+    known = {r["path"] for r in records}
+    entries, owned = [], set()
+    for order, selector in enumerate(selectors):
+        files = [path for path in selector["files"] if path in known and path not in owned]
+        owned.update(files)
+        entries.append({"selector_id": selector_id(selector["path"]), "path": selector["path"],
+                        "role": selector["role"], "order": order, "files": files})
+    orphans = sorted(known - owned)
+    if orphans:
+        raise ValueError("physical files without an owning selector: " + ", ".join(orphans[:20]))
+    return entries
+
+
+def _selector_view(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [{k: e[k] for k in ("selector_id", "path", "role", "order")}
+            | {"files": [source_key(p) for p in e["files"]]} for e in entries]
+
+
 def plan(
     records: list[dict[str, Any]], artifact_root: Path, run_dir: Path, *,
+    selectors: list[dict[str, Any]] | None = None,
     strategy: str | None = None, worker_model: str | None = None, concurrency: int | None = None,
 ) -> dict[str, Any]:
-    """One logical task per eligible source; reuse a compatible cached catalog instead of
-    planning a reader for it. Concurrency is a bound, never a per-task promise."""
+    """Per-file ledger under each user-declared selector. One reader responsibility per
+    selector; a compatible cached file catalog is reused instead of being read again."""
     strategy = strategy or "MULTI_AGENT_PER_SOURCE"
     if strategy not in STRATEGIES:
         raise ValueError(f"unknown reading strategy {strategy!r}; expected one of {STRATEGIES}")
     if concurrency is not None and int(concurrency) < 1:
         raise ValueError("reading concurrency must be a positive integer")
+    entries = _selector_entries(records, selectors)
+    owner = {path: e["selector_id"] for e in entries for path in e["files"]}
     results_dir = run_dir / "reading" / "results"
     tasks = []
     for record in records:
         key = source_key(record["path"])
         task = {"source_key": key, "path": record["path"], "role": record["role"],
-                "content_digest": record["content_digest"]}
+                "content_digest": record["content_digest"], "selector_id": owner[record["path"]]}
         if record["status"] in {"METADATA_ONLY", "UNSUPPORTED"}:
             task["state"] = "UNSUPPORTED"
         elif record["status"] not in {"READ", "TRANSCRIBED"}:
@@ -116,11 +154,36 @@ def plan(
     document = {
         "contract_version": CONTRACT_VERSION, "reader_role": READER_ROLE, "strategy": strategy,
         "worker_model": worker_model if strategy != "SEQUENTIAL" else None,
-        "concurrency": int(concurrency) if concurrency else None,
-        "tasks": tasks, "created_at": now(),
+        "concurrency": None if strategy == "SEQUENTIAL" else int(concurrency or DEFAULT_CONCURRENCY),
+        "selectors": _selector_view(entries), "tasks": tasks, "history": [], "created_at": now(),
     }
     write_json(run_dir / "reading" / "task-plan.json", document)
     return document
+
+
+def attach_selectors(run_dir: Path, records: list[dict[str, Any]], selectors: list[dict[str, Any]], *,
+                     strategy: str | None = None) -> dict[str, Any]:
+    """Upgrade a plan written before selector ownership existed, preserving every task
+    state and recorded result. The initial strategy stays in the history; nothing is re-read."""
+    path = run_dir / "reading" / "task-plan.json"
+    task_plan = read_json(path)
+    if task_plan.get("selectors"):
+        return task_plan
+    entries = _selector_entries(records, selectors)
+    owner = {p: e["selector_id"] for e in entries for p in e["files"]}
+    for task in task_plan["tasks"]:
+        task["selector_id"] = owner[task["path"]]
+    task_plan["selectors"] = _selector_view(entries)
+    task_plan.setdefault("history", []).append({
+        "event": "SELECTOR_OWNERSHIP_ATTACHED", "at": now(), "initial_strategy": task_plan["strategy"],
+        "states_at_migration": summary(task_plan),
+    })
+    if strategy:
+        task_plan["strategy"] = strategy
+    if task_plan.get("strategy") != "SEQUENTIAL" and not task_plan.get("concurrency"):
+        task_plan["concurrency"] = DEFAULT_CONCURRENCY
+    write_json(path, task_plan)
+    return task_plan
 
 
 def summary(task_plan: dict[str, Any]) -> dict[str, int]:
@@ -134,9 +197,56 @@ def pending(task_plan: dict[str, Any]) -> list[dict[str, Any]]:
     return [task for task in task_plan["tasks"] if task["state"] == "PLANNED"]
 
 
+def assignments(task_plan: dict[str, Any]) -> list[dict[str, Any]]:
+    """One reader responsibility per selector that still has unaccounted files, queued in
+    waves of at most `concurrency` concurrently active readers, in declared order."""
+    limit = int(task_plan.get("concurrency") or 1)
+    out = []
+    for selector in sorted(task_plan.get("selectors") or [], key=lambda s: s["order"]):
+        files = [t for t in task_plan["tasks"] if t.get("selector_id") == selector["selector_id"]]
+        todo = [t for t in files if t["state"] == "PLANNED"]
+        if not todo:
+            continue
+        out.append({"selector_id": selector["selector_id"], "selector_path": selector["path"],
+                    "role": selector["role"], "wave": len(out) // limit + 1, "files_total": len(files),
+                    "files_pending": todo, "files_already_accounted": len(files) - len(todo)})
+    return out
+
+
+def _check_catalog(catalog: Any, label: str, errors: list[str], owned: dict[str, int] | None,
+                   own_lines: int | None) -> None:
+    if not isinstance(catalog, dict):
+        errors.append(f"{label} catalog must be an object")
+        return
+    forbidden = sorted(set(catalog) & FORBIDDEN_FIELDS)
+    if forbidden:
+        errors.append(f"{label} catalog contains main-model decisions {forbidden}; readers only catalog facts")
+    unknown = sorted(set(catalog) - CATALOG_FIELDS - FORBIDDEN_FIELDS)
+    if unknown:
+        errors.append(f"{label} catalog contains unknown sections {unknown}")
+    for section in sorted(CATALOG_FIELDS & set(catalog)):
+        for item in catalog.get(section) or []:
+            if not isinstance(item, dict):
+                continue
+            cited = item.get("file")
+            if owned is not None and cited is not None and cited not in owned:
+                errors.append(f"{label} {section} cites {cited!r}, which this selector does not own")
+                continue
+            if section != "excerpts":
+                continue
+            total = owned.get(cited) if (owned is not None and cited) else own_lines
+            if owned is not None and not cited:
+                errors.append(f"{label} excerpt must name its file")
+                continue
+            start, end = item.get("line_start"), item.get("line_end", item.get("line_start"))
+            if start is not None and not (isinstance(start, int) and isinstance(end, int)
+                                          and 1 <= start <= end <= (total or 0)):
+                errors.append(f"{label} excerpt {start}-{end} is outside the source ({total} lines)")
+
+
 def _validate_result(result: dict[str, Any], task: dict[str, Any] | None, line_counts: dict[str, int]) -> list[str]:
     label = f"reader result for {result.get('path') or result.get('source_key') or '<unknown>'}"
-    errors = []
+    errors: list[str] = []
     if task is None:
         return [f"{label} names no selected source of this run"]
     extra = sorted(set(result) - RESULT_FIELDS)
@@ -150,41 +260,76 @@ def _validate_result(result: dict[str, Any], task: dict[str, Any] | None, line_c
     if reader.get("role", READER_ROLE) != READER_ROLE:
         errors.append(f"{label} reader.role must be {READER_ROLE}")
     status = result.get("status")
-    if status not in {"CATALOGED", "FAILED"}:
-        errors.append(f"{label} status must be CATALOGED or FAILED")
+    if status not in FILE_STATUSES:
+        errors.append(f"{label} status must be one of {list(FILE_STATUSES)}")
     if status == "FAILED":
         if not str(result.get("error", "")).strip():
             errors.append(f"{label} FAILED requires an error explanation")
+        return errors
+    if status == "INSPECTED":
+        if result.get("catalog"):
+            errors.append(f"{label} INSPECTED means read with nothing to add; facts belong under CATALOGED")
         return errors
     catalog = result.get("catalog")
     if not isinstance(catalog, dict) or not any(catalog.get(field) for field in CATALOG_FIELDS):
         errors.append(f"{label} CATALOGED requires a non-empty factual catalog")
         return errors
-    forbidden = sorted(set(catalog) & FORBIDDEN_FIELDS)
-    if forbidden:
-        errors.append(f"{label} catalog contains main-model decisions {forbidden}; readers only catalog facts")
-    unknown = sorted(set(catalog) - CATALOG_FIELDS - FORBIDDEN_FIELDS)
-    if unknown:
-        errors.append(f"{label} catalog contains unknown sections {unknown}")
-    total = line_counts.get(task["path"], 0)
-    for excerpt in catalog.get("excerpts", []) or []:
-        start, end = excerpt.get("line_start"), excerpt.get("line_end", excerpt.get("line_start"))
-        if start is not None and not (isinstance(start, int) and isinstance(end, int) and 1 <= start <= end <= total):
-            errors.append(f"{label} excerpt {start}-{end} is outside the source ({total} lines)")
+    _check_catalog(catalog, label, errors, None, line_counts.get(task["path"], 0))
     return errors
 
 
+def _expand(results: list[dict[str, Any]], task_plan: dict[str, Any], line_counts: dict[str, int],
+            errors: list[str]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Split selector results into per-file results (the accounting and cache unit) and
+    selector-level catalogs. Plain per-file results pass through unchanged."""
+    by_key = {t["source_key"]: t for t in task_plan["tasks"]}
+    by_path = {t["path"]: t for t in task_plan["tasks"]}
+    selectors = {s["selector_id"]: s for s in task_plan.get("selectors") or []}
+    files, selector_catalogs = [], []
+    for result in results:
+        if "selector_id" not in result:
+            files.append(result)
+            continue
+        sid = result.get("selector_id")
+        selector = selectors.get(sid)
+        label = f"selector result {sid}"
+        if selector is None:
+            errors.append(f"{label} names no selector of this run")
+            continue
+        extra = sorted(set(result) - SELECTOR_RESULT_FIELDS)
+        if extra:
+            errors.append(f"{label} contains unknown fields {extra}")
+        if result.get("role", selector["role"]) != selector["role"]:
+            errors.append(f"{label} tries to change the selector role; readers never change authority")
+        owned = {by_key[k]["path"]: line_counts.get(by_key[k]["path"], 0) for k in selector["files"]}
+        reader = result.get("reader") if isinstance(result.get("reader"), dict) else {}
+        for entry in result.get("files") or []:
+            task = by_key.get(entry.get("source_key")) or by_path.get(entry.get("path"))
+            if task is None or task.get("selector_id") != sid:
+                errors.append(f"{label} accounts for {entry.get('path') or entry.get('source_key')!r}, "
+                              "which this selector does not own")
+                continue
+            files.append({"source_key": task["source_key"], "path": task["path"], "reader": reader, **entry})
+        if result.get("catalog"):
+            _check_catalog(result["catalog"], label, errors, owned, None)
+            selector_catalogs.append({"selector_id": sid, "shard": result.get("shard"), "reader": reader,
+                                      "catalog": result["catalog"]})
+    return files, selector_catalogs
+
+
 def submit(run_dir: Path, results: list[dict[str, Any]]) -> dict[str, Any]:
-    """Record reader results. May be called several times as readers finish; each call is
-    validated as a whole and records nothing when any result is invalid."""
+    """Record reader results — per selector (with its file accounting) or per file. May be
+    called several times (e.g. once per internal shard); each call is validated as a whole
+    and records nothing when any part is invalid."""
     task_plan = read_json(run_dir / "reading" / "task-plan.json")
     by_key = {task["source_key"]: task for task in task_plan["tasks"]}
     by_path = {task["path"]: task for task in task_plan["tasks"]}
     catalog = read_json(run_dir / "evidence" / "source-catalog.json")["sources"]
     line_counts = {entry["path"]: entry["line_count"] or 0 for entry in catalog}
-    errors = []
+    errors: list[str] = []
+    files, selector_catalogs = _expand(results, task_plan, line_counts, errors)
     seen = set()
-    for result in results:
+    for result in files:
         task = by_key.get(result.get("source_key")) or by_path.get(result.get("path"))
         if task is not None:
             if task["source_key"] in seen:
@@ -196,34 +341,52 @@ def submit(run_dir: Path, results: list[dict[str, Any]]) -> dict[str, Any]:
     if errors:
         raise StageError("reading", errors)
     results_dir = run_dir / "reading" / "results"
-    for result in results:
+    for result in files:
         task = by_key.get(result.get("source_key")) or by_path[result["path"]]
         stored = {**result, "source_key": task["source_key"], "path": task["path"], "role": task["role"]}
         write_json(results_dir / f"{task['source_key']}.json", stored)
-        task["state"] = "CATALOGED" if result["status"] == "CATALOGED" else "FAILED_WORKER"
+        task["state"] = "FAILED_WORKER" if result["status"] == "FAILED" else "CATALOGED"
         if result["status"] == "FAILED":
             task["error"] = str(result["error"])
+    for item in selector_catalogs:
+        folder = run_dir / "reading" / "selector-results" / item["selector_id"]
+        folder.mkdir(parents=True, exist_ok=True)
+        write_json(folder / f"{len(list(folder.glob('*.json'))) + 1:03d}.json", item)
     write_json(run_dir / "reading" / "task-plan.json", task_plan)
-    return {"recorded": len(results), "states": summary(task_plan), "pending": [t["path"] for t in pending(task_plan)]}
+    return {"recorded": len(files), "selector_catalogs": len(selector_catalogs), "states": summary(task_plan),
+            "pending": [t["path"] for t in pending(task_plan)]}
+
+
+def _with_file(items: list[Any], path: str) -> list[Any]:
+    out = []
+    for item in items or []:
+        if isinstance(item, dict):
+            out.append(item if "file" in item else {"file": path, **item})
+        else:
+            out.append({"file": path, "fact": item})
+    return out
 
 
 def reconcile(run_dir: Path, artifact_root: Path) -> dict[str, Any]:
-    """Validate completeness, preserve conflicts, consolidate the catalog and fill the
-    reuse cache. Nothing is majority-voted: conflicting statements go to the main model."""
+    """Require every physical file under every selector to be accounted for, preserve
+    conflicts, build one provenance-preserving catalog per selector and fill the file
+    cache. Nothing is majority-voted: conflicting statements go to the main model."""
     task_plan = read_json(run_dir / "reading" / "task-plan.json")
     missing = [task["path"] for task in pending(task_plan)]
     if missing:
         raise StageError("reading", [
-            f"{len(missing)} selected source(s) have no reader result yet: " + ", ".join(missing[:20])
-            + " — submit a CATALOGED or FAILED result for each; no source may silently disappear"
+            f"{len(missing)} selected file(s) have no reader disposition yet: " + ", ".join(missing[:20])
+            + " — each selector's reader must account for every file it owns; no file may silently disappear"
         ])
     results_dir = run_dir / "reading" / "results"
     identifier_statements: dict[str, list[dict[str, str]]] = {}
-    references: list[dict[str, str]] = []
+    references: list[dict[str, Any]] = []
     selected_paths = {task["path"] for task in task_plan["tasks"]}
-    sources = []
+    sources, models = [], set()
+    buckets: dict[str, dict[str, list[Any]]] = {}
     for task in task_plan["tasks"]:
         entry = {k: task[k] for k in ("source_key", "path", "role", "content_digest", "state")}
+        entry["selector_id"] = task.get("selector_id")
         path = results_dir / f"{task['source_key']}.json"
         if task["state"] in {"CATALOGED", "REUSED"}:
             if not path.is_file():
@@ -231,9 +394,15 @@ def reconcile(run_dir: Path, artifact_root: Path) -> dict[str, Any]:
             result = read_json(path)
             if result.get("content_digest") != task["content_digest"]:
                 raise StageError("reading", [f"{task['path']} reader result is stale (digest mismatch)"])
-            cat = result.get("catalog", {})
-            entry["result_ref"] = f"results/{task['source_key']}.json"
-            entry["reader"] = result.get("reader", {})
+            cat = result.get("catalog") or {}
+            entry.update({"result_ref": f"results/{task['source_key']}.json", "reader": result.get("reader", {}),
+                          "disposition": result.get("status")})
+            if (result.get("reader") or {}).get("model"):
+                models.add(str(result["reader"]["model"]))
+            bucket = buckets.setdefault(task.get("selector_id") or task["source_key"], {})
+            for section in sorted(CATALOG_FIELDS):
+                if cat.get(section):
+                    bucket.setdefault(section, []).extend(_with_file(cat[section], task["path"]))
             for item in cat.get("identifiers", []) or []:
                 ident = item.get("identifier") if isinstance(item, dict) else str(item)
                 statement = (item.get("title") or item.get("statement") or "") if isinstance(item, dict) else ""
@@ -241,29 +410,66 @@ def reconcile(run_dir: Path, artifact_root: Path) -> dict[str, Any]:
                     identifier_statements.setdefault(ident, []).append({"source": task["path"], "statement": statement})
             for ref in cat.get("references", []) or []:
                 target = ref.get("target") if isinstance(ref, dict) else str(ref)
-                references.append({"source": task["path"], "target": target,
-                                   "selected": target in selected_paths})
+                references.append({"source": task["path"], "target": target, "selected": target in selected_paths})
             if task["state"] == "CATALOGED":
-                cache = _cache_path(artifact_root, task["source_key"])
-                write_json(cache, {"contract_version": CONTRACT_VERSION, "path": task["path"],
-                                   "role": task["role"], "content_digest": task["content_digest"],
-                                   "status": "CATALOGED", "result": result})
+                write_json(_cache_path(artifact_root, task["source_key"]), {
+                    "contract_version": CONTRACT_VERSION, "path": task["path"], "role": task["role"],
+                    "content_digest": task["content_digest"], "status": "CATALOGED", "result": result})
         elif task["state"] == "FAILED_WORKER":
             entry["error"] = task.get("error")
         sources.append(entry)
+    shards: dict[str, int] = {}
+    for folder in sorted((run_dir / "reading" / "selector-results").glob("*")):
+        for item_path in sorted(folder.glob("*.json")):
+            item = read_json(item_path)
+            shards[folder.name] = shards.get(folder.name, 0) + 1
+            if (item.get("reader") or {}).get("model"):
+                models.add(str(item["reader"]["model"]))
+            bucket = buckets.setdefault(folder.name, {})
+            for section, values in sorted((item.get("catalog") or {}).items()):
+                bucket.setdefault(section, []).extend(values or [])
+    selectors_out = []
+    for selector in task_plan.get("selectors") or []:
+        files = [t for t in task_plan["tasks"] if t.get("selector_id") == selector["selector_id"]]
+        states: dict[str, int] = {}
+        for t in files:
+            states[t["state"]] = states.get(t["state"], 0) + 1
+        catalog_ref = f"selector-catalogs/{selector['selector_id']}.json"
+        write_json(run_dir / "reading" / catalog_ref, {
+            "selector_id": selector["selector_id"], "path": selector["path"], "role": selector["role"],
+            "files": [t["path"] for t in files], "catalog": buckets.get(selector["selector_id"], {})})
+        selectors_out.append({"selector_id": selector["selector_id"], "path": selector["path"],
+                              "role": selector["role"], "files_total": len(files), "file_states": states,
+                              "complete": all(t["state"] in ACCOUNTED for t in files),
+                              "selector_level_results": shards.get(selector["selector_id"], 0),
+                              "catalog_ref": catalog_ref})
     conflicts = []
     for ident, statements in sorted(identifier_statements.items()):
         distinct = {s["statement"].strip().casefold() for s in statements if s["statement"].strip()}
         if len(distinct) > 1:
             conflicts.append({"identifier": ident, "statements": statements})
+    counts = summary(task_plan)
     reconciliation = {
         "contract_version": CONTRACT_VERSION, "reconciled_at": now(), "strategy": task_plan["strategy"],
-        "worker_model": task_plan.get("worker_model"), "states": summary(task_plan),
+        "worker_model": task_plan.get("worker_model"), "states": counts, "selectors": selectors_out,
         "worker_failures": [s for s in sources if s["state"] == "FAILED_WORKER"],
         "identifier_conflicts": conflicts, "cross_references": references,
+        "telemetry": {
+            "user_source_selectors": len(task_plan.get("selectors") or []),
+            "physical_files_selected": len(task_plan["tasks"]),
+            "reader_concurrency_limit": task_plan.get("concurrency"),
+            "reader_model_requested": task_plan.get("worker_model"),
+            "reader_models_reported": sorted(models),
+            "reader_model_host_verified": None,  # a reader's own claim is not host verification
+            "file_catalogs_reused": counts["REUSED"], "file_results_recorded": counts["CATALOGED"],
+            "failed_reader_files": counts["FAILED_WORKER"], "empty_files": counts["EMPTY"],
+            "unsupported_files": counts["UNSUPPORTED"] + counts["FAILED_TO_READ"],
+            "unaccounted_files": counts["PLANNED"],
+            "internal_shards_used": {sid: n for sid, n in shards.items() if n > 1},
+            "history": task_plan.get("history", []),
+        },
         "note": "Conflicts are preserved for the main model; nothing was majority-voted.",
     }
     write_json(run_dir / "reading" / "source-catalog.json", {"sources": sources})
     write_json(run_dir / "reading" / "reconciliation.json", reconciliation)
     return reconciliation
-
