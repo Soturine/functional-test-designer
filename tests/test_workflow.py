@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import tempfile
 import unittest
@@ -91,6 +92,7 @@ class CommandSurfaceTests(unittest.TestCase):
             self.assertNotIn(fragment, source)
 
 
+@unittest.skipUnless(importlib.util.find_spec("pypdf"), "reading a PDF authority needs the optional pypdf package")
 class NaturalGenerationTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temp = tempfile.TemporaryDirectory()
