@@ -683,5 +683,81 @@ class ExecutionViewTests(unittest.TestCase):
         self.assertTrue(render.render_execution_plan(organization, index).startswith("# Plano de execução"))
 
 
+
+class ExecutionPendencyTests(unittest.TestCase):
+    """A NEEDS_REVIEW case always shows why: its Questions and its recorded execution unknowns,
+    in words, without inventing a Question."""
+
+    DETAIL = "The sources do not say how an invitation is made to expire."
+
+    def report(self, name: str, mutate=None) -> tuple[str, Any]:
+        sys.path.insert(0, str(ROOT / "tests"))
+        from support import PackRun, procedure
+        def change(pack):
+            if mutate:
+                mutate(pack, procedure)
+        run = PackRun(name, change)
+        self.addCleanup(run.close)
+        run.finalize()
+        return (run.artifacts / "output" / "report.html").read_text(encoding="utf-8"), run
+
+    @staticmethod
+    def template(report: str, case_id: str) -> str:
+        start = report.index(f'id="tc-tpl-{case_id}"')
+        return report[start:report.index("</template>", start)]
+
+    def setup_path_unknown(self, pack, procedure) -> None:
+        procedure(pack, "T1")["unknowns"] = [{"kind": "UNKNOWN_SETUP_PATH", "detail": self.DETAIL}]
+
+    def test_a_review_case_without_a_question_explains_its_open_item(self) -> None:
+        report, run = self.report("saas-accounts", self.setup_path_unknown)
+        case = run.output("test-cases/TC-001.json")
+        self.assertEqual(("NEEDS_REVIEW", []), (case["status"], case["question_refs"]))
+        body = self.template(report, "TC-001")
+        self.assertIn("Execution open item", body)
+        self.assertIn("UNKNOWN_SETUP_PATH", body)
+        self.assertIn("The selected sources do not show how to prepare the starting state", body)
+        self.assertIn(self.DETAIL, body)
+        self.assertIn('<span class="badge badge-pendency">1 Open item</span>', report)
+
+    def test_no_question_is_created_for_an_open_item(self) -> None:
+        _, baseline = self.report("saas-accounts")
+        _, changed = self.report("saas-accounts", self.setup_path_unknown)
+        self.assertEqual(baseline.output("questions.json"), changed.output("questions.json"))
+
+    def test_an_automation_only_blocker_is_explained_too(self) -> None:
+        report, run = self.report("saas-accounts")
+        case = run.output("test-cases/TC-002.json")
+        self.assertEqual("NEEDS_FIXTURE", case["automation_readiness"])
+        body = self.template(report, "TC-002")
+        for blocker in case["readiness_blockers"]:
+            self.assertIn(blocker, body)
+        self.assertIn("Deterministic test data for automation is missing", body)
+
+    def test_a_case_without_blockers_has_no_open_item_badge(self) -> None:
+        report, run = self.report("saas-accounts")
+        ready = [e["id"] for e in run.output("test-cases.json")["test_cases"]
+                 if not run.output(e["file"])["readiness_blockers"]]
+        self.assertTrue(ready)
+        self.assertNotIn("badge-pendency", self.template(report, ready[0]))
+
+    def test_the_legend_explains_suitability_and_every_readiness_value(self) -> None:
+        report, _ = self.report("logistics-storage")
+        self.assertIn("MEDIUM / NEEDS_FIXTURE", report)
+        self.assertIn("adequação / prontidão", report)
+        for readiness in ("NEEDS_POLICY", "NEEDS_ENVIRONMENT", "NEEDS_FIXTURE", "NEEDS_SELECTOR",
+                          "BLOCKED_EXTERNAL_DEPENDENCY", "NOT_APPLICABLE"):
+            self.assertIn(f"<dt>{readiness}</dt>", report[report.index('id="glossary"'):])
+        self.assertIn("Pendência de execução", report)
+
+    def test_open_items_use_the_run_locale(self) -> None:
+        case = {"readiness_blockers": ["MISSING_EXECUTION_SURFACE", "BLOCKING_QUESTION"],
+                "notes": ["MISSING_EXECUTION_SURFACE: sem tela de consulta."]}
+        items = render.execution_pendencies(case, "pt")
+        self.assertEqual(["MISSING_EXECUTION_SURFACE"], [i["kind"] for i in items])  # the Question shows itself
+        self.assertTrue(items[0]["meaning"].startswith("As fontes selecionadas não mostram onde"))
+        self.assertEqual("sem tela de consulta.", items[0]["detail"])
+
+
 if __name__ == "__main__":
     unittest.main()

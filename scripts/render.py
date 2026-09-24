@@ -62,6 +62,8 @@ LABELS = {
         "order_execution_order": "ordem de execução",
         "modal_of": " de ", "glossary_title": "Legenda e termos do relatório", "modal_close": "Fechar",
         "tc_alerts": "Atenções da análise", "finding_singular": "Finding", "question_singular": "Pergunta",
+        "pendency_singular": "Pendência de execução", "pendency_plural": "Pendências", "pendency_one": "Pendência",
+        "pendency_detail": "Neste caso",
         "no_filter_results": "Nenhum Test Case corresponde aos filtros ativos.",
         "tc_count_suffix": "Test Cases", "blocking_question": "Pergunta bloqueante",
         "identifier": "Identificador", "disposition": "Disposição", "kind": "Tipo",
@@ -121,6 +123,8 @@ LABELS = {
         "order_execution_order": "execution order",
         "modal_of": " of ", "glossary_title": "Report legend and terminology", "modal_close": "Close",
         "tc_alerts": "Analysis alerts", "finding_singular": "Finding", "question_singular": "Question",
+        "pendency_singular": "Execution open item", "pendency_plural": "Open items", "pendency_one": "Open item",
+        "pendency_detail": "In this case",
         "no_filter_results": "No Test Case matches the active filters.",
         "tc_count_suffix": "Test Cases", "blocking_question": "Blocking question",
         "identifier": "Identifier", "disposition": "Disposition", "kind": "Kind",
@@ -200,7 +204,8 @@ SECURITY_DIMENSIONS = {"SECURITY", "AUTHORIZATION"}
 def labels_for(index: dict[str, Any]) -> dict[str, str]:
     # Suites published before v2.3 carry no locale; they keep neutral English labels.
     language = str(index.get("output_locale", "en")).split("-", 1)[0].casefold()
-    return LABELS.get(language, LABELS["en"])
+    labels = LABELS.get(language, LABELS["en"])
+    return {**labels, "_language": language if language in LABELS else "en"}
 
 
 def read_json(path: Path) -> dict[str, Any]:
@@ -551,6 +556,61 @@ def _case_flags(case: dict[str, Any], merge_ids: set[str], question_ids: set[str
     return flags
 
 
+# What each procedure unknown means for whoever runs the case, per locale. The detail
+# recorded for the specific case (in its notes as "KIND: detail") is shown next to it.
+UNKNOWN_MEANINGS = {
+    "pt": {
+        "MISSING_EXECUTION_SURFACE": "As fontes selecionadas não mostram onde executar esta ação (tela, endpoint ou dispositivo). O cenário é mantido; a superfície de execução precisa ser confirmada.",
+        "UNKNOWN_SETUP_PATH": "As fontes selecionadas não mostram como preparar o estado inicial ou a condição de teste. O caminho de preparação precisa ser confirmado.",
+        "MISSING_ORACLE": "A autoridade não define o resultado esperado; ele precisa ser decidido antes de julgar aprovação ou reprovação.",
+        "AMBIGUOUS_POLICY": "A regra aplicável é ambígua ou conflitante nas fontes.",
+        "UNRESOLVED_PERMISSION": "Não está definido qual perfil pode executar a ação.",
+        "EXTERNAL_DEPENDENCY_UNAVAILABLE": "A execução depende de um sistema externo indisponível no ambiente de teste.",
+        "MISSING_FIXTURE": "Falta massa de dados determinística para automatizar; um testador ainda consegue executar.",
+        "MISSING_SELECTOR": "Falta um seletor ou identificador estável para automatizar a interface.",
+        "MISSING_ENVIRONMENT": "Falta um ambiente adequado (volume, dispositivos, gerador de carga) para executar ou automatizar.",
+    },
+    "en": {
+        "MISSING_EXECUTION_SURFACE": "The selected sources do not show where to perform this action (screen, endpoint or device). The scenario is kept; its execution surface must be confirmed.",
+        "UNKNOWN_SETUP_PATH": "The selected sources do not show how to prepare the starting state or test condition. The setup path must be confirmed.",
+        "MISSING_ORACLE": "The authority does not define the expected result; it must be decided before judging pass or fail.",
+        "AMBIGUOUS_POLICY": "The applicable rule is ambiguous or conflicting in the sources.",
+        "UNRESOLVED_PERMISSION": "It is not defined which role may perform the action.",
+        "EXTERNAL_DEPENDENCY_UNAVAILABLE": "Execution depends on an external system unavailable in the test environment.",
+        "MISSING_FIXTURE": "Deterministic test data for automation is missing; a tester can still run the case.",
+        "MISSING_SELECTOR": "A stable selector or identifier for UI automation is missing.",
+        "MISSING_ENVIRONMENT": "A suitable environment (volume, devices, load generator) is missing to run or automate the case.",
+    },
+}
+_NOTE_KIND = re.compile(r"^([A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+):\s*(.+)$", re.DOTALL)
+
+
+def execution_pendencies(case: dict[str, Any], language: str) -> list[dict[str, str]]:
+    """The case's recorded execution unknowns, each with what it means and, when the procedure
+    recorded one, its case-specific detail. A blocking Question is shown as its Question, not
+    here; nothing is invented and no Question is created."""
+    meanings = UNKNOWN_MEANINGS.get(language, UNKNOWN_MEANINGS["en"])
+    details: dict[str, list[str]] = {}
+    for note in case.get("notes", []) or []:
+        match = _NOTE_KIND.match(str(note).strip())
+        if match and match.group(1) in meanings:
+            details.setdefault(match.group(1), []).append(match.group(2).strip())
+    kinds = [k for k in case.get("readiness_blockers", []) or [] if k != "BLOCKING_QUESTION"]
+    kinds += [k for k in details if k not in kinds]
+    return [{"kind": kind, "meaning": meanings.get(kind, ""), "detail": " ".join(details.get(kind, []))}
+            for kind in kinds]
+
+
+def render_pendency_card(item: dict[str, str], labels: dict[str, str]) -> str:
+    return (
+        f'<article class="pendency-item"><div class="question-title"><span>{esc(labels["pendency_singular"])}</span>'
+        f'<span class="badge">{esc(item["kind"])}</span></div>'
+        + (f'<p>{esc(item["meaning"])}</p>' if item["meaning"] else "")
+        + (f'<p><strong>{esc(labels["pendency_detail"])}:</strong> {esc(item["detail"])}</p>' if item["detail"] else "")
+        + "</article>"
+    )
+
+
 def _case_badges(case: dict[str, Any], labels: dict[str, str]) -> str:
     """Shared between the compact TC row and the opened TC's own heading, so both
     always agree — one badge-building rule, not two copies that can drift apart."""
@@ -561,8 +621,8 @@ def _case_badges(case: dict[str, Any], labels: dict[str, str]) -> str:
     badges.append(f'<span class="badge priority">{esc(case["priority"])}</span>')
     if case.get("automation_suitability"):
         badges.append(
-            f'<span class="badge automation">{esc(case["automation_suitability"])} / '
-            f'{esc(case.get("automation_readiness"))}</span>'
+            f'<span class="badge automation" title="{esc(labels["suitability"])} / {esc(labels["automation_readiness"])}">'
+            f'{esc(case["automation_suitability"])} / {esc(case.get("automation_readiness"))}</span>'
         )
     n_findings, n_questions = len(case.get("finding_refs") or []), len(case.get("question_refs") or [])
     if n_findings:
@@ -571,6 +631,10 @@ def _case_badges(case: dict[str, Any], labels: dict[str, str]) -> str:
     if n_questions:
         word = labels["question_singular"] if n_questions == 1 else labels["questions"]
         badges.append(f'<span class="badge badge-question">{n_questions} {esc(word)}</span>')
+    n_pending = len(execution_pendencies(case, labels.get("_language", "en")))
+    if n_pending:
+        word = labels["pendency_one"] if n_pending == 1 else labels["pendency_plural"]
+        badges.append(f'<span class="badge badge-pendency">{n_pending} {esc(word)}</span>')
     return "".join(badges)
 
 
@@ -623,11 +687,12 @@ def render_tc_alerts(
         render_question_card(questions_by_id[ref], labels)
         for ref in case.get("question_refs", []) or [] if ref in questions_by_id
     ]
-    if not finding_cards and not question_cards:
+    pendency_cards = [render_pendency_card(item, labels) for item in execution_pendencies(case, labels.get("_language", "en"))]
+    if not finding_cards and not question_cards and not pendency_cards:
         return ""
     return (
         f'<section class="tc-alerts"><h3>{esc(labels["tc_alerts"])}</h3>'
-        f'{"".join(finding_cards)}{"".join(question_cards)}</section>'
+        f'{"".join(finding_cards)}{"".join(question_cards)}{"".join(pendency_cards)}</section>'
     )
 
 
@@ -950,6 +1015,17 @@ GLOSSARY: dict[str, list[tuple[str, list[tuple[str, str]]]]] = {
             ("NEEDS_REVIEW", "O cenário é válido, mas uma incerteza material ou um detalhe de execução ausente exige revisão/esclarecimento."),
             ("BLOCKED", "A execução depende de uma dependência externa, ambiente, equipamento indisponível ou outra condição bloqueante."),
             ("EXPLORATORY", "O caso é intencionalmente exploratório, não um teste normativo determinístico de aprova/reprova."),
+            ("Pendência de execução", "Uma incerteza registrada no procedimento (por exemplo MISSING_EXECUTION_SURFACE ou UNKNOWN_SETUP_PATH), exibida no TC com o que significa e o detalhe do caso. Não é uma Pergunta: uma Pergunta só aparece quando a análise a criou."),
+        ]),
+        ("Automação: adequação / prontidão", [
+            ("MEDIUM / NEEDS_FIXTURE", "O selo de automação mostra adequação / prontidão: quanto vale automatizar o caso (HIGH, MEDIUM, LOW, MANUAL_ONLY) e o que ainda falta para automatizá-lo."),
+            ("READY", "Nada falta para automatizar o caso."),
+            ("NEEDS_POLICY", "Falta decidir uma regra, permissão ou resultado esperado."),
+            ("NEEDS_ENVIRONMENT", "Falta um ambiente ou superfície de execução adequado."),
+            ("NEEDS_FIXTURE", "Falta massa de dados determinística ou um caminho de preparação conhecido."),
+            ("NEEDS_SELECTOR", "Falta um seletor ou identificador estável de interface."),
+            ("BLOCKED_EXTERNAL_DEPENDENCY", "Depende de um sistema externo indisponível."),
+            ("NOT_APPLICABLE", "O caso é MANUAL_ONLY; prontidão de automação não se aplica."),
         ]),
         ("Prioridade", [
             ("CRITICAL", "A falha pode quebrar um fluxo central, integridade/segurança, uma transição irreversível, auditabilidade crítica ou comportamento igualmente severo."),
@@ -999,6 +1075,17 @@ GLOSSARY: dict[str, list[tuple[str, list[tuple[str, str]]]]] = {
             ("NEEDS_REVIEW", "The scenario is valid, but a material uncertainty or missing execution detail requires review/clarification."),
             ("BLOCKED", "Execution depends on an unavailable external dependency/environment/equipment or another blocking condition."),
             ("EXPLORATORY", "The case is intentionally exploratory rather than a deterministic normative pass/fail test."),
+            ("Execution open item", "An uncertainty recorded in the procedure (for example MISSING_EXECUTION_SURFACE or UNKNOWN_SETUP_PATH), shown on the TC with what it means and the case's own detail. It is not a Question: a Question appears only when the analysis created one."),
+        ]),
+        ("Automation: suitability / readiness", [
+            ("MEDIUM / NEEDS_FIXTURE", "The automation badge reads suitability / readiness: how worthwhile automating the case is (HIGH, MEDIUM, LOW, MANUAL_ONLY) and what is still missing to automate it."),
+            ("READY", "Nothing is missing to automate the case."),
+            ("NEEDS_POLICY", "A rule, permission or expected result still has to be decided."),
+            ("NEEDS_ENVIRONMENT", "A suitable environment or execution surface is missing."),
+            ("NEEDS_FIXTURE", "Deterministic test data or a known setup path is missing."),
+            ("NEEDS_SELECTOR", "A stable UI selector or identifier is missing."),
+            ("BLOCKED_EXTERNAL_DEPENDENCY", "Depends on an unavailable external system."),
+            ("NOT_APPLICABLE", "The case is MANUAL_ONLY; automation readiness does not apply."),
         ]),
         ("Priority", [
             ("CRITICAL", "Failure can break a core flow, integrity/security, an irreversible transition, critical auditability, or similarly severe behavior."),
@@ -1349,6 +1436,8 @@ dialog::backdrop {{ background:rgba(20,29,34,.72); }}
 .req-page-empty {{ margin-top:10px; }}
 .tc-alerts {{ margin-bottom:18px; padding:14px; border:1px solid #f0dca6; border-radius:8px; background:var(--warning-soft); }}
 .tc-alerts h3 {{ margin-top:0; }}
+.pendency-item {{ padding:10px 12px; margin-top:10px; border:1px dashed #d9b24c; border-radius:8px; background:#fff; }}
+.pendency-item p {{ margin:6px 0 0; }}
 .artifact-links {{ display:flex; gap:10px; }} .artifact-links a {{ border:1px solid #aeb7bc; border-radius:6px; padding:6px 10px; text-decoration:none; }}
 .technical {{ margin-top:12px; color:var(--muted); font-size:13px; }}
 .technical-grid {{ display:grid; grid-template-columns:max-content 1fr; gap:6px 14px; }} .technical-grid dt {{ font-weight:700; color:var(--ink); }} .technical-grid dd {{ margin:0; }}
