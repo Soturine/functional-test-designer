@@ -331,6 +331,15 @@ class ExecutableProcedureTests(unittest.TestCase):
         with self.assertRaisesRegex(StageError, r"uses fixtures \['USER_OWNER_A'\]"):
             run.submit("procedures")
 
+    def test_literal_request_content_is_not_counted_as_actions(self) -> None:
+        from procedures import compressed_action
+        for single in ('As CLIENT_A, in the HTTP client, send POST to /api/v1/scan/?reader_name=GATE_A with the body [{"data": {"id": "TAG_A"}}].',
+                       "Como INTEGRACAO_A, no cliente HTTP, enviar POST para /api/v1/pedidos/?read_only=true com o corpo {\"item\": 1}."):
+            self.assertFalse(compressed_action(single), single)
+        for compound in ("As ADMIN_A, open ORDER_A, select Cancel and then save the form.",
+                         "Na APP, abrir Pedidos, informar PEDIDO_A e clicar em Enviar."):
+            self.assertTrue(compressed_action(compound), compound)
+
     def test_object_first_physical_manipulation_is_recognized(self) -> None:
         for action in ("Pass CRATE_A through the gate with the label covered.",
                        "Passar CAIXA_A pelo leitor com a etiqueta coberta.",

@@ -191,11 +191,17 @@ def _text(value: Any) -> str:
     return str(value or "").strip()
 
 
+# Literal technical content in a step (paths, query strings, inline JSON, code identifiers
+# such as reader_name) is data, not actions: it must not be counted as verbs or separators.
+_LITERAL = re.compile(r"\S*[/=]\S*|\{[^{}]*\}|\[[^\[\]]*\]|`[^`]*`|\"[^\"]*\"|\b\w*_\w*\b")
+
+
 def compressed_action(action: str) -> bool:
     """One written action that hides a multi-action sequence."""
-    verbs = ACTION_VERB.findall(action)
-    markers = SEQUENCE_MARKER.findall(action)
-    commas = action.count(",")
+    prose = _LITERAL.sub(" ", action)
+    verbs = ACTION_VERB.findall(prose)
+    markers = SEQUENCE_MARKER.findall(prose)
+    commas = prose.count(",")
     return (len(verbs) >= 3 and (markers or commas >= 2)) or (len(verbs) >= 2 and len(markers) >= 1)
 
 
