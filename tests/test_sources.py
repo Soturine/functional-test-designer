@@ -129,6 +129,60 @@ class TestAssetDiscoveryTests(unittest.TestCase):
         js = "describe('x', () => {\n  it('rejects expired tokens', () => {});\n  test(\"renews\", () => {});\n});\n"
         self.assertEqual(2, len(sources.discover_test_assets(js, "t/auth.spec.js")))
 
+    def test_other_ecosystem_conventions_are_discovered(self) -> None:
+        go = "package orders\n\nfunc TestCancelOrder(t *testing.T) {}\nfunc helper() {}\n"
+        self.assertEqual(["TestCancelOrder"], [a["reference"] for a in sources.discover_test_assets(go, "orders_test.go")])
+        java = "class LedgerTest {\n  @Test\n  void rejectsNegativeAmount() {\n  }\n  void helper() {}\n}\n"
+        self.assertEqual(["rejectsNegativeAmount"],
+                         [a["reference"] for a in sources.discover_test_assets(java, "LedgerTest.java")])
+        kotlin = "class DoseTest {\n  @Test fun capsDailyDose() {}\n}\n"
+        self.assertEqual(["capsDailyDose"], [a["reference"] for a in sources.discover_test_assets(kotlin, "DoseTest.kt")])
+        csharp = "public class CartTests {\n  [Fact]\n  public async Task EmptyCartCannotCheckout() {}\n}\n"
+        self.assertEqual(["EmptyCartCannotCheckout"],
+                         [a["reference"] for a in sources.discover_test_assets(csharp, "CartTests.cs")])
+        gherkin = "Feature: Transfers\n  Scenario: Transfer above the daily limit is refused\n"
+        self.assertEqual(["Transfer above the daily limit is refused"],
+                         [a["reference"] for a in sources.discover_test_assets(gherkin, "transfers.feature")])
+
+    def test_test_file_facet_follows_ecosystem_conventions_only(self) -> None:
+        for path in ("app/tests/test_orders.py", "svc/orders_test.go", "web/src/cart.spec.ts",
+                     "web/__tests__/cart.js", "core/src/test/java/LedgerTest.java", "spec/models/user_spec.rb",
+                     "features/transfers.feature"):
+            self.assertTrue(sources.is_test_file(path), path)
+        for path in ("app/orders.py", "app/testing_utils.md", "app/contest.py", "app/tests/fixture.json",
+                     "docs/test-plan.md"):
+            self.assertFalse(sources.is_test_file(path), path)
+
+    def test_tests_inside_an_implementation_selection_challenge_without_changing_role(self) -> None:
+        records = [
+            {"path": "app/billing/tests/test_invoices.py", "role": "IMPLEMENTATION_EVIDENCE"},
+            {"path": "app/billing/invoices.py", "role": "IMPLEMENTATION_EVIDENCE"},
+            {"path": "docs/rules.md", "role": "FUNCTIONAL_AUTHORITY"},
+            {"path": "qa/test_refunds.py", "role": "TEST_ASSET"},
+        ]
+        texts = {
+            "app/billing/tests/test_invoices.py": "def test_overdue_invoice_is_flagged():\n    pass\n",
+            # an ordinary implementation file whose function merely starts with "test" is not a test asset
+            "app/billing/invoices.py": "def test_mode_enabled():\n    return False\n",
+            "docs/rules.md": "BR-1 - Overdue invoices\n",
+            "qa/test_refunds.py": "def test_refund_window():\n    pass\n",
+        }
+        found = sources.discover_all_test_assets(records, texts)
+        self.assertEqual(
+            {("app/billing/tests/test_invoices.py::test_overdue_invoice_is_flagged", "IMPLEMENTATION_EVIDENCE"),
+             ("qa/test_refunds.py::test_refund_window", "TEST_ASSET")},
+            {(a["asset"], a["source_role"]) for a in found},
+        )
+        self.assertEqual("IMPLEMENTATION_EVIDENCE", records[0]["role"])
+
+    def test_unparseable_implementation_test_file_is_a_warning_not_a_failure(self) -> None:
+        warnings: list[str] = []
+        records = [{"path": "app/tests/test_broken.py", "role": "IMPLEMENTATION_EVIDENCE"}]
+        self.assertEqual([], sources.discover_all_test_assets(records, {"app/tests/test_broken.py": "def (:\n"}, warnings))
+        self.assertTrue(warnings and warnings[0].startswith("TEST_ASSET_NOT_PARSED"))
+        with self.assertRaises(sources.ScopeError):  # an explicit TEST_ASSET selection still fails loudly
+            sources.discover_all_test_assets([{"path": "t/test_x.py", "role": "TEST_ASSET"}], {"t/test_x.py": "def (:\n"})
+
 
 if __name__ == "__main__":
     unittest.main()

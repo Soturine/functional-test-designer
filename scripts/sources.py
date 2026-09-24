@@ -411,12 +411,43 @@ def infer_locale(explicit: str | None, authority_texts: Iterable[str], request_t
 
 _TEST_NAME = re.compile(r"^test[_A-Z0-9]", re.IGNORECASE)
 _JS_TEST = re.compile(r"""\b(?:it|test)\s*\(\s*(['"`])(?P<name>.+?)\1""")
+_RUBY_TEST = re.compile(r"""^\s*(?:it|scenario|specify)\s+(['"])(?P<name>.+?)\1""")
+_GO_TEST = re.compile(r"^func\s+(?P<name>Test\w*)\s*\(")
+_GHERKIN = re.compile(r"^\s*Scenario(?: Outline| Template)?:\s*(?P<name>\S.*?)\s*$")
+_ANNOTATION = re.compile(r"^\s*(?:@(?:Test|ParameterizedTest|RepeatedTest|TestFactory)\b|\[(?:Test|Fact|Theory|TestMethod|TestCase)\b)")
+_METHOD = re.compile(r"\b(?:fun|void|def|function|Task|async\s+Task)\s+(?P<name>\w+)\s*\(|\b(?P<bare>\w+)\s*\([^)]*\)\s*(?:\{|throws|=>)")
+_PREFIXED_METHOD = re.compile(r"\bfunction\s+(?P<name>test\w+)\s*\(")
+# Ecosystem naming conventions for test files, independent of any project vocabulary.
+_TEST_FILE = re.compile(
+    r"(?:^|/)test_[^/]+\.py$|_test\.(?:py|go)$|\.(?:test|spec)\.(?:[cm]?js|jsx|ts|tsx)$|"
+    r"(?:Test|Tests|IT|Spec)\.(?:java|kt|cs|php|groovy|scala|swift)$|_spec\.rb$|\.feature$",
+    re.IGNORECASE,
+)
+_TEST_DIRECTORY = re.compile(r"(?:^|/)(?:tests?|__tests__|specs?)/", re.IGNORECASE)
+_CODE_EXTENSIONS = {".py", ".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs", ".go", ".java", ".kt", ".cs", ".php",
+                    ".rb", ".feature", ".groovy", ".scala", ".swift"}
+
+
+def is_test_file(path: str) -> bool:
+    """A physical file that is an existing test by common ecosystem conventions (file
+    name, or a code file below a conventional test directory). This is a facet of the
+    file, never a role: it does not change the file's authority."""
+    normalized = str(path).replace("\\", "/")
+    if Path(normalized).suffix.lower() not in _CODE_EXTENSIONS:
+        return False
+    return bool(_TEST_FILE.search(normalized) or _TEST_DIRECTORY.search(normalized))
 
 
 def discover_test_assets(text: str, source: str) -> list[dict[str, Any]]:
     """Statically list test behaviors; the inspected code is never imported or executed."""
     found: list[dict[str, Any]] = []
-    if source.endswith(".py"):
+
+    def add(reference: str, line: int | None, docstring: str = "") -> None:
+        found.append({"asset": f"{source}::{reference}", "source": source, "reference": reference,
+                      "line": line, "docstring": docstring})
+
+    suffix = Path(source).suffix.lower()
+    if suffix == ".py":
         try:
             tree = ast.parse(text)
         except SyntaxError as exc:
@@ -424,12 +455,8 @@ def discover_test_assets(text: str, source: str) -> list[dict[str, Any]]:
 
         def record(node: ast.AST, owner: str | None) -> None:
             name = getattr(node, "name")
-            reference = f"{owner}::{name}" if owner else name
-            found.append({
-                "asset": f"{source}::{reference}", "source": source, "reference": reference,
-                "line": getattr(node, "lineno", None),
-                "docstring": (ast.get_docstring(node) or "").strip()[:300],
-            })
+            add(f"{owner}::{name}" if owner else name, getattr(node, "lineno", None),
+                (ast.get_docstring(node) or "").strip()[:300])
 
         for node in tree.body:
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and _TEST_NAME.match(node.name):
@@ -438,23 +465,62 @@ def discover_test_assets(text: str, source: str) -> list[dict[str, Any]]:
                 for child in node.body:
                     if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)) and _TEST_NAME.match(child.name):
                         record(child, node.name)
-    else:
-        for number, line in enumerate(text.splitlines(), 1):
+        return found
+    lines = text.splitlines()
+    annotated = False
+    for number, line in enumerate(lines, 1):
+        if suffix == ".go":
+            match = _GO_TEST.search(line)
+        elif suffix == ".feature":
+            match = _GHERKIN.search(line)
+        elif suffix == ".rb":
+            match = _RUBY_TEST.search(line)
+        elif suffix in {".java", ".kt", ".cs", ".php", ".groovy", ".scala", ".swift"}:
+            annotation = _ANNOTATION.search(line)
+            if annotation:
+                annotated = True
+                line = line[annotation.end():]
+            method = _METHOD.search(line)
+            match = None
+            if method and (annotated or _TEST_NAME.match(method.group("name") or method.group("bare") or "")):
+                name = method.group("name") or method.group("bare")
+                add(name, number)
+                annotated = False
+            elif suffix == ".php":
+                match = _PREFIXED_METHOD.search(line)
+            if match is None:
+                continue
+        else:
             match = _JS_TEST.search(line)
-            if match:
-                reference = match.group("name")
-                found.append({
-                    "asset": f"{source}::{reference}", "source": source,
-                    "reference": reference, "line": number, "docstring": "",
-                })
+        if match:
+            add(match.group("name"), number)
     return found
 
 
-def discover_all_test_assets(records: list[dict[str, Any]], texts: dict[str, str]) -> list[dict[str, Any]]:
+def discover_all_test_assets(
+    records: list[dict[str, Any]], texts: dict[str, str], warnings: list[str] | None = None,
+) -> list[dict[str, Any]]:
+    """Existing tests that challenge the suite: every file of an explicit TEST_ASSET
+    selection, plus conventional test files found inside IMPLEMENTATION_EVIDENCE
+    selections. The source keeps its role; `source_role` records it and existing tests
+    are never authority. An implementation-side test file that cannot be parsed stays
+    ordinary implementation evidence and is reported in `warnings`."""
     assets: list[dict[str, Any]] = []
     for record in records:
-        if record["role"] == "TEST_ASSET" and record["path"] in texts:
-            assets.extend(discover_test_assets(texts[record["path"]], record["path"]))
+        if record["path"] not in texts:
+            continue
+        if record["role"] == "TEST_ASSET":
+            found = discover_test_assets(texts[record["path"]], record["path"])
+        elif record["role"] == "IMPLEMENTATION_EVIDENCE" and is_test_file(record["path"]):
+            try:
+                found = discover_test_assets(texts[record["path"]], record["path"])
+            except ScopeError as exc:
+                if warnings is not None:
+                    warnings.append(f"TEST_ASSET_NOT_PARSED: {exc}")
+                continue
+        else:
+            continue
+        assets.extend({**item, "source_role": record["role"]} for item in found)
     return assets
 
 

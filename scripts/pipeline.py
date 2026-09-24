@@ -240,7 +240,8 @@ def start_run(
     authority_texts = [texts[r["path"]] for r in records if r["role"] == "FUNCTIONAL_AUTHORITY"]
     locale_info = sources.infer_locale(locale, authority_texts, request_text)
     authority_index = sources.index_authority(records, texts, id_pattern)
-    test_assets = sources.discover_all_test_assets(records, texts)
+    asset_warnings: list[str] = []
+    test_assets = sources.discover_all_test_assets(records, texts, asset_warnings)
     text_dir = run_dir / "authority-text"
     for record in records:
         if record["role"] == "FUNCTIONAL_AUTHORITY":
@@ -287,6 +288,7 @@ def start_run(
     write_json(run_dir / "sources.json", {
         "scope": {key: selection[key] for key in ("selected_scope_roots", "resolved_scope_paths")},
         "records": records, "authority_index": authority_index, "test_assets": test_assets,
+        "test_asset_warnings": asset_warnings,
     })
     _record(run_dir, "SOURCE_SELECTION", started_at=began, inputs=sources_selected,
             outputs={"scope": selection["resolved_scope_paths"], "records": records},
@@ -305,6 +307,7 @@ def start_run(
     order = _work_order(run_dir)
     return {"run_dir": str(run_dir), "resumed": False, "work_order": str(order), **locale_info,
             "authority_identifiers": len(authority_index), "test_assets": len(test_assets),
+            "test_asset_warnings": asset_warnings,
             "reading_task_plan": str(run_dir / "reading" / "task-plan.json"), "reading": run["reading"],
             "reading_states": reading_states, "next_stage": first}
 
@@ -861,7 +864,9 @@ def finalize_run(run_dir: Path, formats: Any = None, baseline: dict[str, Any] | 
     metrics.update({"stage_seconds": state.get("stage_seconds", {}), "stage_rejections": state.get("rejections", {}),
                     "authority_identifiers": len(source_state["authority_index"]),
                     "test_assets_discovered": len(source_state["test_assets"]),
-                    "warnings": document["diagnostics"]["warnings"]})
+                    "test_assets_by_source_role": _count(a.get("source_role", "TEST_ASSET")
+                                                         for a in source_state["test_assets"]),
+                    "warnings": document["diagnostics"]["warnings"] + source_state.get("test_asset_warnings", [])})
     write_json(run_dir / "run-metrics.json", metrics)
     render_began = now()
     rendered = render_outputs(canonical_path, Path(run["artifact_root"]), formats)

@@ -302,7 +302,8 @@ def validate_expansion(payload: dict[str, Any], context: dict[str, Any]) -> dict
             errors.append(f"{label} disposition must be one of {sorted(ASSET_DISPOSITIONS)}")
         intent = item.get("intent") if isinstance(item.get("intent"), dict) else {}
         record = {
-            "asset": asset, "source": assets[asset]["source"], "disposition": disposition, "dimension": None,
+            "asset": asset, "source": assets[asset]["source"],
+            "source_role": assets[asset].get("source_role", "TEST_ASSET"), "disposition": disposition, "dimension": None,
             "intent": {field: _text(intent.get(field)) for field in INTENT_FIELDS},
             "covered_by": [], "test_ref": None, "question": None,
             "reason": _text(item.get("reason")) or None, "alignment": None,

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import unittest
 
 from support import PackRun, candidate
@@ -127,6 +128,57 @@ class ExpansionStageTests(unittest.TestCase):
             candidate(pack, "BOUNDARY", "B1")["test"]["oracle_source"] = {"source": "src/invitations.py", "reference": "invite"}
         run = self.reach_expansion("saas-accounts", implementation_oracle)
         with self.assertRaisesRegex(StageError, "DERIVED and needs oracle_source in Functional Authority"):
+            run.submit("expansion")
+
+
+class ImplementationTestAssetTests(unittest.TestCase):
+    """Existing tests below an implementation selection challenge the suite; they keep
+    the implementation role and never become authority."""
+
+    @staticmethod
+    def as_implementation(pack):
+        for source in pack["sources"].values():
+            if source["role"] == "TEST_ASSET":
+                source["role"] = "IMPLEMENTATION_EVIDENCE"
+
+    def check(self, name: str) -> None:
+        explicit = PackRun(name)
+        self.addCleanup(explicit.close)
+        explicit_assets = explicit.start()["test_assets"]
+        run = PackRun(name, self.as_implementation)
+        self.addCleanup(run.close)
+        started = run.start()
+        self.assertGreater(started["test_assets"], 0)
+        self.assertEqual(explicit_assets, started["test_assets"])
+        state = json.loads((run.run_dir / "sources.json").read_text(encoding="utf-8"))
+        roles = {record["path"]: record["role"] for record in state["records"]}
+        for asset in state["test_assets"]:
+            self.assertEqual("IMPLEMENTATION_EVIDENCE", asset["source_role"])
+            self.assertEqual("IMPLEMENTATION_EVIDENCE", roles[asset["source"]])
+        authority_sources = {item["source"] for item in state["authority_index"]}
+        self.assertTrue(authority_sources)
+        self.assertFalse({a["source"] for a in state["test_assets"]} & authority_sources)
+        run.submit("design")
+        run.submit("expansion")
+        result = json.loads((run.run_dir / "stages" / "expansion.result.json").read_text(encoding="utf-8"))
+        challenge = result["test_asset_challenge"]
+        self.assertEqual(started["test_assets"], len(challenge))
+        self.assertTrue(all(item["source_role"] == "IMPLEMENTATION_EVIDENCE" for item in challenge))
+
+    def test_saas_tests_inside_implementation_are_challenged(self) -> None:
+        self.check("saas-accounts")
+
+    def test_refund_api_tests_inside_implementation_are_challenged(self) -> None:
+        self.check("api-refunds")
+
+    def test_undispositioned_implementation_side_test_is_rejected(self) -> None:
+        def mutate(pack):
+            self.as_implementation(pack)
+            pack["stages"]["expansion"]["test_assets"].pop()
+        run = PackRun("saas-accounts", mutate)
+        self.addCleanup(run.close)
+        run.through("design")
+        with self.assertRaisesRegex(StageError, "1 discovered test asset behavior"):
             run.submit("expansion")
 
 
