@@ -49,6 +49,12 @@ LABELS = {
         "no_results": "Nenhum Test Case corresponde aos filtros.", "expand_all": "Expandir todos",
         "collapse_all": "Recolher todos", "collapse": "Recolher", "expand": "Expandir",
         "open_group": "Ver Test Cases", "modal_prev": "Anterior", "modal_next": "Próximo", "requirement_filter": "Requisito",
+        "request_contract": "Contrato da requisição", "execution_variants": "Variantes de execução",
+        "state_contract": "Restauração de estado", "rc_method": "Método", "rc_endpoint": "Endpoint",
+        "rc_parameters": "Parâmetros", "rc_body": "Corpo", "rc_fixture_pool": "Massa de fixtures",
+        "rc_varies": "O que varia", "rc_measurements": "Medições",
+        "SELF_CLEANING": "o próprio caso limpa (ver Limpeza)",
+        "REQUIRES_FIXTURE_RESET": "o harness deve reiniciar as fixtures de Dados de teste antes do próximo caso",
         "view_functional": "Por requisito", "view_all": "Todos", "view_families": "Famílias", "modal_page": "Visão", "notes": "Notas", "post_suite": "Pós-suíte", "post_suite_rationale": "Motivação",
         "post_suite_related": "Test Cases relacionados", "post_suite_lineage": "Origem (execução pós-suíte · run)",
         "order_use_case_main_flow": "ordem do fluxo principal", "order_canonical_order": "ordem canônica",
@@ -101,6 +107,12 @@ LABELS = {
         "no_results": "No Test Case matches the filters.", "expand_all": "Expand all",
         "collapse_all": "Collapse all", "collapse": "Collapse", "expand": "Expand",
         "open_group": "View Test Cases", "modal_prev": "Previous", "modal_next": "Next", "requirement_filter": "Requirement",
+        "request_contract": "Request contract", "execution_variants": "Execution variants",
+        "state_contract": "State restoration", "rc_method": "Method", "rc_endpoint": "Endpoint",
+        "rc_parameters": "Parameters", "rc_body": "Body", "rc_fixture_pool": "Fixture pool",
+        "rc_varies": "What varies", "rc_measurements": "Measurements",
+        "SELF_CLEANING": "the case cleans up itself (see Cleanup)",
+        "REQUIRES_FIXTURE_RESET": "the harness must reset the Test Data fixtures before the next case",
         "view_functional": "By requirement", "view_all": "All", "view_families": "Families", "modal_page": "View", "notes": "Notes", "post_suite": "Post-suite", "post_suite_rationale": "Rationale",
         "post_suite_related": "Related Test Cases", "post_suite_lineage": "Origin (post-suite run · run)",
         "order_use_case_main_flow": "main-flow order", "order_canonical_order": "canonical order",
@@ -354,6 +366,7 @@ def render_case_markdown(
         f"## {labels['steps']}\n" + "\n".join(steps),
         f"## {labels['postconditions']}\n" + _bullets(case["postconditions"], none),
         f"## {labels['cleanup']}\n" + _bullets(case["cleanup"], none),
+        *_execution_context_markdown(case, labels),
         f"## {labels['traceability']}\n"
         f"- {labels['requirements']}: {', '.join(requirement_names) or none}\n"
         f"- {labels['coverage_points']}: {', '.join(case['coverage_point_refs'])}\n"
@@ -681,6 +694,11 @@ def render_case_body(
       <section><h3>{esc(labels['test_data'])}</h3>{_data(case.get('test_data', []), none)}</section>
     </div>
     <section><h3>{esc(labels['steps'])}</h3>{_steps(case['steps'], labels)}</section>
+    <div class="two-column">
+      <section><h3>{esc(labels['postconditions'])}</h3>{_list(case.get('postconditions', []), none)}</section>
+      <section><h3>{esc(labels['cleanup'])}</h3>{_list(case.get('cleanup', []), none)}</section>
+    </div>
+    {_execution_context_html(case, labels)}
     <section class="flow-section"><div class="flow-heading"><h3>{esc(labels['flow'])}</h3>{expand}</div>{flow}</section>
     {f'<section><h3>{esc(labels["suitability"])}</h3>{automation}</section>' if automation else ''}
     <section><h3>{esc(labels['artifacts'])}</h3><div class="artifact-links">{''.join(links) or esc(none)}</div></section>
@@ -709,6 +727,45 @@ def render_case_template(
         f'data-priority="{esc(case["priority"])}" data-family="{esc(family_id)}" '
         f'data-features="{esc(" ".join(sorted(flags)))}" data-search="{esc(search)}">{body}</template>'
     )
+
+
+def _contract_rows(case: dict[str, Any], labels: dict[str, str]) -> list[tuple[str, str]]:
+    contract = case.get("request_contract") or {}
+    rows = []
+    for field in ("method", "endpoint", "parameters", "body", "fixture_pool", "varies", "measurements"):
+        value = contract.get(field)
+        if value:
+            rows.append((labels[f"rc_{field}"], "; ".join(value) if isinstance(value, list) else str(value)))
+    return rows
+
+
+def _execution_context_markdown(case: dict[str, Any], labels: dict[str, str]) -> list[str]:
+    """Request contract, execution variants and the state contract, when the case has them."""
+    sections = []
+    if case.get("request_contract"):
+        sections.append(f"## {labels['request_contract']}\n" + "\n".join(
+            f"- **{name}:** {value}" for name, value in _contract_rows(case, labels)))
+    if case.get("execution_variants"):
+        sections.append(f"## {labels['execution_variants']}\n" + "\n".join(
+            f"- **{v['kind']}:** {v['description']}" for v in case["execution_variants"]))
+    if case.get("state_contract"):
+        sections.append(f"## {labels['state_contract']}\n{case['state_contract']} — {labels[case['state_contract']]}")
+    return sections
+
+
+def _execution_context_html(case: dict[str, Any], labels: dict[str, str]) -> str:
+    parts = []
+    if case.get("request_contract"):
+        parts.append(f"<section><h3>{esc(labels['request_contract'])}</h3><dl class=\"technical-grid\">" + "".join(
+            f"<dt>{esc(name)}</dt><dd>{esc(value)}</dd>" for name, value in _contract_rows(case, labels)) + "</dl></section>")
+    if case.get("execution_variants"):
+        parts.append(f"<section><h3>{esc(labels['execution_variants'])}</h3><ul>" + "".join(
+            f"<li><strong>{esc(v['kind'])}:</strong> {esc(v['description'])}</li>" for v in case["execution_variants"])
+            + "</ul></section>")
+    if case.get("state_contract"):
+        parts.append(f"<p class=\"muted\"><strong>{esc(labels['state_contract'])}:</strong> "
+                     f"{esc(case['state_contract'])} — {esc(labels[case['state_contract']])}</p>")
+    return "".join(parts)
 
 
 def _case_row(case: dict[str, Any], labels: dict[str, str]) -> str:

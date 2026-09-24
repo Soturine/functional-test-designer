@@ -55,6 +55,8 @@ def map_test_case(case: dict[str, Any]) -> dict[str, Any]:
             "state_contract": case.get("state_contract") or ("SELF_CLEANING" if case.get("cleanup") else "REQUIRES_FIXTURE_RESET"),
             "required_resources": list(case.get("required_resources") or []),
             "environment_requirements": list(case.get("environment_requirements") or []),
+            "variants": [dict(v) for v in case.get("execution_variants") or []],
+            "request_contract": dict(case["request_contract"]) if case.get("request_contract") else None,
         },
     }
 

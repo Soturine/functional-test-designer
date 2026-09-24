@@ -675,7 +675,7 @@ def build_canonical(run_dir: Path, baseline_comparison: dict[str, Any] | None = 
             "source_refs": _clean_refs(test["source_refs"] + procedure.get("evidence_refs", [])),
             "preconditions": procedure["preconditions"], "test_data": procedure["test_data"],
             "steps": procedure["steps"], "postconditions": procedure["postconditions"],
-            "cleanup": procedure["cleanup"],
+            "cleanup": procedure["cleanup"], "state_contract": procedure_stage.state_contract(procedure["cleanup"]),
             "tags": [identifier_titles.get(i, i) for i in test["identifiers"]],
             "notes": procedure["notes"] + [f"{u['kind']}: {u['detail']}" for u in procedure["unknowns"]],
             "test_basis": test["basis"], "primary_type": test["primary_type"], "secondary_tags": [],
@@ -694,6 +694,10 @@ def build_canonical(run_dir: Path, baseline_comparison: dict[str, Any] | None = 
             "failure_domain": test["failure_domain"],
             "source_identifiers": [identifier_titles.get(i, i) for i in test["identifiers"]],
         }
+        if procedure.get("execution_variants"):
+            case["execution_variants"] = procedure["execution_variants"]
+        if procedure.get("request_contract"):
+            case["request_contract"] = procedure["request_contract"]
         if test.get("dimension"):
             case["expansion_dimension"] = test["dimension"]
         if test.get("pattern") or test.get("surface"):

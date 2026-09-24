@@ -78,6 +78,7 @@ def _export_canonical_case(case: dict[str, Any]) -> dict[str, Any]:
         "automation_readiness": case.get("automation_readiness"),
         "readiness_blockers": list(case.get("readiness_blockers", [])),
         "automation_layer": case.get("automation_layer"), "automation_tool_hint": case.get("automation_tool_hint"),
+        "execution_variants": case.get("execution_variants", []), "request_contract": case.get("request_contract"),
         "environment_requirements": [], "required_resources": [], "chaos_run_id": None,
     }
 
@@ -95,7 +96,7 @@ def _export_chaos_case(chaos_run_id: str, case: dict[str, Any]) -> dict[str, Any
         "automation_suitability": case.get("automation_suitability"),
         "automation_readiness": None,
         "readiness_blockers": sorted({u["kind"] for u in case.get("unknowns", []) if u.get("kind")}),
-        "automation_layer": None, "automation_tool_hint": None,
+        "automation_layer": None, "automation_tool_hint": None, "execution_variants": [], "request_contract": None,
         "environment_requirements": case.get("environment_requirements", []),
         "required_resources": case.get("required_resources", []), "chaos_run_id": chaos_run_id,
     }
@@ -242,7 +243,8 @@ def preview_export(
     carried = ("title", "priority", "status", "preconditions", "test_data", "steps", "postconditions", "cleanup",
                "state_contract", "requirement_refs", "related_test_cases", "source_kind", "automation_suitability",
                "automation_readiness", "readiness_blockers", "automation_layer", "automation_tool_hint",
-               "required_resources", "environment_requirements", "chaos_run_id")
+               "required_resources", "environment_requirements", "chaos_run_id", "execution_variants",
+               "request_contract")
     azure_cases = [{"id": case["export_key"], "tags": case["execution_tags"], "coverage_point_refs": [],
                     **{field: case.get(field) for field in carried}} for case in package["test_cases"]]
     return build_preview(

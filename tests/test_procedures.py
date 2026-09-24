@@ -372,5 +372,98 @@ class ExecutableProcedureTests(unittest.TestCase):
         run.submit("procedures")
 
 
+
+class ExecutionContractTests(unittest.TestCase):
+    """Self-contained execution: actors have a starting context, named requests travel as a
+    contract, state restoration is explicit, and execution variants place, never clone."""
+
+    def submit(self, name, mutate):
+        run = PackRun(name, mutate)
+        self.addCleanup(run.close)
+        run.through("expansion")
+        return run
+
+    @staticmethod
+    def acting(pack, precondition=None):
+        item = procedure(pack, "T1")
+        item["test_data"].append({"name": "USER_ADMIN_B", "description": "second user with the Owner role in ACCOUNT_A"})
+        item["steps"][0]["action"] = "As USER_ADMIN_B, open the member management page of ACCOUNT_A."
+        if precondition:
+            item["preconditions"].append(precondition)
+
+    def test_an_actor_without_a_starting_context_is_rejected(self) -> None:
+        run = self.submit("saas-accounts", self.acting)
+        with self.assertRaisesRegex(StageError, "acts as USER_ADMIN_B, but no precondition or earlier step"):
+            run.submit("procedures")
+
+    def test_an_actor_whose_session_is_a_precondition_is_accepted(self) -> None:
+        run = self.submit("saas-accounts", lambda pack: self.acting(pack, "USER_ADMIN_B is signed in to ACCOUNT_A."))
+        run.submit("procedures")
+
+    def test_a_load_case_naming_a_request_must_carry_its_contract(self) -> None:
+        run = self.submit("api-refunds", lambda pack: procedure(pack, "D2").pop("request_contract"))
+        with self.assertRaisesRegex(StageError, "describe that request in request_contract"):
+            run.submit("procedures")
+
+    def test_a_ui_driven_concurrency_case_needs_no_request_contract(self) -> None:
+        run = self.submit("saas-accounts", None)
+        self.assertNotIn("request_contract", procedure(run.pack, "D2"))
+        run.submit("procedures")
+
+    def test_a_request_contract_is_a_description_not_a_tool_invocation(self) -> None:
+        def tool(pack):
+            procedure(pack, "D2")["request_contract"]["body"] = "curl -X POST /refunds -d amount=60.00"
+        run = self.submit("api-refunds", tool)
+        with self.assertRaisesRegex(StageError, "describes the request, not a tool invocation"):
+            run.submit("procedures")
+
+    def test_a_request_contract_cannot_invent_a_threshold(self) -> None:
+        def invented(pack):
+            procedure(pack, "D2")["request_contract"]["measurements"] = ["p95 latency under 350 ms"]
+        run = self.submit("api-refunds", invented)
+        with self.assertRaisesRegex(StageError, "request_contract.measurements asserts"):
+            run.submit("procedures")
+
+    def test_contract_fixtures_must_be_described(self) -> None:
+        def undefined(pack):
+            procedure(pack, "D2")["request_contract"]["fixture_pool"] = "CLIENT_A and CLIENT_B credentials"
+        run = self.submit("api-refunds", undefined)
+        with self.assertRaisesRegex(StageError, r"uses fixtures \['CLIENT_B'\]"):
+            run.submit("procedures")
+
+    def test_contract_and_state_contract_reach_the_published_case(self) -> None:
+        run = PackRun("api-refunds")
+        self.addCleanup(run.close)
+        run.finalize(("JSON", "MARKDOWN"))
+        index = run.output("test-cases.json")
+        cases = [run.output(entry["file"]) for entry in index["test_cases"]]
+        contract = next(c for c in cases if c.get("request_contract"))
+        self.assertEqual(("POST", "/refunds"), (contract["request_contract"]["method"], contract["request_contract"]["endpoint"]))
+        for case in cases:
+            self.assertEqual("SELF_CLEANING" if case["cleanup"] else "REQUIRES_FIXTURE_RESET", case["state_contract"])
+        markdown = (run.artifacts / "output" / next(e["markdown_file"] for e in index["test_cases"]
+                                                     if e["id"] == contract["id"])).read_text(encoding="utf-8")
+        self.assertIn("## Request contract", markdown)
+        self.assertIn("## State restoration", markdown)
+
+    def test_a_physical_execution_variant_places_the_case_in_the_physical_view_without_a_clone(self) -> None:
+        def variant(pack):
+            procedure(pack, "T1")["execution_variants"] = [
+                {"kind": "PHYSICAL_DEVICE", "description": "Submit the invitation from a real handheld enrolled to ACCOUNT_A."}]
+        run = PackRun("saas-accounts", variant)
+        self.addCleanup(run.close)
+        run.finalize(("JSON",))
+        organization = run.output("organization.json")
+        physical = next(g for g in organization["groups"] if g["id"] == "PHYSICAL_DEVICE")
+        self.assertEqual([("TC-001", "EXECUTION_VARIANT")], [(m["case"], m["via"]) for m in physical["members"]])
+        self.assertEqual(len(run.output("test-cases.json")["test_cases"]), len(organization["memberships"]))
+
+    def test_an_execution_variant_must_say_how_it_differs(self) -> None:
+        run = self.submit("saas-accounts", lambda pack: procedure(pack, "T1").update(
+            execution_variants=[{"kind": "PHYSICAL_DEVICE", "description": "real device"}]))
+        with self.assertRaisesRegex(StageError, "must describe how that execution differs"):
+            run.submit("procedures")
+
+
 if __name__ == "__main__":
     unittest.main()

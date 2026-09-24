@@ -404,6 +404,38 @@
     "readiness_blockers": {
       "$ref": "#/$defs/uniqueStringList"
     },
+    "state_contract": {
+      "enum": [
+        "SELF_CLEANING",
+        "REQUIRES_FIXTURE_RESET"
+      ]
+    },
+    "execution_variants": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "description"],
+        "properties": {
+          "kind": {"enum": ["PHYSICAL_DEVICE", "SIMULATED_DEVICE", "MANUAL_FIELD"]},
+          "description": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "request_contract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["method", "endpoint", "measurements"],
+      "properties": {
+        "method": {"type": "string", "minLength": 1},
+        "endpoint": {"type": "string", "minLength": 1},
+        "parameters": {"type": ["array", "string", "null"]},
+        "body": {"type": ["string", "null"]},
+        "fixture_pool": {"type": ["string", "null"]},
+        "varies": {"type": ["array", "string", "null"]},
+        "measurements": {"type": ["array", "string"]}
+      }
+    },
     "expansion_dimension": {
       "enum": [
         "NEGATIVE",

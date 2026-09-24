@@ -41,8 +41,34 @@ READINESS_ORDER = (
 PROCEDURE_KEYS = {"procedures"}
 PROCEDURE_FIELDS = {
     "test", "preconditions", "test_data", "steps", "postconditions", "cleanup", "oracle_step",
-    "single_step_reason", "unknowns", "automation", "notes", "evidence_refs",
+    "single_step_reason", "unknowns", "automation", "notes", "evidence_refs", "execution_variants",
+    "request_contract",
 }
+# How a case can be executed beyond its default surface (e.g. the same flow through a real
+# device); used to place the one Test Case in more execution views, never to clone it.
+EXECUTION_VARIANT_KINDS = ("PHYSICAL_DEVICE", "SIMULATED_DEVICE", "MANUAL_FIELD")
+# The request a load/concurrency experiment repeats, described without tool syntax.
+REQUEST_CONTRACT_FIELDS = ("method", "endpoint", "parameters", "body", "fixture_pool", "varies", "measurements")
+REQUEST_CONTRACT_REQUIRED = ("method", "endpoint", "measurements")
+TOOL_SYNTAX = re.compile(
+    r"\b(?:curl\s+-|http\.(?:get|post|put|patch|delete)\s*\(|k6\s+run|jmeter\s+-|locust\s+-|"
+    r"artillery\s+run|ab\s+-[nc]|wrk\s+-[tcd])", re.IGNORECASE)
+STATE_CONTRACTS = ("SELF_CLEANING", "REQUIRES_FIXTURE_RESET")
+# A step performed on behalf of a fixture actor ("As USER_A, ...", "Como USER_A, ...").
+ACTING_FIXTURE = re.compile(
+    r"^\s*(?:As|Como)\s+(?:(?:the|o|a|os|as|el|la)\s+)?([A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+)\b")
+# Load experiments against a request surface must say which request they repeat.
+LOAD_TYPES = {"PERFORMANCE", "CONCURRENCY", "RACE_CONDITION"}
+REQUEST_LAYERS = {"API", "INTEGRATION"}
+# A request the procedure already names (an HTTP method or a resource path): evidence exists,
+# so its contract must travel with the case.
+NAMED_REQUEST = re.compile(r"\b(?:GET|POST|PUT|PATCH|DELETE)\b|(?<![\w/])/[A-Za-z0-9_\-]+(?:/[A-Za-z0-9_\-{}.]*)*")
+
+
+def state_contract(cleanup: list[str]) -> str:
+    """Who restores state after the case: its own cleanup steps, or a harness that resets
+    the fixtures its test_data declares before the next case."""
+    return "SELF_CLEANING" if cleanup else "REQUIRES_FIXTURE_RESET"
 # Unknowns that honestly explain why a procedure cannot cite its execution path yet.
 PATH_UNKNOWNS = {"MISSING_EXECUTION_SURFACE", "UNKNOWN_SETUP_PATH"}
 
@@ -303,6 +329,7 @@ def validate_procedures(payload: dict[str, Any], context: dict[str, Any]) -> dic
             )
         about_auth = bool(AUTH_WORDS.search(f"{test['title']} {test['trigger']} {test['objective']}"))
         normalized_steps = []
+        established = " ".join(preconditions)
         if not steps:
             errors.append(f"{label} requires at least one step")
         for number, step in enumerate(steps, 1):
@@ -311,6 +338,13 @@ def validate_procedures(payload: dict[str, Any], context: dict[str, Any]) -> dic
                 errors.append(f"{label} step {number} requires an action")
             if not expected and not missing_oracle:
                 errors.append(f"{label} step {number} requires an observable expected_result")
+            acting = ACTING_FIXTURE.match(action)
+            if acting and not re.search(rf"\b{re.escape(acting.group(1))}\b", established):
+                errors.append(
+                    f"{label} step {number} acts as {acting.group(1)}, but no precondition or earlier step gives "
+                    f"{acting.group(1)} a usable starting context (an open session, a configured credential or "
+                    "client, a device in hand); state it in the preconditions")
+            established += " " + action
             if ABSTRACT_ACTION.search(action):
                 errors.append(f"{label} step {number} action is abstract; say who does which atomic action to which target (and where, with which semantic data) as the evidence supports, or keep the known intent and declare MISSING_EXECUTION_SURFACE / UNKNOWN_SETUP_PATH")
             if expected and ABSTRACT_OBSERVATION.search(expected):
@@ -350,8 +384,45 @@ def validate_procedures(payload: dict[str, Any], context: dict[str, Any]) -> dic
                 "step": number, "action": action, "expected_result": expected or None,
                 "needs_clarification": not expected,
             })
+        variants = []
+        for variant in item.get("execution_variants", []) or []:
+            kind = _text(variant.get("kind")) if isinstance(variant, dict) else ""
+            description = _text(variant.get("description")) if isinstance(variant, dict) else ""
+            if kind not in EXECUTION_VARIANT_KINDS:
+                errors.append(f"{label} execution_variants kind must be one of {EXECUTION_VARIANT_KINDS}")
+            elif len(description.split()) < 4:
+                errors.append(f"{label} execution variant {kind} must describe how that execution differs")
+            else:
+                check_locale(f"{label}.execution_variant", description, locale, errors)
+                variants.append({"kind": kind, "description": description})
+        contract = None
+        raw_contract = item.get("request_contract")
+        if raw_contract is not None:
+            if not isinstance(raw_contract, dict) or set(raw_contract) - set(REQUEST_CONTRACT_FIELDS):
+                errors.append(f"{label} request_contract accepts only {REQUEST_CONTRACT_FIELDS}")
+                raw_contract = {}
+            contract = {}
+            for field in REQUEST_CONTRACT_FIELDS:
+                value = raw_contract.get(field)
+                contract[field] = ([_text(v) for v in value if _text(v)] if isinstance(value, list)
+                                   else _text(value) or None)
+            for field in REQUEST_CONTRACT_REQUIRED:
+                if not contract[field]:
+                    errors.append(f"{label} request_contract.{field} is required")
+            contract_text = " ".join(v if isinstance(v, str) else " ".join(v) for v in contract.values() if v)
+            if TOOL_SYNTAX.search(contract_text):
+                errors.append(f"{label} request_contract describes the request, not a tool invocation")
+            for threshold in LOAD_THRESHOLD.finditer(" ".join(contract["measurements"] or [])
+                                                      if isinstance(contract["measurements"], list)
+                                                      else contract["measurements"] or ""):
+                if threshold.group("number").replace(",", ".") not in designed_numbers:
+                    errors.append(
+                        f"{label} request_contract.measurements asserts {threshold.group(0)!r}, which the designed "
+                        "Test Case does not state; measure and record the value instead")
         defined = {row["name"] for row in normalized_data}
         used_text = " ".join([*preconditions, *(s["action"] + " " + (s["expected_result"] or "") for s in normalized_steps),
+                              *[variant["description"] for variant in variants],
+                              *([str(contract.get("body") or ""), str(contract.get("fixture_pool") or "")] if contract else []),
                               *[_text(v) for v in item.get("postconditions", []) or []],
                               *[_text(v) for v in item.get("cleanup", []) or []]])
         # Codes and constants the selected sources themselves use are vocabulary, not fixtures.
@@ -388,6 +459,12 @@ def validate_procedures(payload: dict[str, Any], context: dict[str, Any]) -> dic
             errors.append(f"{label} automation.layer must be one of {LAYERS}")
         if hint not in TOOL_HINTS:
             errors.append(f"{label} automation.tool_hint must be one of {TOOL_HINTS}")
+        names_request = any(NAMED_REQUEST.search(step["action"]) for step in normalized_steps)
+        if test.get("primary_type") in LOAD_TYPES and layer in REQUEST_LAYERS and names_request and contract is None:
+            errors.append(
+                f"{label} is a {test['primary_type']} experiment on a request its steps name; describe that request in "
+                "request_contract (method, endpoint, parameters, body, fixture_pool, varies, measurements) so an "
+                "executor can build it without reopening the sources")
         blocking = bool(blocking_by_test.get(test["id"])) or any(
             unknown["question"] in blocking_questions for unknown in unknowns
         )
@@ -403,6 +480,7 @@ def validate_procedures(payload: dict[str, Any], context: dict[str, Any]) -> dic
             "single_step_reason": _text(item.get("single_step_reason")) or None,
             "automation_suitability": suitability, "automation_layer": layer,
             "automation_tool_hint": hint, **classification,
+            "execution_variants": variants, "request_contract": contract,
         }
         if missing_oracle and not any(u["question"] for u in unknowns if u["kind"] == "MISSING_ORACLE"):
             errors.append(f"{label} MISSING_ORACLE requires the Question that asks for the oracle")

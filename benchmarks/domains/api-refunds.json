@@ -904,6 +904,15 @@
        "expected_result": "The refunded total never exceeds the captured amount."
       }
      ],
+     "request_contract": {
+      "method": "POST",
+      "endpoint": "/refunds",
+      "parameters": ["the refunded payment is PAYMENT_CAPTURED_100"],
+      "body": "a refund of 60.00 for PAYMENT_CAPTURED_100",
+      "fixture_pool": "CLIENT_A credentials and one distinct key per request",
+      "varies": ["the key of each request"],
+      "measurements": ["HTTP status of each request", "sum of the refunded amounts of PAYMENT_CAPTURED_100"]
+     },
      "automation": {
       "suitability": "MEDIUM",
       "layer": "API"
