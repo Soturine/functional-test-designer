@@ -20,25 +20,41 @@ def _hash(payload: dict[str, Any]) -> str:
 
 
 def map_test_case(case: dict[str, Any]) -> dict[str, Any]:
-    """Map only portable Test Plan concepts; the canonical suite remains authoritative."""
+    """Map portable Test Plan concepts plus the execution context an executor needs to run
+    the case without the canonical suite at hand: its fixture definitions (test_data), its
+    end state and cleanup, and whether state is restored by the case itself or by a harness
+    reset (state_contract). The canonical suite remains authoritative."""
     return {
         "local_id": case["id"],
         "title": case["title"],
         "priority": case["priority"],
-        "preconditions": list(case.get("preconditions", [])),
+        "preconditions": list(case.get("preconditions") or []),
+        "test_data": [dict(row) for row in case.get("test_data") or []],
         "steps": [
             {"action": step["action"], "expected_result": step.get("expected_result")}
             for step in case.get("steps", [])
         ],
+        "postconditions": list(case.get("postconditions") or []),
+        "cleanup": list(case.get("cleanup") or []),
         "tags": list(case.get("tags", [])),
         "trace_refs": {
             "requirements": list(case.get("requirement_refs", [])),
             "coverage_points": list(case.get("coverage_point_refs", [])),
+            "related_test_cases": list(case.get("related_test_cases") or []),
         },
         "status": case["status"],
+        "source_kind": case.get("source_kind", "CANONICAL"),
         "automation": {
             "suitability": case.get("automation_suitability"),
             "readiness": case.get("automation_readiness"),
+            "readiness_blockers": list(case.get("readiness_blockers") or []),
+            "layer": case.get("automation_layer"),
+            "tool_hint": case.get("automation_tool_hint"),
+        },
+        "execution": {
+            "state_contract": case.get("state_contract") or ("SELF_CLEANING" if case.get("cleanup") else "REQUIRES_FIXTURE_RESET"),
+            "required_resources": list(case.get("required_resources") or []),
+            "environment_requirements": list(case.get("environment_requirements") or []),
         },
     }
 
@@ -68,9 +84,10 @@ def build_group_suite_mapping(groups: list[dict[str, Any]]) -> dict[str, Any]:
                 {"suite": suite, "suite_type": group.get("suite_type", "REQUIREMENT_BASED")}
             )
             suite_members.setdefault(suite, []).append(key)
+    # Members keep the order the caller gave (e.g. operational flow); suites keep theirs too.
     return {
         "memberships": [{"local_id": key, "suites": suites} for key, suites in memberships.items()],
-        "suite_members": {name: sorted(set(keys)) for name, keys in sorted(suite_members.items())},
+        "suite_members": {name: list(dict.fromkeys(keys)) for name, keys in suite_members.items()},
         "canonical_test_cases": len(memberships), "cloned_test_cases": 0,
     }
 

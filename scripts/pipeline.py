@@ -1112,8 +1112,10 @@ def _chaos_runs_for(run_dir: Path) -> list[dict[str, Any]]:
     return runs
 
 
-def organization_for_run(run_dir: Path, canonical: dict[str, Any] | None = None) -> dict[str, Any]:
-    """The publication organization of a run, from persisted state only (no source reads)."""
+def organization_for_run(run_dir: Path, canonical: dict[str, Any] | None = None,
+                         chaos_runs: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+    """The publication organization of a run, from persisted state only (no source reads).
+    `chaos_runs` narrows the post-suite runs placed (default: every finalized one)."""
     run_dir = Path(run_dir)
     canonical = canonical or read_canonical(run_dir / "canonical-suite.json")
     source_state = read_json(run_dir / "sources.json")
@@ -1123,7 +1125,7 @@ def organization_for_run(run_dir: Path, canonical: dict[str, Any] | None = None)
             path = run_dir / "authority-text" / (reading_stage.source_key(record["path"]) + ".txt")
             if path.is_file():
                 texts[record["path"]] = path.read_text(encoding="utf-8")
-    chaos_runs = _chaos_runs_for(run_dir)
+    chaos_runs = _chaos_runs_for(run_dir) if chaos_runs is None else chaos_runs
     organization = build_organization(canonical, authority_index=source_state["authority_index"],
                                       authority_texts=texts, chaos_runs=chaos_runs)
     organization["post_suite_runs"] = [{k: r[k] for k in ("chaos_run_id", "parent_run_id")} | {"cases": len(r["cases"])}

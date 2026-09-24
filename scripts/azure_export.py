@@ -57,18 +57,27 @@ def migrate_integration_state(state: dict[str, Any]) -> dict[str, Any]:
     return {**state, "test_cases": {migrate_export_key(key): value for key, value in entries.items()}}
 
 
+def state_contract(cleanup: list[str]) -> str:
+    """How an executor restores state after the case: the case's own cleanup steps, or a
+    harness that resets the fixtures it declares in test_data before the next case."""
+    return "SELF_CLEANING" if cleanup else "REQUIRES_FIXTURE_RESET"
+
+
 def _export_canonical_case(case: dict[str, Any]) -> dict[str, Any]:
+    cleanup = list(case.get("cleanup", []))
     return {
         "export_key": canonical_export_key(case["id"]), "local_id": case["id"], "source_kind": "CANONICAL",
         "title": case["title"], "priority": case["priority"], "status": case["status"],
         "preconditions": case.get("preconditions", []),
         "test_data": case.get("test_data", []),
         "steps": [{"action": s["action"], "expected_result": s.get("expected_result")} for s in case.get("steps", [])],
-        "postconditions": case.get("postconditions", []),
+        "postconditions": case.get("postconditions", []), "cleanup": cleanup, "state_contract": state_contract(cleanup),
         "requirement_refs": case.get("source_identifiers", []),
         "related_test_cases": [], "execution_tags": list(case.get("tags", [])),
         "automation_suitability": case.get("automation_suitability"),
         "automation_readiness": case.get("automation_readiness"),
+        "readiness_blockers": list(case.get("readiness_blockers", [])),
+        "automation_layer": case.get("automation_layer"), "automation_tool_hint": case.get("automation_tool_hint"),
         "environment_requirements": [], "required_resources": [], "chaos_run_id": None,
     }
 
@@ -80,11 +89,13 @@ def _export_chaos_case(chaos_run_id: str, case: dict[str, Any]) -> dict[str, Any
         "status": case.get("status", "NEEDS_REVIEW"),
         "preconditions": case.get("preconditions", []), "test_data": case.get("test_data", []),
         "steps": [{"action": s["action"], "expected_result": s.get("expected_result")} for s in case.get("steps", [])],
-        "postconditions": case.get("postconditions", []),
+        "postconditions": case.get("postconditions", []), "cleanup": [], "state_contract": state_contract([]),
         "requirement_refs": case.get("related_source_identifiers", []),
         "related_test_cases": case.get("related_test_cases", []), "execution_tags": case.get("execution_tags", []),
         "automation_suitability": case.get("automation_suitability"),
         "automation_readiness": None,
+        "readiness_blockers": sorted({u["kind"] for u in case.get("unknowns", []) if u.get("kind")}),
+        "automation_layer": None, "automation_tool_hint": None,
         "environment_requirements": case.get("environment_requirements", []),
         "required_resources": case.get("required_resources", []), "chaos_run_id": chaos_run_id,
     }
@@ -99,24 +110,27 @@ def build_export_package(
     run_dir = Path(run_dir).resolve()
     canonical = pipeline.read_canonical(run_dir / "canonical-suite.json")
     run = read_json(run_dir / "run.json")
-    chaos_dir = run_dir / "challenges"  # internal storage name kept for compatibility
-    available = sorted(p.name for p in chaos_dir.iterdir()) if chaos_dir.is_dir() else []
-    selected = available if chaos_ids is None else chaos_ids
+    # Finalized chaos runs of this run and of the revision it explicitly supersedes; the
+    # internal storage folder keeps its historical name `challenges/`.
+    finalized = {item["chaos_run_id"]: item for item in pipeline._chaos_runs_for(run_dir)}
+    if chaos_ids is None:
+        picked = list(finalized.values())
+    else:
+        picked = []
+        parents = [run_dir] + ([run_dir.parent / run["supersedes"]] if run.get("supersedes") else [])
+        for chaos_id in chaos_ids:
+            if chaos_id in finalized:
+                picked.append(finalized[chaos_id])
+            elif any((parent / "challenges" / chaos_id / "challenge-run.json").is_file() for parent in parents):
+                raise ValueError(f"chaos run {chaos_id!r} is not finalized; only a finalized run can be exported")
+            else:
+                raise ValueError(f"chaos run {chaos_id!r} does not exist under {run_dir}")
     chaos_runs: list[dict[str, Any]] = []
     export_cases: list[dict[str, Any]] = [_export_canonical_case(case) for case in canonical["cases"]]
-    for chaos_id in selected:
-        lineage_path = chaos_dir / chaos_id / "challenge-run.json"
-        cases_path = chaos_dir / chaos_id / "challenge-cases.json"
-        if not lineage_path.is_file():
-            raise ValueError(f"chaos run {chaos_id!r} does not exist under {run_dir}")
-        lineage = read_json(lineage_path)
-        if lineage.get("status") != "FINALIZED" or not cases_path.is_file():
-            if chaos_ids is not None:
-                raise ValueError(f"chaos run {chaos_id!r} is not finalized; only a finalized run can be exported")
-            continue
-        cases = read_json(cases_path)["cases"]
-        export_cases.extend(_export_chaos_case(chaos_id, case) for case in cases)
-        chaos_runs.append({"chaos_run_id": chaos_id, "cases": len(cases)})
+    for item in picked:
+        export_cases.extend(_export_chaos_case(item["chaos_run_id"], case) for case in item["cases"])
+        chaos_runs.append({"chaos_run_id": item["chaos_run_id"], "parent_run_id": item["parent_run_id"],
+                           "cases": len(item["cases"])})
     requirement_mapping = requirement_mapping or {}
     by_identifier: dict[str, list[str]] = {}
     for entry in export_cases:
@@ -144,18 +158,22 @@ def build_export_package(
             "test_case_refs": sorted(set(keys)),
         })
     canonical_count = sum(1 for c in export_cases if c["source_kind"] == "CANONICAL")
+    suites = _organization_suites(run_dir, canonical, picked, requirements)
     return {
         "schema_version": SCHEMA_VERSION,
         "source_run": {"run_id": run["run_id"], "canonical_digest": canonical.get("semantic_fingerprint")},
         "chaos_runs": chaos_runs,
         "requirements": requirements,
+        "suites": suites,
         "test_cases": export_cases,
         "diagnostics": {
             "canonical_test_cases": canonical_count,
             "chaos_test_cases": len(export_cases) - canonical_count,
             "requirement_groups": sum(1 for r in requirements if r["identifier"]),
             "unassigned_cases": len(by_identifier.get(UNASSIGNED, [])),
-            "suite_placements": sum(len(r["test_case_refs"]) for r in requirements),
+            "suites": len(suites),
+            "suite_placements": sum(len(s["test_case_refs"]) for s in suites),
+            "multi_suite_cases": sum(1 for count in _placements(suites).values() if count > 1),
             "cloned_test_cases": 0,
         },
     }
@@ -168,11 +186,51 @@ def suite_name(identifier: str | None, title: str | None) -> str:
     return identifier or title or UNASSIGNED
 
 
-def _requirement_groups(package: dict[str, Any]) -> list[dict[str, Any]]:
-    """FTD's own requirement -> case relationships as the generic named groups
-    `azure_devops.build_group_suite_mapping` expects. Naming a group is FTD aggregation;
-    turning groups into Azure Suite placements is delegated."""
-    return [{"suite": r["suite_name"], "export_keys": r["test_case_refs"]} for r in package["requirements"]]
+SUITE_TYPES = {"FUNCTIONAL": "REQUIREMENT_BASED", "TRANSVERSAL": "STATIC", "EXECUTION_VIEW": "STATIC"}
+
+
+def _placements(suites: list[dict[str, Any]]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for suite in suites:
+        for key in suite["test_case_refs"]:
+            counts[key] = counts.get(key, 0) + 1
+    return counts
+
+
+def _organization_suites(run_dir: Path, canonical: dict[str, Any], chaos_runs: list[dict[str, Any]],
+                         requirements: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Suites follow the publication organization (functional groups in operational order,
+    transversal rules, execution views). Requirement identifiers stay trace metadata on each
+    case. Without a persisted organization input, one suite per requirement is kept."""
+    if not ((run_dir / "sources.json").is_file() and (run_dir / "run.json").is_file()):
+        return [{"suite_name": r["suite_name"], "group": r["identifier"], "kind": "FUNCTIONAL",
+                 "suite_type": "REQUIREMENT_BASED", "order_source": "CANONICAL_ORDER",
+                 "test_case_refs": r["test_case_refs"]} for r in requirements]
+    organization = pipeline.organization_for_run(run_dir, canonical, chaos_runs=chaos_runs)
+    suites = []
+    for group in organization["groups"]:
+        keys = [canonical_export_key(m["case"]) if m["origin"] == "CANONICAL"
+                else chaos_export_key(m["chaos_run_id"], m["case"]) for m in group["members"]]
+        suites.append({
+            "suite_name": group["label"], "group": group["id"], "kind": group["kind"],
+            "suite_type": SUITE_TYPES.get(group["kind"], "STATIC"), "order_source": group["order_source"],
+            "flow_reference": group.get("flow_reference"), "identifier": group.get("identifier"),
+            "test_case_refs": list(dict.fromkeys(keys)),
+        })
+    placed = set(_placements(suites))
+    orphans = [r for req in requirements for r in req["test_case_refs"] if r not in placed]
+    if orphans:  # e.g. a chaos case related to nothing and tagged for no execution view
+        suites.append({"suite_name": UNASSIGNED, "group": None, "kind": "UNASSIGNED", "suite_type": "STATIC",
+                       "order_source": "CANONICAL_ORDER", "test_case_refs": list(dict.fromkeys(orphans))})
+    return suites
+
+
+def _suite_groups(package: dict[str, Any]) -> list[dict[str, Any]]:
+    """FTD's own organization as the generic named groups `azure_devops.build_group_suite_mapping`
+    expects. Naming a group is FTD aggregation; turning groups into Azure Suite placements is
+    delegated."""
+    return [{"suite": s["suite_name"], "suite_type": s["suite_type"], "export_keys": s["test_case_refs"]}
+            for s in package["suites"]]
 
 
 def preview_export(
@@ -181,17 +239,16 @@ def preview_export(
 ) -> dict[str, Any]:
     """Local and read-only: no remote call happens here. All Azure-specific mapping,
     diffing and Suite placement is delegated to integrations/azure_devops.py."""
-    azure_cases = [{
-        "id": case["export_key"], "title": case["title"], "priority": case["priority"], "status": case["status"],
-        "preconditions": case["preconditions"], "steps": case["steps"], "tags": case["execution_tags"],
-        "requirement_refs": case["requirement_refs"], "coverage_point_refs": [],
-        "automation_suitability": case.get("automation_suitability"),
-        "automation_readiness": case.get("automation_readiness"),
-    } for case in package["test_cases"]]
+    carried = ("title", "priority", "status", "preconditions", "test_data", "steps", "postconditions", "cleanup",
+               "state_contract", "requirement_refs", "related_test_cases", "source_kind", "automation_suitability",
+               "automation_readiness", "readiness_blockers", "automation_layer", "automation_tool_hint",
+               "required_resources", "environment_requirements", "chaos_run_id")
+    azure_cases = [{"id": case["export_key"], "tags": case["execution_tags"], "coverage_point_refs": [],
+                    **{field: case.get(field) for field in carried}} for case in package["test_cases"]]
     return build_preview(
         azure_cases, mapping or {}, project=project, plan=plan, suite=suite,
         include_needs_review=include_needs_review,
-        suite_mapping=build_group_suite_mapping(_requirement_groups(package)),
+        suite_mapping=build_group_suite_mapping(_suite_groups(package)),
     )
 
 

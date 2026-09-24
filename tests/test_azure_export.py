@@ -177,6 +177,114 @@ class RequirementGroupingTests(unittest.TestCase):
         self.assertEqual(1, sum(c["export_key"] == key for c in package["test_cases"]))  # never cloned
 
 
+
+class OrganizationSuiteTests(unittest.TestCase):
+    """Azure suites mirror the publication organization; each case stays one work item."""
+
+    def package(self, **challenge):
+        run = PackRun("saas-accounts")
+        self.addCleanup(run.close)
+        run.finalize()
+        if challenge:
+            _finalized_challenge(run, "field-pass", **challenge)
+        return run, az.build_export_package(run.run_dir)
+
+    def test_suites_follow_the_organization_in_its_order(self) -> None:
+        run, package = self.package()
+        organization = ch.pipeline.organization_for_run(run.run_dir)
+        self.assertEqual([g["label"] for g in organization["groups"]], [s["suite_name"] for s in package["suites"]])
+        for group, suite in zip(organization["groups"], package["suites"]):
+            self.assertEqual([az.canonical_export_key(m["case"]) for m in group["members"]], suite["test_case_refs"])
+        preview = az.preview_export(package, project="P", plan="L", suite="S")
+        first = package["suites"][0]
+        self.assertEqual(first["test_case_refs"], preview["suite_mapping"]["suite_members"][first["suite_name"]])
+
+    def test_a_case_in_a_functional_suite_and_an_execution_view_is_one_work_item(self) -> None:
+        _, package = self.package()
+        views = [s for s in package["suites"] if s["group"] == "LOAD_CONCURRENCY"]
+        self.assertTrue(views, "fixture should place at least one case in the load view")
+        key = views[0]["test_case_refs"][0]
+        homes = [s["suite_name"] for s in package["suites"] if key in s["test_case_refs"]]
+        self.assertGreater(len(homes), 1)
+        self.assertEqual(1, sum(c["export_key"] == key for c in package["test_cases"]))
+        preview = az.preview_export(package, project="P", plan="L", suite="S")
+        self.assertEqual(1, sum(item["local_id"] == key for item in preview["create"]))
+        membership = next(m for m in preview["suite_mapping"]["memberships"] if m["local_id"] == key)
+        self.assertEqual(sorted(homes), sorted(s["suite"] for s in membership["suites"]))
+
+    def test_every_export_key_has_a_suite(self) -> None:
+        _, package = self.package(execution_tags=["MANUAL"])
+        placed = {key for suite in package["suites"] for key in suite["test_case_refs"]}
+        self.assertEqual({c["export_key"] for c in package["test_cases"]}, placed)
+
+
+    def test_a_revision_inherits_the_finalized_chaos_runs_of_the_run_it_supersedes(self) -> None:
+        run, _ = self.package(execution_tags=["MANUAL"])
+        result = ch.pipeline.start_run(
+            workspace=run.workspace, artifact_root=run.artifacts, run_id="revision",
+            sources_selected=[{"path": path, "role": item["role"]} for path, item in run.pack["sources"].items()],
+            locale=run.pack.get("locale"), request_text=run.pack.get("request", ""),
+            reading={"strategy": "SEQUENTIAL"}, supersedes=run.run_dir.name)
+        revision = Path(result["run_dir"])
+        for stage in ("design", "expansion", "procedures"):
+            ch.pipeline.submit_stage(revision, stage, run.pack["stages"][stage])
+        ch.pipeline.finalize_run(revision, ["JSON"])
+        package = az.build_export_package(revision)
+        self.assertEqual([{"chaos_run_id": "field-pass", "parent_run_id": run.run_dir.name, "cases": 1}],
+                         package["chaos_runs"])
+        self.assertIn("chaos:field-pass:CH-001", {c["export_key"] for c in package["test_cases"]})
+        self.assertFalse((revision / "challenges").exists())  # inherited by reference, never copied
+
+
+class MappedPayloadContextTests(unittest.TestCase):
+    """What a canonical case defines survives, unchanged, into the Azure payload."""
+
+    def test_fixture_definitions_survive_from_canonical_to_package_to_payload(self) -> None:
+        run = PackRun("saas-accounts")
+        self.addCleanup(run.close)
+        run.finalize()
+        canonical = ch.pipeline.read_canonical(run.run_dir / "canonical-suite.json")
+        package = az.build_export_package(run.run_dir, chaos_ids=[])
+        preview = az.preview_export(package, project="P", plan="L", suite="S")
+        payloads = {item["local_id"]: item["payload"] for item in preview["create"]}
+        with_data = [c for c in canonical["cases"] if c["test_data"]]
+        self.assertTrue(with_data, "fixture should define test data")
+        for case in canonical["cases"]:
+            key = az.canonical_export_key(case["id"])
+            exported = next(c for c in package["test_cases"] if c["export_key"] == key)
+            self.assertEqual(case["test_data"], exported["test_data"])
+            if key not in payloads:
+                continue
+            payload = payloads[key]
+            self.assertEqual(case["test_data"], payload["test_data"])
+            self.assertEqual(case["postconditions"], payload["postconditions"])
+            self.assertEqual(case["cleanup"], payload["cleanup"])
+            self.assertEqual(case["preconditions"], payload["preconditions"])
+            self.assertEqual(case["readiness_blockers"], payload["automation"]["readiness_blockers"])
+            self.assertEqual(case["automation_layer"], payload["automation"]["layer"])
+            self.assertEqual(case["automation_tool_hint"], payload["automation"]["tool_hint"])
+            self.assertEqual(case["automation_readiness"], payload["automation"]["readiness"])
+            self.assertEqual("CANONICAL", payload["source_kind"])
+            self.assertEqual("SELF_CLEANING" if case["cleanup"] else "REQUIRES_FIXTURE_RESET",
+                             payload["execution"]["state_contract"])
+
+    def test_a_chaos_payload_names_its_related_cases_resources_and_state_contract(self) -> None:
+        run = PackRun("saas-accounts")
+        self.addCleanup(run.close)
+        run.finalize()
+        related = ch.pipeline.read_canonical(run.run_dir / "canonical-suite.json")["cases"][0]["id"]
+        _finalized_challenge(run, "field-pass", related_test_cases=[related], required_resources=["Second client device"],
+                             environment_requirements=["Isolated staging tenant"])
+        package = az.build_export_package(run.run_dir)
+        preview = az.preview_export(package, project="P", plan="L", suite="S")
+        payload = next(i["payload"] for i in preview["create"] if i["local_id"] == "chaos:field-pass:CH-001")
+        self.assertEqual("CHAOS", payload["source_kind"])
+        self.assertEqual([related], payload["trace_refs"]["related_test_cases"])
+        self.assertEqual(["Second client device"], payload["execution"]["required_resources"])
+        self.assertEqual(["Isolated staging tenant"], payload["execution"]["environment_requirements"])
+        self.assertEqual("REQUIRES_FIXTURE_RESET", payload["execution"]["state_contract"])
+
+
 class PreviewAndPublishTests(unittest.TestCase):
     def test_preview_is_local_and_read_only(self) -> None:
         run = PackRun("saas-accounts")
@@ -254,7 +362,7 @@ class RequirementSuiteNameTests(unittest.TestCase):
                 self.assertEqual(f"{group['identifier']} — {group['title']}", group["suite_name"])
         preview = az.preview_export(package, project="P", plan="L", suite="S")
         names = set(preview["suite_mapping"]["suite_members"])
-        self.assertEqual({g["suite_name"] for g in package["requirements"]}, names)
+        self.assertEqual({s["suite_name"] for s in package["suites"]}, names)  # suites follow the organization
 
     def test_any_identifier_scheme_is_accepted(self) -> None:
         self.assertEqual("REQ.7 — Export audit", az.suite_name("REQ.7", "Export audit"))
