@@ -21,6 +21,7 @@ detected by `verify_manifest`.
 from __future__ import annotations
 
 import argparse
+from collections import Counter
 import hashlib
 import json
 import re
@@ -35,7 +36,7 @@ if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
 from common import (  # noqa: E402
-    GENERATOR, StageError, file_digest, normalize_identifier, now, read_json, stable_digest,
+    GENERATOR, StageError, content_tokens, file_digest, normalize_identifier, now, read_json, stable_digest,
     write_json,
 )
 import design as design_stage  # noqa: E402
@@ -778,6 +779,349 @@ def build_canonical(run_dir: Path, baseline_comparison: dict[str, Any] | None = 
     }
     return {"index": index, "questions": {"schema_version": "2.2", "questions": questions},
             "cases": cases, "diagnostics": diagnostics}
+
+
+# --- publication organization: placements and execution views, never clones -------------
+#
+# A Test Case keeps one identity; *where* it is shown is derived publication metadata.
+# Every projection (HTML, machine-readable JSON, Azure suites) reads this one model.
+
+ORGANIZATION_LABELS = {
+    "pt": {"TRANSVERSAL": "Regras de negócio transversais", "E2E": "Casos de uso ponta a ponta (E2E)",
+           "LOAD_CONCURRENCY": "Carga e concorrência", "PHYSICAL_DEVICE": "Físicos / dispositivos",
+           "CHAOS_RESILIENCE": "Chaos / resiliência", "MANUAL_FIELD": "Manual / campo"},
+    "es": {"TRANSVERSAL": "Reglas de negocio transversales", "E2E": "Casos de uso de extremo a extremo (E2E)",
+           "LOAD_CONCURRENCY": "Carga y concurrencia", "PHYSICAL_DEVICE": "Físicos / dispositivos",
+           "CHAOS_RESILIENCE": "Caos / resiliencia", "MANUAL_FIELD": "Manual / campo"},
+    "en": {"TRANSVERSAL": "Cross-cutting business rules", "E2E": "End-to-end use cases (E2E)",
+           "LOAD_CONCURRENCY": "Load and concurrency", "PHYSICAL_DEVICE": "Physical / devices",
+           "CHAOS_RESILIENCE": "Chaos / resilience", "MANUAL_FIELD": "Manual / field"},
+}
+EXECUTION_VIEWS = ("E2E", "LOAD_CONCURRENCY", "PHYSICAL_DEVICE", "CHAOS_RESILIENCE", "MANUAL_FIELD")
+# Canonical signals per execution view (primary types and automation layers the suite already records).
+_VIEW_TYPES = {"LOAD_CONCURRENCY": {"PERFORMANCE", "CONCURRENCY", "RACE_CONDITION"},
+               "PHYSICAL_DEVICE": {"HARDWARE_INTEGRATION", "FIELD"},
+               "CHAOS_RESILIENCE": {"CHAOS", "RECOVERY", "RESILIENCE"}}
+# Post-suite execution tags per view; a case may carry any well-formed tag, these are the recognized ones.
+_VIEW_TAGS = {"LOAD_CONCURRENCY": {"LOAD", "PERFORMANCE", "CONCURRENCY"},
+              "PHYSICAL_DEVICE": {"PHYSICAL_DEVICE", "HARDWARE", "DEVICE"},
+              "CHAOS_RESILIENCE": {"CHAOS_RECOVERY", "CHAOS", "RESILIENCE"},
+              "MANUAL_FIELD": {"MANUAL", "FIELD"}}
+_STEP_LINE = re.compile(r"^\s*(\d{1,2})[.)]\s+(\S.*)$")
+
+
+def _use_case_flows(authority_index: list[dict[str, Any]], authority_texts: dict[str, str]) -> dict[str, Any]:
+    """Main-flow steps of every documented use case and the use case each alternative or
+    exception flow belongs to, read from the authority's own structure: a use case's
+    section runs to the next use case (or higher-level identifier); numbered lines before
+    its first alternative flow are the main flow; flows defined inside the section are its
+    alternatives."""
+    ordered = sorted(authority_index, key=lambda item: (item.get("source", ""), item.get("line") or 0))
+    flows: dict[str, Any] = {}
+    for position, item in enumerate(ordered):
+        if sources.identifier_kind(item["identifier"]) != "USE_CASE" or not item.get("line"):
+            continue
+        end, alternatives = None, []
+        for later in ordered[position + 1:]:
+            if later.get("source") != item.get("source"):
+                break
+            kind = sources.identifier_kind(later["identifier"])
+            if kind in {"ALTERNATIVE_FLOW", "EXCEPTION_FLOW"}:
+                alternatives.append(later)
+                continue
+            end = later.get("line")
+            break
+        lines = (authority_texts.get(item.get("source", "")) or "").splitlines()
+        stop = (alternatives[0]["line"] if alternatives else end or len(lines) + 1) - 1
+        steps = [match.group(2) for line in lines[item["line"]:stop] if (match := _STEP_LINE.match(line))]
+        flows[normalize_identifier(item["identifier"])] = {
+            "identifier": item["identifier"], "steps": steps,
+            "alternatives": {normalize_identifier(alt["identifier"]): alt.get("excerpt") or alt.get("title") or ""
+                             for alt in alternatives},
+        }
+    return flows
+
+
+def _best_step(text: str, steps: list[str], minimum: float = 0.25) -> int | None:
+    """The main-flow step a text is about: TF-IDF cosine over the flow's own steps, so
+    words every step uses decide nothing. None when no step is a confident match."""
+    import math
+
+    def stems(value: str) -> set[str]:
+        # A light prefix stem lets inflections meet ("bloquear"/"bloqueia", "confirm"/"confirmed").
+        return {token[:5] if len(token) > 5 else token for token in content_tokens(value)}
+
+    step_tokens = [stems(step) for step in steps]
+    frequency = Counter(token for tokens in step_tokens for token in tokens)
+    weight = {token: math.log((len(steps) + 1) / (count + 1)) + 1 for token, count in frequency.items()}
+    words = stems(text)
+    best, best_score = None, 0.0
+    for index, tokens in enumerate(step_tokens):
+        norm = math.sqrt(sum(weight[t] ** 2 for t in tokens)) or 1.0
+        score = sum(weight[t] ** 2 for t in tokens & words) / norm / (math.sqrt(sum(weight[t] ** 2 for t in words & set(weight))) or 1.0)
+        if score > best_score:
+            best, best_score = index, score
+    return best if best_score >= minimum else None
+
+
+def _case_text(case: dict[str, Any]) -> str:
+    return " ".join([case.get("title", ""), case.get("objective", "")])
+
+
+def build_organization(
+    canonical: dict[str, Any], *, authority_index: list[dict[str, Any]], authority_texts: dict[str, str],
+    chaos_runs: list[dict[str, Any]] | None = None, locale: str | None = None,
+) -> dict[str, Any]:
+    """Placements of canonical and post-suite cases in functional groups and execution
+    views. Functional groups are the authority's functional requirements (or, when it has
+    none, its use cases, else the scenario families). Inside a functional group, cases
+    follow the main flow of the use case most associated with that requirement, with an
+    alternative flow's cases right after the step it challenges; without a derivable flow
+    the canonical order is kept. A case appears in several groups by reference only."""
+    language = (locale or canonical["index"].get("output_locale") or "en").split("-")[0].lower()
+    labels = ORGANIZATION_LABELS.get(language, ORGANIZATION_LABELS["en"])
+    cases = canonical["cases"]
+    order_of = {case["id"]: number for number, case in enumerate(cases)}
+    requirements = canonical["index"]["requirements"]
+    kind_of = {normalize_identifier(r["source_identifier"]): (r.get("kind") or sources.identifier_kind(r["source_identifier"]))
+               for r in requirements if r.get("source_identifier")}
+    title_of = {normalize_identifier(r["source_identifier"]): (r["source_identifier"], r.get("source_title"))
+                for r in requirements if r.get("source_identifier")}
+    flows = _use_case_flows(authority_index, authority_texts)
+    owner_use_case = {alt: uc for uc, flow in flows.items() for alt in flow["alternatives"]}
+
+    functional_kind = next((k for k in ("FUNCTIONAL_REQUIREMENT", "USE_CASE") if k in kind_of.values()), None)
+    # Which functional group a use case belongs to: the one its Test Cases co-occur with most.
+    co: dict[str, Counter] = {}
+    for case in cases:
+        ids = {normalize_identifier(v) for v in case.get("source_identifiers", [])}
+        for uc in (i for i in ids if kind_of.get(i) == "USE_CASE"):
+            co.setdefault(uc, Counter()).update(i for i in ids if kind_of.get(i) == functional_kind)
+    uc_group = {uc: sorted(counter.items(), key=lambda kv: (-kv[1], kv[0]))[0][0] for uc, counter in co.items() if counter}
+    # Several requirements may share one documented flow: each follows the use case its
+    # Test Cases co-occur with most.
+    group_flow: dict[str, str] = {}
+    if functional_kind == "FUNCTIONAL_REQUIREMENT":
+        for group in {g for counter in co.values() for g in counter}:
+            group_flow[group] = sorted(co, key=lambda u: (-co[u][group], u))[0]
+    if functional_kind == "USE_CASE":
+        group_flow = {uc: uc for uc in kind_of if kind_of[uc] == "USE_CASE"}
+
+    def functional_groups(case: dict[str, Any]) -> tuple[list[str], str]:
+        if case.get("test_basis") == "E2E":
+            return [], "E2E"
+        ids = [normalize_identifier(v) for v in case.get("source_identifiers", [])]
+        if functional_kind is None:
+            return [f"FAMILY:{(case.get('scenario_refs') or ['-'])[0]}"], "FAMILY"
+        direct = [i for i in ids if kind_of.get(i) == functional_kind]
+        if direct:
+            return list(dict.fromkeys(direct)), "IDENTIFIER"
+        via = []
+        for i in ids:
+            uc = i if kind_of.get(i) == "USE_CASE" else owner_use_case.get(i)
+            target = uc if functional_kind == "USE_CASE" else uc_group.get(uc or "")
+            if target:
+                via.append(target)
+        if via:
+            return list(dict.fromkeys(via)), "USE_CASE"
+        return ["TRANSVERSAL"], "TRANSVERSAL"
+
+    clauses = {c["id"]: c.get("normalized_claim", "") for c in canonical["index"].get("normative_clauses", [])}
+    points = {p["id"]: p for p in canonical["index"].get("coverage_points", [])}
+    claim_text = {case["id"]: " ".join(clauses.get(ref, "") for point in case.get("coverage_point_refs", [])
+                                      for ref in points.get(point, {}).get("clause_refs", []))
+                  for case in cases}
+    # A requirement's title names what it is about; its statement only when it has no title.
+    requirement_text = {normalize_identifier(r["source_identifier"]): r.get("source_title") or (r.get("source_statement") or "")[:300]
+                        for r in requirements if r.get("source_identifier")}
+    members: dict[str, list[dict[str, Any]]] = {}
+    positions: dict[tuple[str, str], float | None] = {}
+    for case in cases:
+        groups, via = functional_groups(case)
+        if via == "E2E":
+            members.setdefault("E2E", []).append({"case": case["id"], "origin": "CANONICAL", "via": "BASIS"})
+            continue
+        ids = {normalize_identifier(v) for v in case.get("source_identifiers", [])}
+        for group in groups:
+            flow = flows.get(group_flow.get(group, ""), {})
+            steps = flow.get("steps", [])
+            position = None
+            alternative = next((normalize_identifier(a) for a in case.get("source_identifiers", [])
+                                if normalize_identifier(a) in flow.get("alternatives", {})), None)
+            if alternative:
+                # An alternative flow's cases follow the main-flow step it branches from.
+                step = _best_step(flow["alternatives"][alternative], steps)
+                position = (step if step is not None else len(steps)) + 0.5
+            elif steps and case.get("test_basis") in {None, "ACCEPTANCE", "REGRESSION"}:
+                step = None
+                if group_flow.get(group) in ids:
+                    # A case exercising the use case itself: its claims are the step sentences.
+                    step = _best_step(f"{_case_text(case)} {claim_text.get(case['id'], '')}", steps)
+                if step is None and group in requirement_text:
+                    # A requirement's own acceptance cases stay together, in authority order,
+                    # at the step the requirement describes.
+                    step = _best_step(requirement_text[group], steps, minimum=0.0)
+                position = float(step) if step is not None else None
+            positions[(group, case["id"])] = position
+            members.setdefault(group, []).append({"case": case["id"], "origin": "CANONICAL", "via": via})
+    # Derived, characterization and exploratory cases follow the acceptance case whose
+    # coverage point they share.
+    point_owner: dict[tuple[str, str], str] = {}
+    for case in cases:
+        if case.get("test_basis") in {None, "ACCEPTANCE", "REGRESSION"}:
+            for point in case.get("coverage_point_refs", []):
+                point_owner.setdefault(point, case["id"])
+    for case in cases:
+        if case.get("test_basis") in {None, "ACCEPTANCE", "REGRESSION", "E2E"}:
+            continue
+        owners = [point_owner[p] for p in case.get("coverage_point_refs", []) if p in point_owner]
+        for group, entries in members.items():
+            if any(e["case"] == case["id"] for e in entries) and positions.get((group, case["id"])) is None:
+                anchor = next((o for o in owners if (group, o) in positions), None)
+                if anchor is not None and positions.get((group, anchor)) is not None:
+                    positions[(group, case["id"])] = positions[(group, anchor)]
+                    order_of[case["id"]] = order_of[anchor] + order_of[case["id"]] / (10 * len(cases) + 1)
+
+    def sort_members(group: str) -> list[dict[str, Any]]:
+        # Cases without a matched flow step keep their canonical neighbours' place.
+        carried, last = {}, 0.0
+        for entry in sorted(members.get(group, []), key=lambda e: order_of[e["case"]]):
+            position = positions.get((group, entry["case"]))
+            carried[entry["case"]] = last = position if position is not None else last
+        return sorted(members.get(group, []), key=lambda e: (carried[e["case"]], order_of[e["case"]]))
+
+    ordered_groups = {group: sort_members(group) for group in members if group != "E2E"}
+    # Post-suite cases sit right after the related canonical case they challenge, in every
+    # group that case belongs to; unrelated ones join the transversal group.
+    chaos_records = []
+    for run in chaos_runs or []:
+        for case in run.get("cases", []):
+            chaos_records.append({"case": case["id"], "chaos_run_id": run["chaos_run_id"], "raw": case})
+    for record in chaos_records:
+        related = [r for r in record["raw"].get("related_test_cases", []) if r in order_of]
+        entry = {"case": record["case"], "origin": "POST_SUITE", "chaos_run_id": record["chaos_run_id"]}
+        placed = False
+        for group, entries in ordered_groups.items():
+            anchors = [i for i, e in enumerate(entries) if e["origin"] == "CANONICAL" and e["case"] in related]
+            if anchors:
+                entries.insert(max(anchors) + 1, {**entry, "via": "RELATED_TEST_CASE"})
+                placed = True
+        if not placed:
+            ordered_groups.setdefault("TRANSVERSAL", []).append({**entry, "via": "UNRELATED"})
+
+    def group_label(group: str) -> str:
+        if group in labels:
+            return labels[group]
+        if group.startswith("FAMILY:"):
+            return group.split(":", 1)[1]
+        display, title = title_of.get(group, (group, None))
+        return f"{display} — {title.strip()}" if title and title.strip() and title.strip() != display else display
+
+    functional_order = sorted((g for g in members if g not in labels), key=lambda g: (g.startswith("FAMILY:"), g))
+    groups_out = []
+    for group in [*functional_order, "TRANSVERSAL"]:
+        if group not in ordered_groups:
+            continue
+        flow_uc = group_flow.get(group)
+        ordered = [{**e, "order": i} for i, e in enumerate(ordered_groups[group], 1)]
+        matched = any(positions.get((group, e["case"])) is not None for e in ordered)
+        groups_out.append({
+            "id": group, "kind": "TRANSVERSAL" if group == "TRANSVERSAL" else "FUNCTIONAL", "label": group_label(group),
+            "identifier": title_of.get(group, (None,))[0], "flow_reference": flows[flow_uc]["identifier"] if flow_uc in flows else None,
+            "order_source": "USE_CASE_MAIN_FLOW" if matched else "CANONICAL_ORDER", "members": ordered,
+        })
+    execution_order = {}
+    for rank, group in enumerate(groups_out):
+        for entry in group["members"]:
+            key = (entry["origin"], entry.get("chaos_run_id"), entry["case"])
+            execution_order.setdefault(key, (rank, entry["order"]))
+
+    by_view: dict[str, list[dict[str, Any]]] = {view: [] for view in EXECUTION_VIEWS}
+    by_view["E2E"] = [dict(e) for e in members.get("E2E", [])]
+    for case in cases:
+        variants = {v.get("kind") for v in case.get("execution_variants", []) or []}
+        for view in ("LOAD_CONCURRENCY", "PHYSICAL_DEVICE", "CHAOS_RESILIENCE"):
+            if case.get("primary_type") in _VIEW_TYPES[view] or (view == "PHYSICAL_DEVICE" and case.get("automation_layer") == "HARDWARE"):
+                by_view[view].append({"case": case["id"], "origin": "CANONICAL", "via": "CATEGORY"})
+            elif view in variants:
+                by_view[view].append({"case": case["id"], "origin": "CANONICAL", "via": "EXECUTION_VARIANT"})
+        if case.get("automation_suitability") == "MANUAL_ONLY" or "MANUAL_FIELD" in variants:
+            by_view["MANUAL_FIELD"].append({"case": case["id"], "origin": "CANONICAL", "via": "CATEGORY"})
+    load_ids = {e["case"] for e in by_view["LOAD_CONCURRENCY"]}
+    for record in chaos_records:
+        tags = set(record["raw"].get("execution_tags", []))
+        related = set(record["raw"].get("related_test_cases", []))
+        for view, recognized in _VIEW_TAGS.items():
+            inherited = view == "LOAD_CONCURRENCY" and related and related <= load_ids
+            if tags & recognized or inherited:
+                by_view[view].append({"case": record["case"], "origin": "POST_SUITE", "chaos_run_id": record["chaos_run_id"],
+                                      "via": "EXECUTION_TAG" if tags & recognized else "RELATED_TEST_CASE"})
+    physical = {(e["origin"], e["case"]) for e in by_view["PHYSICAL_DEVICE"]}
+    if {(e["origin"], e["case"]) for e in by_view["MANUAL_FIELD"]} <= physical:
+        by_view["MANUAL_FIELD"] = []  # a manual view identical to the physical one adds nothing
+    for view in EXECUTION_VIEWS:
+        entries = sorted(by_view[view], key=lambda e: execution_order.get(
+            (e["origin"], e.get("chaos_run_id"), e["case"]), (len(groups_out), order_of.get(e["case"], len(cases)))))
+        if entries:
+            groups_out.append({"id": view, "kind": "EXECUTION_VIEW", "label": labels[view], "identifier": None,
+                               "flow_reference": None, "order_source": "EXECUTION_ORDER",
+                               "members": [{**e, "order": i} for i, e in enumerate(entries, 1)]})
+
+    memberships: dict[str, list[dict[str, Any]]] = {}
+    for group in groups_out:
+        for entry in group["members"]:
+            key = entry["case"] if entry["origin"] == "CANONICAL" else f"{entry['chaos_run_id']}:{entry['case']}"
+            memberships.setdefault(key, []).append({"group": group["id"], "order": entry["order"]})
+    return {
+        "schema_version": "1", "functional_grouping": functional_kind or "SCENARIO_FAMILY",
+        "groups": groups_out, "memberships": memberships,
+        "diagnostics": {
+            "canonical_cases": len(cases), "post_suite_cases": len(chaos_records),
+            "groups": sum(g["kind"] != "EXECUTION_VIEW" for g in groups_out),
+            "execution_views": sum(g["kind"] == "EXECUTION_VIEW" for g in groups_out),
+            "placements": sum(len(g["members"]) for g in groups_out),
+            "multi_membership_cases": sum(len(v) > 1 for v in memberships.values()),
+            "cloned_cases": 0,
+        },
+    }
+
+
+def _chaos_runs_for(run_dir: Path) -> list[dict[str, Any]]:
+    """Finalized post-suite runs of this run and of the revision it explicitly supersedes
+    (a successor carries its predecessor's discoveries; they keep their own parent)."""
+    run_dir = Path(run_dir)
+    run = read_json(run_dir / "run.json")
+    parents = [run_dir]
+    if run.get("supersedes"):
+        parents.append(run_dir.parent / run["supersedes"])
+    runs = []
+    for parent in parents:
+        base = parent / "challenges"
+        for folder in sorted(base.iterdir()) if base.is_dir() else []:
+            lineage, cases = folder / "challenge-run.json", folder / "challenge-cases.json"
+            if lineage.is_file() and cases.is_file() and read_json(lineage).get("status") == "FINALIZED":
+                runs.append({"chaos_run_id": folder.name, "parent_run_id": parent.name,
+                             "cases": read_json(cases)["cases"]})
+    return runs
+
+
+def organization_for_run(run_dir: Path, canonical: dict[str, Any] | None = None) -> dict[str, Any]:
+    """The publication organization of a run, from persisted state only (no source reads)."""
+    run_dir = Path(run_dir)
+    canonical = canonical or read_canonical(run_dir / "canonical-suite.json")
+    source_state = read_json(run_dir / "sources.json")
+    texts = {}
+    for record in source_state["records"]:
+        if record["role"] == "FUNCTIONAL_AUTHORITY":
+            path = run_dir / "authority-text" / (reading_stage.source_key(record["path"]) + ".txt")
+            if path.is_file():
+                texts[record["path"]] = path.read_text(encoding="utf-8")
+    chaos_runs = _chaos_runs_for(run_dir)
+    organization = build_organization(canonical, authority_index=source_state["authority_index"],
+                                      authority_texts=texts, chaos_runs=chaos_runs)
+    organization["post_suite_runs"] = [{k: r[k] for k in ("chaos_run_id", "parent_run_id")} | {"cases": len(r["cases"])}
+                                       for r in chaos_runs]
+    return organization
 
 
 def _count(values: Any) -> dict[str, int]:
