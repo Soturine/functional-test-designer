@@ -173,14 +173,58 @@ class ReaderContractTests(unittest.TestCase):
         self.assertEqual(self.tasks[0]["path"], reconciliation["worker_failures"][0]["path"])
 
     def test_conflicting_statements_are_preserved_not_voted(self) -> None:
+        # Two defining sources state the same official identifier differently.
+        run = PackRun("saas-accounts")
+        self.addCleanup(run.close)
+        context = next(p for p, s in run.pack["sources"].items() if s["role"] == "IMPLEMENTATION_EVIDENCE")
+        start(run, roles={context: "TECHNICAL_CONTEXT"})
+        by_path = {t["path"]: t for t in reading.pending(task_plan(run))}
+        results = [reader_result(t) for t in by_path.values()]
+        for result in results:
+            if result["path"] == "docs/requirements.md":
+                result["catalog"]["identifiers"] = [{"identifier": "BR-01", "title": "Seat Limit"}]
+            if result["path"] == context:
+                result["catalog"]["identifiers"] = [{"identifier": "BR-01", "title": "Unlimited seats on trial"}]
+        pipeline.submit_reading(run.run_dir, results)
+        outcome = pipeline.reconcile_reading(run.run_dir)
+        self.assertEqual(1, outcome["identifier_conflicts"])
+        reconciliation = json.loads((run.run_dir / "reading" / "reconciliation.json").read_text(encoding="utf-8"))
+        statements = reconciliation["identifier_conflicts"][0]["statements"]
+        self.assertEqual({"docs/requirements.md", context}, {s["source"] for s in statements})
+
+    def test_implementation_mentions_and_foreign_identifiers_are_not_conflicts(self) -> None:
         results = [reader_result(t) for t in self.tasks]
-        results[0]["catalog"]["identifiers"] = [{"identifier": "RULE-9", "statement": "limit is 5"}]
-        results[1]["catalog"]["identifiers"] = [{"identifier": "RULE-9", "statement": "limit is 10"}]
+        by_role = {t["path"]: t["role"] for t in self.tasks}
+        for result in results:
+            role = by_role[result["path"]]
+            if role == "FUNCTIONAL_AUTHORITY":
+                result["catalog"]["identifiers"] = [{"identifier": "BR-01", "title": "Seat Limit"}]
+            else:
+                # code describing how BR-01 is realized, and a linter code, are not definitions
+                result["catalog"]["identifiers"] = [{"identifier": "BR-01", "title": "enforce seats in invite()"},
+                                                    {"identifier": "LW0603", "title": "try:"}]
         pipeline.submit_reading(self.run.run_dir, results)
         outcome = pipeline.reconcile_reading(self.run.run_dir)
-        self.assertEqual(1, outcome["identifier_conflicts"])
+        self.assertEqual(0, outcome["identifier_conflicts"])
         reconciliation = json.loads((self.run.run_dir / "reading" / "reconciliation.json").read_text(encoding="utf-8"))
-        self.assertEqual(2, len(reconciliation["identifier_conflicts"][0]["statements"]))
+        references = reconciliation["identifier_references"]
+        self.assertTrue(references and {r["identifier"] for r in references} == {"BR-01"})
+        self.assertTrue(all(r["role"] != "FUNCTIONAL_AUTHORITY" for r in references))
+
+    def test_exact_duplicate_facts_appear_once_while_distinct_facts_survive(self) -> None:
+        results = [reader_result(t) for t in self.tasks]
+        results[0]["catalog"]["operations"] = [
+            {"fact": "an owner invites a user by email"},
+            {"fact": "an owner  invites a user by email"},  # same fact, whitespace only
+            {"fact": "an owner invites a user by e-mail address"},  # distinct wording survives
+        ]
+        pipeline.submit_reading(self.run.run_dir, results)
+        pipeline.reconcile_reading(self.run.run_dir)
+        rec = json.loads((self.run.run_dir / "reading" / "reconciliation.json").read_text(encoding="utf-8"))
+        selector = next(s for s in rec["selectors"] if s["path"] == results[0]["path"])
+        catalog = json.loads((self.run.run_dir / "reading" / selector["catalog_ref"]).read_text(encoding="utf-8"))
+        self.assertEqual(2, len(catalog["catalog"]["operations"]))
+        self.assertEqual(1, rec["telemetry"]["duplicate_catalog_items_removed"])
 
     def test_reconciled_catalog_is_bound_into_the_design_record(self) -> None:
         outcome = read_everything(self.run)
@@ -305,6 +349,24 @@ class SelectorReaderTests(unittest.TestCase):
             pipeline.reconcile_reading(run_dir)
         with self.assertRaises(pipeline.IntegrityError):
             pipeline.submit_stage(run_dir, "design", {})
+
+    def test_a_fact_restated_by_file_and_selector_results_appears_once(self) -> None:
+        _, run_dir, plan = self.start(self.SELECTED)
+        results = []
+        for s in plan["selectors"]:
+            r = self.selector_result(plan, s["selector_id"])
+            for f in r["files"]:
+                f.update(status="CATALOGED", catalog={"operations": [{"fact": "defines a function"}]})
+            results.append(r)
+        pipeline.submit_reading(run_dir, results)
+        pipeline.reconcile_reading(run_dir)
+        rec = json.loads((run_dir / "reading" / "reconciliation.json").read_text(encoding="utf-8"))
+        src = next(s for s in rec["selectors"] if s["path"] == "src")
+        operations = json.loads((run_dir / "reading" / src["catalog_ref"]).read_text(encoding="utf-8"))["catalog"]["operations"]
+        # four files each state the fact once (distinct provenance); the selector result's
+        # restatement of src/a.py's fact is not counted twice
+        self.assertEqual(4, len(operations))
+        self.assertEqual(4, len({item["file"] for item in operations}))
 
     def test_complete_selector_results_reconcile_with_file_provenance(self) -> None:
         _, run_dir, plan = self.start(self.SELECTED)

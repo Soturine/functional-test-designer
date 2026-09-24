@@ -30,11 +30,12 @@ File task states:
 from __future__ import annotations
 
 import hashlib
+import json
 import re
 from pathlib import Path
 from typing import Any
 
-from common import StageError, now, read_json, write_json
+from common import StageError, normalize, normalize_identifier, now, read_json, write_json
 
 CONTRACT_VERSION = "2"
 READER_ROLE = "LIGHTWEIGHT_SOURCE_READER"
@@ -54,6 +55,10 @@ FORBIDDEN_FIELDS = {
     "claims", "tests", "test_cases", "oracles", "findings", "questions", "requirements",
     "coverage", "dispositions", "authority", "role_override", "completeness",
 }
+# Roles whose statements about an identifier can compete as definitions. Implementation
+# and test code that mention an identifier describe how it is realized: references.
+DEFINING_ROLES = {"FUNCTIONAL_AUTHORITY", "TECHNICAL_CONTEXT"}
+
 RESULT_FIELDS = {"source_key", "path", "content_digest", "role", "status", "reader", "catalog", "error"}
 SELECTOR_RESULT_FIELDS = {"selector_id", "selector_path", "role", "reader", "catalog", "files", "shard", "error"}
 FILE_STATUSES = ("CATALOGED", "INSPECTED", "FAILED")
@@ -401,6 +406,73 @@ def submit(run_dir: Path, results: list[dict[str, Any]]) -> dict[str, Any]:
             "pending": [t["path"] for t in pending(task_plan)]}
 
 
+def _item_key(item: Any) -> str:
+    """Deterministic identity of one catalog item: its full content with whitespace
+    collapsed. Only exact restatements collapse; similar but distinct facts survive."""
+    def canonical(value: Any) -> Any:
+        if isinstance(value, dict):
+            return {k: canonical(v) for k, v in value.items()}
+        if isinstance(value, list):
+            return [canonical(v) for v in value]
+        return " ".join(value.split()) if isinstance(value, str) else value
+    return json.dumps(canonical(item), sort_keys=True, ensure_ascii=False)
+
+
+def _dedupe(bucket: dict[str, list[Any]]) -> tuple[dict[str, list[Any]], int]:
+    """A selector catalog is an index over its files: a fact that both a file result and
+    the selector-level result restate appears once, with its file provenance."""
+    removed, out = 0, {}
+    for section, items in bucket.items():
+        seen, kept = set(), []
+        for item in items:
+            key = _item_key(item)
+            if key in seen:
+                removed += 1
+                continue
+            seen.add(key)
+            kept.append(item)
+        out[section] = kept
+    return out, removed
+
+
+def identifier_conflicts(statements: dict[str, list[dict[str, str]]], official: dict[str, dict[str, str]]
+                         ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Split identifier statements into genuine definition conflicts and references.
+
+    A conflict needs an official identifier (from the Functional Authority index, when
+    one exists) stated by two different sources of defining roles (authority or
+    technical context) in ways that do not agree; one statement containing the other
+    agrees. The authority index's own title takes part for its source. Implementation
+    and test mentions are references to how the identifier is realized, and identifiers
+    outside the authority universe never enter the conflict list."""
+    def agree(left: str, right: str) -> bool:
+        return left in right or right in left
+
+    conflicts, references = [], []
+    for ident, items in sorted(statements.items()):
+        key = normalize_identifier(ident)
+        if official and key not in official:
+            continue
+        defining = [s for s in items if s.get("role") in DEFINING_ROLES and normalize(s.get("statement"))]
+        references.extend({"identifier": ident, **s} for s in items if s.get("role") not in DEFINING_ROLES)
+        if key in official and official[key].get("title"):
+            defining = [{"source": official[key]["source"], "statement": official[key]["title"],
+                         "role": "FUNCTIONAL_AUTHORITY", "authority_index": True}, *defining]
+        clash = any(a["source"] != b["source"] and not agree(normalize(a["statement"]), normalize(b["statement"]))
+                    for i, a in enumerate(defining) for b in defining[i + 1:])
+        if clash:
+            conflicts.append({"identifier": ident, "statements": defining})
+    return conflicts, references
+
+
+def _official_identifiers(run_dir: Path) -> dict[str, dict[str, str]]:
+    path = run_dir / "sources.json"
+    if not path.is_file():
+        return {}
+    return {normalize_identifier(item["identifier"]): {"title": item.get("title") or "", "source": item.get("source", "")}
+            for item in read_json(path).get("authority_index", [])}
+
+
 def _with_file(items: list[Any], path: str) -> list[Any]:
     out = []
     for item in items or []:
@@ -451,7 +523,8 @@ def reconcile(run_dir: Path, artifact_root: Path) -> dict[str, Any]:
                 ident = item.get("identifier") if isinstance(item, dict) else str(item)
                 statement = (item.get("title") or item.get("statement") or "") if isinstance(item, dict) else ""
                 if ident:
-                    identifier_statements.setdefault(ident, []).append({"source": task["path"], "statement": statement})
+                    identifier_statements.setdefault(ident, []).append(
+                        {"source": task["path"], "statement": statement, "role": task["role"]})
             for ref in cat.get("references", []) or []:
                 target = ref.get("target") if isinstance(ref, dict) else str(ref)
                 references.append({"source": task["path"], "target": target, "selected": target in selected_paths})
@@ -472,6 +545,10 @@ def reconcile(run_dir: Path, artifact_root: Path) -> dict[str, Any]:
             bucket = buckets.setdefault(folder.name, {})
             for section, values in sorted((item.get("catalog") or {}).items()):
                 bucket.setdefault(section, []).extend(values or [])
+    duplicates_removed = 0
+    for sid in list(buckets):
+        buckets[sid], removed = _dedupe(buckets[sid])
+        duplicates_removed += removed
     selectors_out = []
     for selector in task_plan.get("selectors") or []:
         files = [t for t in task_plan["tasks"] if t.get("selector_id") == selector["selector_id"]]
@@ -487,17 +564,14 @@ def reconcile(run_dir: Path, artifact_root: Path) -> dict[str, Any]:
                               "complete": all(t["state"] in ACCOUNTED for t in files),
                               "selector_level_results": shards.get(selector["selector_id"], 0),
                               "catalog_ref": catalog_ref})
-    conflicts = []
-    for ident, statements in sorted(identifier_statements.items()):
-        distinct = {s["statement"].strip().casefold() for s in statements if s["statement"].strip()}
-        if len(distinct) > 1:
-            conflicts.append({"identifier": ident, "statements": statements})
+    conflicts, identifier_references = identifier_conflicts(identifier_statements, _official_identifiers(run_dir))
     counts = summary(task_plan)
     reconciliation = {
         "contract_version": CONTRACT_VERSION, "reconciled_at": now(), "strategy": task_plan["strategy"],
         "worker_model": task_plan.get("worker_model"), "states": counts, "selectors": selectors_out,
         "worker_failures": [s for s in sources if s["state"] == "FAILED_WORKER"],
-        "identifier_conflicts": conflicts, "cross_references": references,
+        "identifier_conflicts": conflicts, "identifier_references": identifier_references,
+        "cross_references": references,
         "telemetry": {
             "user_source_selectors": len(task_plan.get("selectors") or []),
             "physical_files_selected": len(task_plan["tasks"]),
@@ -510,6 +584,7 @@ def reconcile(run_dir: Path, artifact_root: Path) -> dict[str, Any]:
             "unsupported_files": counts["UNSUPPORTED"] + counts["FAILED_TO_READ"],
             "unaccounted_files": counts["PLANNED"],
             "internal_shards_used": {sid: n for sid, n in shards.items() if n > 1},
+            "duplicate_catalog_items_removed": duplicates_removed,
             "history": task_plan.get("history", []),
         },
         "note": "Conflicts are preserved for the main model; nothing was majority-voted.",
