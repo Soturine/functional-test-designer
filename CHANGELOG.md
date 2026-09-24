@@ -82,7 +82,10 @@ Corrective round after the benchmark audit, still targeting 2.4.0:
 - **Cleaner reconciliation.** Exact restatements of a fact appear once per selector catalog. Identifier conflicts need an official identifier stated in disagreeing ways by two defining sources; implementation and test mentions become `identifier_references`.
 - **Finding → Question.** A Finding with coverage disposition `QUESTION` must link the real Question(s) that ask what must be resolved; the canonical Finding carries optional `question_refs`.
 - **Executable procedures.** Chained vague steps are rejected, as are expected results that only echo the action or offer alternative outcomes, and fixtures used without a test-data description (source codes excepted). A step that changes the environment or suppresses a signal needs supporting evidence or an honest `UNKNOWN_SETUP_PATH`/`MISSING_EXECUTION_SURFACE`, and a load, latency or capacity threshold may be asserted only when the designed Test Case states it. The guidance asks for self-contained procedures and a characterization shape for capacity questions without an SLA.
-- **CI.** The test suite runs on Linux and Windows.
+- **Chaos cases** follow the same step rules as canonical procedures (no invented setup technique or threshold, observable single outcomes, described fixtures).
+- **Fixture vocabulary.** Only codes and constants the sources use are exempt from the test-data description rule; fixture-shaped names (`USER_A`, `ORDER_1`, `EMAIL_NEW`) always need a description. The multi-action heuristic ignores paths, query strings, inline JSON and code identifiers.
+- **Reuse.** Facts a selector reader reported only at selector level are folded into the reusable file catalog of the file they cite. Expansion tests cite each evidence reference once.
+- **CI.** The test suite and domain packs run on Linux and Windows; CI installs the optional PDF reader, and PDF-dependent tests skip with a stated reason without it.
 
 ## 2.3.0
 
