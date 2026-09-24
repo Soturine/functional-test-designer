@@ -6,7 +6,9 @@ import shutil
 import sys
 import tempfile
 import unittest
+from html.parser import HTMLParser
 from pathlib import Path
+from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
@@ -473,6 +475,114 @@ class OfficialTitleTests(unittest.TestCase):
         label = render.requirement_label(requirement)
         self.assertEqual("REQ-002", label)
         self.assertNotIn("header", label)
+
+
+class _FamilyPages(HTMLParser):
+    """Collects, per family card, its announced count and each modal page's TC ids."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.families: dict[str, dict[str, Any]] = {}
+        self._family: str | None = None
+        self._page: dict[str, Any] | None = None
+        self._in_count = False
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        a = dict(attrs)
+        classes = (a.get("class") or "").split()
+        if tag == "section" and "tc-group" in classes:
+            self._family = a["data-family"]
+            self.families[self._family] = {"count": None, "pages": []}
+        elif tag == "template" and "req-template" in classes:
+            self._page = {"scope": a.get("data-scope"), "key": a.get("data-key"), "title": a.get("data-title"), "ids": []}
+            self.families[a["data-family"]]["pages"].append(self._page)
+        elif tag == "li" and "tc-row" in classes and self._page is not None:
+            self._page["ids"].append(a["data-id"])
+        elif tag == "span" and "tc-count" in classes:
+            self._in_count = True
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag == "template":
+            self._page = None
+
+    def handle_data(self, data: str) -> None:
+        if self._in_count and self._family:
+            self.families[self._family]["count"] = int(data)
+            self._in_count = False
+
+
+class FamilyModalTests(unittest.TestCase):
+    """A family card's "View Test Cases" opens on every unique TC the card counts; the
+    identifier pages only refine that view."""
+
+    def setUp(self) -> None:
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.output = Path(self.temp_dir.name) / "output"
+        shutil.copytree(ROOT / "examples" / "expected-output", self.output)
+        self.addCleanup(self.temp_dir.cleanup)
+
+    def families(self) -> dict[str, dict[str, Any]]:
+        render.render_markdown(self.output)
+        parser = _FamilyPages()
+        parser.feed(render.render_report(self.output).read_text(encoding="utf-8"))
+        return parser.families
+
+    def _identifiers(self, mapping: dict[str, list[str]]) -> None:
+        index = json.loads((self.output / "test-cases.json").read_text(encoding="utf-8"))
+        for entry in index["test_cases"]:
+            if entry["id"] in mapping:
+                path = self.output / entry["file"]
+                case = json.loads(path.read_text(encoding="utf-8"))
+                case["source_identifiers"] = mapping[entry["id"]]
+                path.write_text(json.dumps(case), encoding="utf-8")
+
+    def _family_of(self, families: dict[str, dict[str, Any]], tc: str) -> dict[str, Any]:
+        return next(f for f in families.values() if tc in f["pages"][0]["ids"])
+
+    def test_first_page_is_the_whole_family_with_exactly_the_card_count(self) -> None:
+        for family in self.families().values():
+            first = family["pages"][0]
+            self.assertEqual("all", first["scope"])
+            self.assertEqual(family["count"], len(first["ids"]))
+            self.assertEqual(len(first["ids"]), len(set(first["ids"])))
+
+    def test_identifier_pages_are_subsets_of_the_family(self) -> None:
+        self._identifiers({"TC-002": ["SYN-A"], "TC-003": ["SYN-A", "SYN-B"], "TC-004": ["SYN-B"]})
+        family = self._family_of(self.families(), "TC-002")
+        pages = {p["key"]: p["ids"] for p in family["pages"][1:]}
+        self.assertEqual(["TC-002", "TC-003"], pages["SYN-A"])
+        self.assertEqual(["TC-003", "TC-004"], pages["SYN-B"])
+        for ids in pages.values():
+            self.assertLessEqual(set(ids), set(family["pages"][0]["ids"]))
+
+    def test_multi_identifier_tc_appears_once_in_the_all_view(self) -> None:
+        self._identifiers({"TC-002": ["SYN-A"], "TC-003": ["SYN-A", "SYN-B"], "TC-004": ["SYN-B"]})
+        family = self._family_of(self.families(), "TC-003")
+        self.assertEqual(1, family["pages"][0]["ids"].count("TC-003"))
+        self.assertEqual(family["count"], len(family["pages"][0]["ids"]))
+        on_pages = sum("TC-003" in p["ids"] for p in family["pages"][1:])
+        self.assertEqual(2, on_pages)
+
+    def test_card_count_equals_the_default_view_for_a_large_family(self) -> None:
+        # Every TC with its own identifier: the first identifier page holds one TC, the
+        # default page still holds the whole family.
+        index = json.loads((self.output / "test-cases.json").read_text(encoding="utf-8"))
+        self._identifiers({entry["id"]: [f"SYN-{n}"] for n, entry in enumerate(index["test_cases"])})
+        for family in self.families().values():
+            self.assertEqual(family["count"], len(family["pages"][0]["ids"]))
+            self.assertEqual(len(family["pages"][0]["ids"]), sum(len(p["ids"]) for p in family["pages"][1:]))
+
+    def test_modal_controller_defaults_to_the_all_page_and_keeps_navigation(self) -> None:
+        render.render_markdown(self.output)
+        report = render.render_report(self.output).read_text(encoding="utf-8")
+        self.assertIn("tcState.index=0", report)
+        self.assertIn('id="tc-page-select"', report)
+        self.assertIn("page.scope==='all'", report)
+        for wired in ("q('tc-prev').addEventListener", "q('tc-next').addEventListener",
+                      "q('tc-page-select').addEventListener", ".filter(p=>p.matchedIds.length>0)"):
+            self.assertIn(wired, report)
+        for forbidden in ("https://", "<script src=", "unpkg", "jsdelivr"):
+            self.assertNotIn(forbidden, report)
 
 
 if __name__ == "__main__":

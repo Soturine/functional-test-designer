@@ -48,7 +48,7 @@ LABELS = {
         "blocking": "Bloqueante", "reason": "Motivo", "impacted": "TCs impactados",
         "no_results": "Nenhum Test Case corresponde aos filtros.", "expand_all": "Expandir todos",
         "collapse_all": "Recolher todos", "collapse": "Recolher", "expand": "Expandir",
-        "open_group": "Ver Test Cases", "modal_prev": "Requisito anterior", "modal_next": "Próximo requisito",
+        "open_group": "Ver Test Cases", "modal_prev": "Anterior", "modal_next": "Próximo", "requirement_filter": "Requisito",
         "modal_of": " de ", "glossary_title": "Legenda e termos do relatório", "modal_close": "Fechar",
         "tc_alerts": "Atenções da análise", "finding_singular": "Finding", "question_singular": "Pergunta",
         "no_filter_results": "Nenhum Test Case corresponde aos filtros ativos.",
@@ -96,7 +96,7 @@ LABELS = {
         "blocking": "Blocking", "reason": "Reason", "impacted": "Impacted TCs",
         "no_results": "No Test Case matches the filters.", "expand_all": "Expand all",
         "collapse_all": "Collapse all", "collapse": "Collapse", "expand": "Expand",
-        "open_group": "View Test Cases", "modal_prev": "Previous requirement", "modal_next": "Next requirement",
+        "open_group": "View Test Cases", "modal_prev": "Previous", "modal_next": "Next", "requirement_filter": "Requirement",
         "modal_of": " of ", "glossary_title": "Report legend and terminology", "modal_close": "Close",
         "tc_alerts": "Analysis alerts", "finding_singular": "Finding", "question_singular": "Question",
         "no_filter_results": "No Test Case matches the active filters.",
@@ -730,14 +730,17 @@ def _case_requirement_keys(case: dict[str, Any], requirements: dict[str, dict[st
     ]
 
 
-def render_requirement_page(group_id: str, key: str, title: str, members: list[dict[str, Any]], labels: dict[str, str]) -> str:
-    """One `<template>` per authoritative identifier inside a family/group: the modal
-    paginates these, never individual Test Cases. Reading `.content` (to find which TC
-    ids live on a page, or to filter them) never materializes or lays this out."""
+def render_requirement_page(group_id: str, key: str, title: str, members: list[dict[str, Any]],
+                            labels: dict[str, str], *, scope: str = "requirement") -> str:
+    """One `<template>` per modal page of a family/group. The first page (scope "all")
+    lists every unique Test Case the family card counts; the following pages refine it
+    by authoritative identifier, where a multi-identifier TC appears on each of its pages.
+    Pages never paginate individual Test Cases. Reading `.content` (to find which TC ids
+    live on a page, or to filter them) never materializes or lays this out."""
     rows = "".join(_case_row(case, labels) for case in members)
     return (
         f'<template class="req-template" data-family="{esc(group_id)}" data-key="{esc(key)}" '
-        f'data-title="{esc(title)}"><div class="req-page-head"><h4>{esc(title)}</h4>'
+        f'data-scope="{esc(scope)}" data-title="{esc(title)}"><div class="req-page-head"><h4>{esc(title)}</h4>'
         f'<p class="muted req-page-count"><span class="req-page-count-value">{len(members)}</span> '
         f'{esc(labels["tc_count_suffix"])}</p></div>'
         f'<ul class="tc-row-list">{rows}</ul>'
@@ -913,7 +916,10 @@ def render_report(output_dir: Path, destination: Path | None = None, artifact_fo
                                  findings_by_id, questions_by_id)
             for entry, case in members
         )
-        req_pages_html = "".join(
+        # The default page is the whole family: exactly the unique TCs the card counts.
+        req_pages_html = render_requirement_page(
+            group_id, labels["all"], title, [case for _, case in members], labels, scope="all",
+        ) + "".join(
             render_requirement_page(group_id, key, page["title"], page["cases"], labels)
             for key, page in pages.items()
         )
@@ -1112,6 +1118,7 @@ dialog::backdrop {{ background:rgba(20,29,34,.72); }}
 .tc-modal-body {{ padding:18px 20px; overflow:auto; background:var(--soft); }}
 .tc-modal-footer {{ display:flex; align-items:center; gap:16px; padding:12px 20px; border-top:1px solid var(--line); position:sticky; bottom:0; background:#fff; flex-wrap:wrap; border-radius:0 0 var(--radius) var(--radius); }}
 .tc-position {{ font-weight:700; font-size:13px; }}
+.tc-page-pick {{ font-size:13px; }} .tc-page-pick select {{ margin-left:4px; max-width:260px; }}
 .modal-close {{ font-size:20px; line-height:1; padding:4px 10px; }}
 .tc-row-list {{ list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:8px; }}
 .tc-row {{ border:1px solid var(--line); border-radius:8px; background:#fff; box-shadow:var(--shadow); overflow:hidden; }}
@@ -1184,6 +1191,7 @@ dialog::backdrop {{ background:rgba(20,29,34,.72); }}
     <div class="tc-modal-body" id="tc-modal-body"></div>
     <div class="tc-modal-footer">
       <button type="button" id="tc-prev">&larr; {esc(labels['modal_prev'])}</button>
+      <label class="tc-page-pick">{esc(labels['requirement_filter'])} <select id="tc-page-select"></select></label>
       <span id="tc-position" class="tc-position"></span>
       <button type="button" id="tc-next">{esc(labels['modal_next'])} &rarr;</button>
     </div>
@@ -1274,10 +1282,13 @@ function renderCurrentPage(){{
   const countValue=clone.querySelector('.req-page-count-value');
   if(countValue)countValue.textContent=page.matchedIds.length;
   q('tc-modal-body').replaceChildren(clone);
-  q('tc-modal-title').textContent=page.key===page.title?page.key:(page.key+' — '+page.title);
+  const isAll=page.scope==='all';
+  q('tc-modal-title').textContent=isAll||page.key===page.title?page.title:(page.key+' — '+page.title);
   q('tc-modal-count').textContent=page.matchedIds.length+' '+TC_COUNT_SUFFIX;
   const single=tcState.pages.length<=1;
   q('tc-position').hidden=single;q('tc-prev').hidden=single;q('tc-next').hidden=single;
+  q('tc-page-select').parentElement.hidden=single;
+  q('tc-page-select').value=String(tcState.index);
   if(!single)q('tc-position').textContent=page.key+' · '+(tcState.index+1)+POS_OF+tcState.pages.length;
   q('tc-prev').disabled=tcState.index===0;
   q('tc-next').disabled=tcState.index===tcState.pages.length-1;
@@ -1286,9 +1297,15 @@ function renderCurrentPage(){{
 function openGroup(familyId,opener){{
   const pages=reqTemplates.filter(t=>t.dataset.family===familyId).map(t=>{{
     const tcIds=reqPageTcIds(t);
-    return {{tpl:t,key:t.dataset.key,title:t.dataset.title,tcIds:tcIds,matchedIds:tcIds.filter(matchesId)}};
+    return {{tpl:t,key:t.dataset.key,title:t.dataset.title,scope:t.dataset.scope,tcIds:tcIds,matchedIds:tcIds.filter(matchesId)}};
   }}).filter(p=>p.matchedIds.length>0);
+  // Page 0 is always the whole family ("all"), so the modal opens on every unique TC
+  // the card counts; the identifier pages after it are refinements, never the default.
   tcState.familyId=familyId;tcState.pages=pages;tcState.index=0;tcState.opener=opener;
+  q('tc-page-select').replaceChildren(...pages.map((p,i)=>{{
+    const option=document.createElement('option');option.value=String(i);
+    option.textContent=p.key+' ('+p.matchedIds.length+')';return option;
+  }}));
   renderCurrentPage();
   tcModal.showModal();
   document.body.classList.add('modal-open');
@@ -1298,6 +1315,7 @@ document.querySelectorAll('.open-group').forEach(button=>button.addEventListener
 }}));
 q('tc-prev').addEventListener('click',()=>{{if(tcState.index>0){{tcState.index-=1;renderCurrentPage();}}}});
 q('tc-next').addEventListener('click',()=>{{if(tcState.index<tcState.pages.length-1){{tcState.index+=1;renderCurrentPage();}}}});
+q('tc-page-select').addEventListener('change',event=>{{tcState.index=Number(event.target.value)||0;renderCurrentPage();}});
 
 // Accordion: opening a TC row clones its full body from the global template exactly
 // once; closing only hides it. Several rows may stay open at once.
