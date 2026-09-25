@@ -1330,8 +1330,7 @@ def finalize_run(run_dir: Path, formats: Any = None, baseline: dict[str, Any] | 
         "procedure_generation_seconds": procedure_seconds,
         "average_procedure_generation_seconds": round(procedure_seconds / procedure_metrics["procedures_generated"], 3)
         if procedure_seconds and procedure_metrics.get("procedures_generated") else None,
-        # The runtime reads each source once at start; later stages only verify digests.
-        "runtime_source_reads": len(source_state["records"]),
+        **reading_metrics(run_dir, source_state["records"]),
         "runtime_source_rereads": 0,
         "source_integrity_checks": state.get("integrity_checks", 0),
     })
@@ -1379,6 +1378,25 @@ def render_run(run_dir: Path, formats: Any = None) -> dict[str, Any]:
     _publish(run_dir, Path(run["artifact_root"]), rendered["files"])
     verify_manifest(run_dir / "run-manifest.json")
     return rendered
+
+
+def reading_metrics(run_dir: Path, records: list[dict[str, Any]]) -> dict[str, int]:
+    """What reading really did, from the reading plan's per-file states: every selected file is
+    accounted for, but only files a reader (or the main model, reading sequentially) catalogued
+    in this run count as read. A reused catalog is not a read; hashing a file to check that it
+    is unchanged is not a read either."""
+    plan_path = Path(run_dir) / "reading" / "task-plan.json"
+    if not plan_path.is_file():  # runs planned before reading ledgers: every readable file was read once
+        readable = sum(record["status"] in {"READ", "TRANSCRIBED"} for record in records)
+        return {"source_files_accounted": len(records), "runtime_source_reads": readable,
+                "reused_file_catalogs": 0, "source_digest_checks": len(records)}
+    states = Counter(task["state"] for task in read_json(plan_path)["tasks"])
+    return {
+        "source_files_accounted": sum(n for state, n in states.items() if state != "PLANNED"),
+        "runtime_source_reads": states["CATALOGED"] + states["MAIN_MODEL"],
+        "reused_file_catalogs": states["REUSED"],
+        "source_digest_checks": len(records),
+    }
 
 
 def refresh_publication_after_post_suite(parent_run_dir: Path) -> list[str]:

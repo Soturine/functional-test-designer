@@ -644,5 +644,48 @@ class EvidenceSnapshotTests(unittest.TestCase):
             self.assertTrue((run.run_dir / "evidence" / entry["text_ref"]).is_file())
 
 
+
+class HonestReadingMetricsTests(unittest.TestCase):
+    """Accounting for a file is not reading it; reusing a catalog is not reading it."""
+
+    def finish(self, run: PackRun) -> dict:
+        for stage in ("design", "expansion", "procedures"):
+            run.submit(stage)
+        pipeline.finalize_run(run.run_dir, ["JSON"])
+        return json.loads((run.run_dir / "run-metrics.json").read_text(encoding="utf-8"))
+
+    def test_a_first_multi_agent_run_reads_what_its_readers_catalogued(self) -> None:
+        run = PackRun("saas-accounts")
+        self.addCleanup(run.close)
+        start(run)
+        read_everything(run)
+        metrics = self.finish(run)
+        files = len(run.pack["sources"])
+        self.assertEqual((files, files, 0, files),
+                         (metrics["source_files_accounted"], metrics["runtime_source_reads"],
+                          metrics["reused_file_catalogs"], metrics["source_digest_checks"]))
+
+    def test_a_run_reusing_every_catalog_reads_nothing(self) -> None:
+        run = PackRun("saas-accounts")
+        self.addCleanup(run.close)
+        start(run)
+        read_everything(run)
+        start(run, run_id="second")
+        metrics = self.finish(run)
+        files = len(run.pack["sources"])
+        self.assertEqual((files, 0, files),
+                         (metrics["source_files_accounted"], metrics["runtime_source_reads"], metrics["reused_file_catalogs"]))
+
+    def test_a_sequential_run_counts_the_files_the_main_model_read(self) -> None:
+        run = PackRun("saas-accounts")
+        self.addCleanup(run.close)
+        run.start()
+        metrics = self.finish(run)
+        plan = task_plan(run)
+        self.assertEqual(sum(t["state"] == "MAIN_MODEL" for t in plan["tasks"]), metrics["runtime_source_reads"])
+        self.assertEqual(0, metrics["reused_file_catalogs"])
+        self.assertEqual(len(plan["tasks"]), metrics["source_files_accounted"])
+
+
 if __name__ == "__main__":
     unittest.main()
