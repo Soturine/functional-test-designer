@@ -73,6 +73,7 @@ Many lightweight readers read faster; one main model decides.
 - **Readers.** The work order lists `reader_assignments`: one per selector that still has unaccounted files. The host spawns one reader per assignment, preferring Haiku on a Claude host.
   - At most `concurrency` readers run at once (default 8). Assignments carry a `wave` number, and later waves wait.
   - Readers use ordinary file and navigation tools; they never generate helper scripts, parsers or crawlers to automate cataloging.
+  - Design, Expansion and Procedures are semantic reasoning stages: write each item from its own claim, evidence and oracle. Never replace that reasoning with a generated mapping or template script that fills field shapes — templated items (one text with only identifiers, codes, fixtures or numbers swapped) are rejected. Helper files never go into the run's `stages/` directory: only the pipeline writes official stage state, and submission and finalize refuse any other file there.
   - An oversized selector may be split into internal shards only when real context limits require it. Shards reconcile back into one selector catalog, and their use is reported in the telemetry.
   - The core role name is `LIGHTWEIGHT_SOURCE_READER`, and no model name appears in the contract.
   - The user can override the worker count, the model or the strategy, including `SEQUENTIAL`, which means no subagents.

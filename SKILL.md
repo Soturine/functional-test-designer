@@ -16,6 +16,7 @@ This works for any project: logistics, ERP, SaaS, APIs, IoT, industrial, aerospa
 - Never invent an oracle, route, label, field, message, credential, id format or state. Unknowns become Questions or procedure unknowns.
 - Write every human-readable text in the run's `output_locale` (explicit request > authority language > request language). Keep code symbols, endpoints, constants, enums, fields, ids and filenames verbatim.
 - The artifact root must be an explicit user destination, never the skill root or the source root.
+- Design, Expansion and Procedures are semantic reasoning stages: write each item from its own claim, evidence and oracle. Never replace that reasoning with a generated mapping or template script that fills field shapes — templated items (one text with only identifiers, codes, fixtures or numbers swapped) are rejected. Helper files never go into the run's `stages/` directory: only the pipeline writes official stage state, and submission and finalize refuse any other file there. Lightweight readers may use ordinary file and navigation tools.
 
 ## Commands
 

@@ -199,6 +199,36 @@ def validate_questions_and_findings(
     return questions, findings
 
 
+# Identifiers, codes, fixtures, numbers and quoted literals: what a mapping script substitutes
+# into one template. What remains is the text a semantic author wrote.
+_TEMPLATE_SLOT = re.compile(
+    r"\b[A-Z]{1,6}[-_ ]?\d+(?:[.\-]\d+)*\b|\b[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+\b|\b\d+(?:[.,]\d+)?\b|\"[^\"]*\"")
+_DIMENSION_WORDS = re.compile(
+    r"\b(?:negative|boundary|operator[ _]error|misuse|state[ _]transition|decision[ _]table|concurrency|"
+    r"race[ _]condition|idempotency|integration|recovery|chaos|security|authorization|data[ _]integrity|"
+    r"cross[ _]requirement|e2e)\b", re.IGNORECASE)
+TEMPLATE_GROUP_LIMIT = 3
+
+
+def _template(text: Any) -> str:
+    text = _DIMENSION_WORDS.sub("#", _TEMPLATE_SLOT.sub("#", str(text or "")))
+    return re.sub(r"\s+", " ", text.lower()).strip()
+
+
+def mechanical_templates(items: list[dict[str, Any]], fields: tuple[str, ...], label: str) -> list[str]:
+    """Items that are one template with only identifiers, codes, fixtures or numbers swapped in:
+    the shape a generated mapping script produces instead of per-item reasoning. Field shapes
+    being valid is not enough; three or more such items are rejected."""
+    groups: dict[str, list[str]] = {}
+    for item in items:
+        signature = " || ".join(_template(item.get(field)) for field in fields)
+        if signature.replace("#", "").replace("||", "").strip():
+            groups.setdefault(signature, []).append(str(item.get("key")))
+    return [f"{len(keys)} {label} are one mechanical template with only identifiers or values swapped "
+            f"({', '.join(keys[:6])}); write each from its own claim, state and oracle"
+            for keys in groups.values() if len(keys) >= TEMPLATE_GROUP_LIMIT]
+
+
 def validate_design(payload: dict[str, Any], context: dict[str, Any]) -> dict[str, Any]:
     """Validate the normative design stage and materialize its canonical design state."""
     errors = unknown_keys(payload, DESIGN_KEYS, "design")
@@ -366,6 +396,7 @@ def validate_design(payload: dict[str, Any], context: dict[str, Any]) -> dict[st
     explicit = validate_explicit_dispositions(payload.get("dispositions", []) or [], authority, question_keys, errors)
     reviews = structure_review(context["authority_index"], claims, payload.get("structure_reviews", []) or [], errors)
     ledger = identifier_ledger(context["authority_index"], claims, tests, explicit, errors)
+    errors.extend(mechanical_templates(payload.get("tests", []) or [], ("title", "state", "trigger", "expected"), "tests"))
     if errors:
         from common import StageError
         raise StageError("design", errors)

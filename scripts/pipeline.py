@@ -448,6 +448,7 @@ def submit_stage(run_dir: Path, stage: str, payload: dict[str, Any]) -> dict[str
     if not isinstance(payload, dict):
         raise ValueError("stage payload must be a JSON object")
     verify_manifest(run_dir / "run-manifest.json", require_publication=False)
+    _check_official_stage_files(run_dir)
     _check_sources_unchanged(run, source_state["records"])
     _save_state(run_dir, integrity_checks=state.get("integrity_checks", 0) + 1)
     records = source_state["records"]
@@ -1291,9 +1292,26 @@ def _bind(run_dir: Path, key: str, value: Any) -> None:
     write_json(path, manifest)
 
 
+# The only files official stage state consists of. Anything else in `stages/` (a helper script,
+# a generated mapping, a scratch payload) is not official state and must live elsewhere.
+OFFICIAL_STAGE_FILES = {"reading.reconciliation.json",
+                        *(f"{stage}.{kind}.json" for stage in ("design", "expansion", "procedures")
+                          for kind in ("payload", "result"))}
+
+
+def _check_official_stage_files(run_dir: Path) -> None:
+    folder = Path(run_dir) / "stages"
+    foreign = sorted(p.name for p in folder.iterdir() if p.name not in OFFICIAL_STAGE_FILES) if folder.is_dir() else []
+    if foreign:
+        raise IntegrityError(
+            f"unofficial files in {folder}: {foreign}. Official stage state is written only by the pipeline; keep "
+            "helper scripts and drafts outside the run directory — they never become stage state")
+
+
 def finalize_run(run_dir: Path, formats: Any = None, baseline: dict[str, Any] | None = None) -> dict[str, Any]:
     """Validate, persist canonical state, render the requested outputs and publish."""
     run_dir = Path(run_dir).resolve()
+    _check_official_stage_files(run_dir)
     run, source_state = _load(run_dir)
     formats = formats or run.get("formats")
     state = _state(run_dir)
@@ -1436,6 +1454,7 @@ STAGE_GUIDE = {
         "Submit results with `pipeline.py reading-submit`, then run `pipeline.py reading-reconcile`, which refuses while any physical file is unaccounted. You may prepare an authority-only skeleton while readers run, but Design is decided and submitted only after reconciliation. If sub-agents are unavailable, restart with --reading-strategy SEQUENTIAL and read the sources yourself; say which mode actually ran.",
     ],
     "design": [
+        "This is a semantic reasoning stage (so are expansion and procedures): write each item from its own claims, evidence and oracle. Do not generate the payload with a mapping or template script; templated items are rejected, and helper files never go into the run's stages/ directory.",
         "Use the reconciled reader catalog (reading/source-catalog.json and reconciliation.json) as your index of the corpus, then read what you need from the evidence snapshots or authority-text/. Conflicts listed in reconciliation are for you to judge — nothing was majority-voted. You own the QA reasoning; the runtime only validates.",
         "Build a lightweight domain_model from the sources: actors, entities, states, operations, invariants, permissions, integrations, events, dependencies, observables, failure_surfaces. Use the project's own vocabulary.",
         "Create one requirement per authority identifier or unidentified requirement. Keep source_identifier/source_title exactly as the authority states them (see authority_identifiers).",

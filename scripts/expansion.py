@@ -15,7 +15,8 @@ from typing import Any
 
 from common import StageError, jaccard, normalize, normalize_identifier, similarity
 from design import (
-    check_locale, traceability, unknown_keys, validate_questions_and_findings, validate_test_intent,
+    check_locale, mechanical_templates, traceability, unknown_keys, validate_questions_and_findings,
+    validate_test_intent,
 )
 
 
@@ -505,6 +506,11 @@ def validate_expansion(payload: dict[str, Any], context: dict[str, Any]) -> dict
     journeys = _journeys(context["authority_index"], candidates, errors)
     guidance = _guidance_dispositions(payload.get("guidance_dispositions"), context.get("guidance_items", []),
                                       tests_by_ref, question_keys, errors)
+    raw_candidates = [c for record in payload.get("dimensions", []) or [] if isinstance(record, dict)
+                      for c in record.get("candidates", []) or [] if isinstance(c, dict)]
+    errors.extend(mechanical_templates(raw_candidates, ("description",), "expansion candidates"))
+    errors.extend(mechanical_templates([c["test"] for c in raw_candidates if isinstance(c.get("test"), dict)],
+                                       ("title", "state", "trigger", "expected"), "expansion tests"))
     if errors:
         raise StageError("expansion", errors)
     return {

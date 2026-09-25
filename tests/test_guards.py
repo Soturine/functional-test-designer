@@ -315,5 +315,63 @@ class TestAssetGroundingTests(unittest.TestCase):
         self.assertTrue(result)
 
 
+
+class MechanicalShortcutTests(unittest.TestCase):
+    """Semantic stages cannot be satisfied by a mapping script that fills field shapes, and
+    helper artifacts never become official stage state."""
+
+    def test_templated_design_tests_are_rejected(self) -> None:
+        def templated(pack):
+            for key, ident in (("T1", "FR-01"), ("T2", "FR-02"), ("T3", "BR-01")):
+                test = by_key(design(pack)["tests"], key)
+                test.update(title=f"Verify {ident} behavior", state="the system is ready",
+                            trigger=f"execute the {ident} flow", expected=f"{ident} is satisfied")
+        run = PackRun("saas-accounts", templated)
+        self.addCleanup(run.close)
+        run.start()
+        with self.assertRaisesRegex(StageError, "3 tests are one mechanical template"):
+            run.submit("design")
+
+    def test_templated_expansion_candidates_are_rejected(self) -> None:
+        def templated(pack):
+            records = expansion(pack)["dimensions"]
+            filled = 0
+            for record in records:
+                for item in record.get("candidates", []):
+                    if filled < 3:
+                        item["description"] = f"Check {record['dimension']} handling for FR-0{filled + 1}."
+                        filled += 1
+        run = PackRun("saas-accounts", templated)
+        self.addCleanup(run.close)
+        run.through("design")
+        with self.assertRaisesRegex(StageError, "expansion candidates are one mechanical template"):
+            run.submit("expansion")
+
+    def test_distinct_cases_sharing_a_shape_stay_valid(self) -> None:
+        from design import mechanical_templates
+        items = [{"key": "A", "title": "Reading from an inactive reader is ignored", "state": "READER_A is inactive",
+                  "trigger": "send a reading from READER_A", "expected": "The reading is ignored."},
+                 {"key": "B", "title": "Reading from a deleted reader is ignored", "state": "READER_B was deleted",
+                  "trigger": "send a reading from READER_B", "expected": "The reading is ignored."},
+                 {"key": "C", "title": "Reading from a device that is not a reader is ignored",
+                  "state": "DEVICE_C is a printer", "trigger": "send a reading from DEVICE_C", "expected": "The reading is ignored."}]
+        self.assertEqual([], mechanical_templates(items, ("title", "state", "trigger", "expected"), "tests"))
+
+    def test_helper_artifacts_never_become_stage_state(self) -> None:
+        run = PackRun("saas-accounts")
+        self.addCleanup(run.close)
+        run.through("design")
+        helper = run.run_dir / "stages" / "build_expansion.py"
+        helper.write_text("# generated mapping\n", encoding="utf-8")
+        with self.assertRaisesRegex(pipeline.IntegrityError, r"unofficial files in .*build_expansion\.py"):
+            run.submit("expansion")
+        helper.unlink()
+        run.submit("expansion")
+        run.submit("procedures")
+        (run.run_dir / "stages" / "procedures.draft.json").write_text("{}", encoding="utf-8")
+        with self.assertRaisesRegex(pipeline.IntegrityError, "unofficial files"):
+            pipeline.finalize_run(run.run_dir, ["JSON"])
+
+
 if __name__ == "__main__":
     unittest.main()
