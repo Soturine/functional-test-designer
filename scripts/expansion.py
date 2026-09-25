@@ -74,7 +74,11 @@ ALIGNMENT_THRESHOLDS = {
     "actor": 0.34, "state": 0.34, "trigger": 0.34, "failure_domain": 0.4, "expected": 0.34,
 }
 STRICT_FIELDS = {"failure_domain", "expected"}
-EXPANSION_KEYS = {"dimensions", "test_assets", "questions", "findings"}
+EXPANSION_KEYS = {"dimensions", "test_assets", "questions", "findings", "guidance_dispositions"}
+# How each instructions guidance/seed item ended. Guidance is never authority and never
+# forces a Test Case; it must simply not disappear without an answer.
+GUIDANCE_DISPOSITIONS = {"MATERIALIZED", "ALREADY_COVERED", "USED_FOR_ORDERING", "QUESTION_REQUIRED",
+                         "NOT_APPLICABLE_WITH_REASON"}
 
 
 def _text(value: Any) -> str:
@@ -499,14 +503,56 @@ def validate_expansion(payload: dict[str, Any], context: dict[str, Any]) -> dict
         test["source_refs"] = unique_refs([ref for target in atomics for ref in target["source_refs"]])
 
     journeys = _journeys(context["authority_index"], candidates, errors)
+    guidance = _guidance_dispositions(payload.get("guidance_dispositions"), context.get("guidance_items", []),
+                                      tests_by_ref, question_keys, errors)
     if errors:
         raise StageError("expansion", errors)
     return {
         "tests": tests, "candidates": candidates, "questions": questions, "findings": findings,
         "dimension_summary": dimension_summary(records, candidates),
         "checklists": reviews, "test_asset_challenge": challenge, "journeys": journeys,
+        "guidance_dispositions": guidance,
         "unknown_family_titles": sorted({normalize(t["family"]) for t in tests} - families),
     }
+
+
+def _guidance_dispositions(
+    raw: Any, items: list[dict[str, Any]], tests_by_ref: dict[str, dict[str, Any]], question_keys: Any,
+    errors: list[str],
+) -> list[dict[str, Any]]:
+    """One explicit disposition per guidance/seed item. The runtime checks the accounting
+    (known item, real tests/Question, a reason); the model decides what the guidance means."""
+    by_anchor = {item["anchor"]: item for item in items}
+    recorded: dict[str, dict[str, Any]] = {}
+    for entry in raw or []:
+        entry = entry if isinstance(entry, dict) else {}
+        anchor, disposition = _text(entry.get("item")), _text(entry.get("disposition"))
+        label = f"guidance {anchor or '<missing>'}"
+        if anchor not in by_anchor:
+            errors.append(f"{label} is not an item of the instructions (known: {sorted(by_anchor)[:5]})")
+            continue
+        if anchor in recorded:
+            errors.append(f"{label} is dispositioned twice")
+        if disposition not in GUIDANCE_DISPOSITIONS:
+            errors.append(f"{label} disposition must be one of {sorted(GUIDANCE_DISPOSITIONS)}")
+        refs = [_text(value) for value in entry.get("tests", []) or [] if _text(value)]
+        unknown = [ref for ref in refs if ref not in tests_by_ref]
+        record = {"item": anchor, "text": by_anchor[anchor]["text"], "disposition": disposition,
+                  "test_keys": [tests_by_ref[ref]["key"] for ref in refs if ref in tests_by_ref],
+                  "question": _text(entry.get("question")) or None, "reason": _text(entry.get("reason")) or None}
+        if unknown:
+            errors.append(f"{label} names unknown tests {unknown}")
+        if disposition in {"MATERIALIZED", "ALREADY_COVERED"} and not refs:
+            errors.append(f"{label} {disposition} must name the tests that exercise it")
+        if disposition == "QUESTION_REQUIRED" and record["question"] not in set(question_keys):
+            errors.append(f"{label} QUESTION_REQUIRED must name a known Question")
+        if disposition in {"USED_FOR_ORDERING", "NOT_APPLICABLE_WITH_REASON"} and len((record["reason"] or "").split()) < 4:
+            errors.append(f"{label} {disposition} needs a reason saying how it was used or why it does not apply")
+        recorded[anchor] = record
+    missing = [anchor for anchor in by_anchor if anchor not in recorded]
+    if missing:
+        errors.append(f"{len(missing)} instructions guidance item(s) have no disposition: {missing[:10]}")
+    return [recorded[anchor] for anchor in by_anchor if anchor in recorded]
 
 
 def _checklist(

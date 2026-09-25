@@ -198,5 +198,78 @@ class ImplementationTestAssetTests(unittest.TestCase):
             run.submit("expansion")
 
 
+
+class GuidanceAccountabilityTests(unittest.TestCase):
+    """Guidance from the instructions file must end with an explicit disposition. It is never
+    authority and never forces a Test Case."""
+
+    REQUEST = {"guidance": ["Explore sustained load and bursts on invitations."],
+               "seeds": [{"text": "Follow the invitation flow from invite to acceptance.", "section": "Main flow"}],
+               "source_order": [], "effective": {}}
+
+    def reach(self, dispositions=None):
+        import pipeline
+        from pathlib import Path as _Path
+        run = PackRun("saas-accounts")
+        self.addCleanup(run.close)
+        result = pipeline.start_run(
+            workspace=run.workspace, artifact_root=run.artifacts, run_id=run.pack["name"],
+            sources_selected=[{"path": path, "role": item["role"]} for path, item in run.pack["sources"].items()],
+            locale=run.pack.get("locale"), request_text=run.pack.get("request", ""), reading={"strategy": "SEQUENTIAL"},
+            normalized_request=self.REQUEST)
+        run.run_dir = _Path(result["run_dir"])
+        run.submit("design")
+        if dispositions is not None:
+            run.pack["stages"]["expansion"]["guidance_dispositions"] = dispositions
+        return run
+
+    LOAD = "instructions.md#guidance-001"
+    FLOW = "instructions.md#seed-001"
+
+    def test_unanswered_guidance_is_rejected(self) -> None:
+        run = self.reach()
+        with self.assertRaisesRegex(StageError, r"2 instructions guidance item\(s\) have no disposition"):
+            run.submit("expansion")
+
+    def test_explored_is_not_an_answer_without_cases_a_question_or_a_reason(self) -> None:
+        run = self.reach([{"item": self.LOAD, "disposition": "MATERIALIZED"},
+                          {"item": self.FLOW, "disposition": "USED_FOR_ORDERING"}])
+        with self.assertRaises(StageError) as raised:
+            run.submit("expansion")
+        text = str(raised.exception)
+        self.assertIn("MATERIALIZED must name the tests that exercise it", text)
+        self.assertIn("USED_FOR_ORDERING needs a reason", text)
+
+    def test_a_question_disposition_needs_a_real_question(self) -> None:
+        run = self.reach([{"item": self.LOAD, "disposition": "QUESTION_REQUIRED", "question": "Q-NOPE"},
+                          {"item": self.FLOW, "disposition": "USED_FOR_ORDERING",
+                           "reason": "orders the invitation cases along the flow"}])
+        with self.assertRaisesRegex(StageError, "QUESTION_REQUIRED must name a known Question"):
+            run.submit("expansion")
+
+    def test_accounted_guidance_is_published_without_changing_the_test_case_count(self) -> None:
+        import pipeline
+        baseline = PackRun("saas-accounts")
+        self.addCleanup(baseline.close)
+        baseline.finalize(("JSON",))
+        run = self.reach([
+            {"item": self.LOAD, "disposition": "ALREADY_COVERED", "tests": ["D2"]},
+            {"item": self.FLOW, "disposition": "USED_FOR_ORDERING", "reason": "orders the invitation cases along the flow"}])
+        run.submit("expansion")
+        run.submit("procedures")
+        pipeline.finalize_run(run.run_dir, ["JSON"])
+        index = run.output("test-cases.json")
+        self.assertEqual(len(baseline.output("test-cases.json")["test_cases"]), len(index["test_cases"]))
+        load = next(d for d in index["guidance_dispositions"] if d["item"] == self.LOAD)
+        self.assertEqual(("ALREADY_COVERED", 1), (load["disposition"], len(load["test_refs"])))
+        self.assertTrue(load["test_refs"][0].startswith("TC-"))
+
+    def test_runs_without_instructions_need_no_dispositions(self) -> None:
+        run = PackRun("saas-accounts")
+        self.addCleanup(run.close)
+        run.finalize(("JSON",))
+        self.assertNotIn("guidance_dispositions", run.output("test-cases.json"))
+
+
 if __name__ == "__main__":
     unittest.main()

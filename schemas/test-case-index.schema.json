@@ -114,6 +114,22 @@
         "$ref": "#/$defs/expansionDimension"
       }
     },
+    "guidance_dispositions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["item", "text", "disposition", "test_refs"],
+        "properties": {
+          "item": {"type": "string"},
+          "text": {"type": "string"},
+          "disposition": {"enum": ["MATERIALIZED", "ALREADY_COVERED", "USED_FOR_ORDERING", "QUESTION_REQUIRED", "NOT_APPLICABLE_WITH_REASON"]},
+          "test_refs": {"type": "array", "items": {"type": "string"}},
+          "question_ref": {"type": ["string", "null"]},
+          "reason": {"type": ["string", "null"]}
+        }
+      }
+    },
     "gap_metrics": {
       "type": "object",
       "additionalProperties": {

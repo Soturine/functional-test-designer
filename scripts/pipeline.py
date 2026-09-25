@@ -41,6 +41,7 @@ from common import (  # noqa: E402
 )
 import design as design_stage  # noqa: E402
 import expansion as expansion_stage  # noqa: E402
+import instructions as instructions_stage  # noqa: E402
 import procedures as procedure_stage  # noqa: E402
 import reading as reading_stage  # noqa: E402
 import sources  # noqa: E402
@@ -470,9 +471,13 @@ def submit_stage(run_dir: Path, stage: str, payload: dict[str, Any]) -> dict[str
             asset_texts = {
                 source: (run_dir / "evidence" / catalog[source]["text_ref"]).read_text(encoding="utf-8")
                 for source in asset_sources if catalog.get(source, {}).get("text_ref")}
+            normalized_path = run_dir / "normalized-request.json"
+            guidance = (instructions_stage.guidance_items(read_json(normalized_path))
+                        if normalized_path.is_file() else [])
             result = expansion_stage.validate_expansion(payload, {
                 **base, "design": design, "taken_keys": _taken_keys(design),
                 "test_assets": source_state["test_assets"], "asset_texts": asset_texts,
+                "guidance_items": guidance,
             })
             offset = len(design["tests"])
             for number, test in enumerate(result["tests"], offset + 1):
@@ -786,6 +791,13 @@ def build_canonical(run_dir: Path, baseline_comparison: dict[str, Any] | None = 
         "identifier_dispositions": ledger, "expansion_summary": summary, "gap_metrics": gaps,
         "baseline_comparison": baseline_comparison or {"status": "NOT_APPLIED"},
     }
+    key_to_id = {test["key"]: test["id"] for test in tests}
+    if expanded.get("guidance_dispositions"):
+        index["guidance_dispositions"] = [{
+            "item": entry["item"], "text": entry["text"], "disposition": entry["disposition"],
+            "test_refs": [key_to_id[key] for key in entry["test_keys"] if key in key_to_id],
+            "question_ref": question_id.get(entry["question"]) if entry["question"] else None,
+            "reason": entry["reason"]} for entry in expanded["guidance_dispositions"]]
     diagnostics = {
         "domain_model": design["domain_model"], "expansion_candidates": expanded["candidates"],
         "checklists": expanded["checklists"], "journeys": expanded["journeys"],
@@ -1394,6 +1406,7 @@ STAGE_GUIDE = {
     "expansion": [
         "The normative baseline is frozen: add, never edit. Evaluate every dimension in `dimensions` across all families and record what you considered.",
         "Walk operator_error_patterns and failure_surfaces as reasoning prompts: decide how, or whether, each applies to THIS project using its domain_model. Mark irrelevant ones NOT_APPLICABLE with the project-specific reason; never materialize a scenario just because the checklist names it.",
+        "When `user_guidance` lists items (anchors `instructions.md#guidance-NNN` / `#seed-NNN`), give each exactly one `guidance_dispositions` entry: MATERIALIZED or ALREADY_COVERED with the `tests` that exercise it, USED_FOR_ORDERING or NOT_APPLICABLE_WITH_REASON with a `reason`, or QUESTION_REQUIRED with the `question`. Guidance is not authority and never forces a Test Case; it must not disappear unanswered.",
         "Materialized candidates carry a test with basis DERIVED (oracle_source in authority), CHARACTERIZATION (oracle_source in implementation/test assets) or EXPLORATORY (undefined policy: safe invariants plus a Question). Anchor each to the normative claims it derives from.",
         "ALREADY_COVERED needs covered_by plus the candidate intent (actor, state, trigger, failure_domain, expected); coverage is checked semantically against the target test.",
         "Challenge every discovered test asset: normalize its intent, compare, and disposition it. Existing tests never become authority.",
@@ -1438,6 +1451,7 @@ def _work_order(run_dir: Path) -> Path:
         normalized = read_json(run_dir / "normalized-request.json")
         order["user_guidance"] = {
             "guidance": normalized.get("guidance", []), "seeds": normalized.get("seeds", []),
+            "items": instructions_stage.guidance_items(normalized),
             "note": "From the instructions file: seeds and guidance provoke reasoning and never limit it. "
                     "They are not authority — a seed the selected authority/evidence does not support "
                     "is never promoted to a normative Test Case, Finding or oracle.",

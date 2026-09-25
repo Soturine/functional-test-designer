@@ -316,6 +316,14 @@ def resolve_sources(request: dict[str, Any], input_path: Path | None) -> tuple[P
     return workspace, selected, order
 
 
+def guidance_items(request: dict[str, Any], input_name: str = INPUT_BASENAME) -> list[dict[str, Any]]:
+    """Every meaningful guidance and seed item, stably anchored, that the canonical generation
+    must account for with an explicit disposition (never necessarily a Test Case)."""
+    guidance = [{"anchor": f"{input_name}#guidance-{n:03d}", "text": str(text).strip(), "section": None}
+                for n, text in enumerate(request.get("guidance") or [], 1) if str(text).strip()]
+    return guidance + seed_items(request, input_name)
+
+
 def seed_items(request: dict[str, Any], input_name: str = INPUT_BASENAME) -> list[dict[str, Any]]:
     """Item-level, stably anchored seeds in the order the host listed them."""
     return [{"anchor": f"{input_name}#seed-{n:03d}", "text": str(seed["text"]).strip(),

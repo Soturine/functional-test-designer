@@ -67,10 +67,13 @@ Complete worked payloads for six domains live in `benchmarks/domains/*.json` (`s
                    "intent": {"actor": "", "state": "", "trigger": "", "failure_domain": "", "expected": ""},
                    "grounding": ["optional excerpts quoted verbatim from the test file"],
                    "covered_by": ["T1"], "test": {}, "dimension": "for promotions", "question": "", "duplicate_of": "", "reason": ""}],
+  "guidance_dispositions": [{"item": "instructions.md#guidance-001", "disposition": "MATERIALIZED | ALREADY_COVERED | USED_FOR_ORDERING | QUESTION_REQUIRED | NOT_APPLICABLE_WITH_REASON",
+                             "tests": ["T1"], "question": "", "reason": ""}],
   "questions": [], "findings": []
 }
 ```
 
+- Instructions guidance is accounted for, never obeyed as authority: when the run has an instructions file, every guidance and seed item (listed with its anchor in `user_guidance.items`) gets exactly one disposition. `MATERIALIZED`/`ALREADY_COVERED` name the tests that exercise it, `QUESTION_REQUIRED` names a known Question, `USED_FOR_ORDERING`/`NOT_APPLICABLE_WITH_REASON` give a reason. The runtime checks the accounting only; a summary saying an idea "was explored" is not an answer. Dispositions are published in the index (`guidance_dispositions`, with TC ids).
 - All 17 dimensions appear once. `OPERATOR_ERROR` carries `patterns_reviewed` covering every operator pattern; `CHAOS` carries `surfaces_reviewed` covering every failure surface. `CANDIDATES` items must have at least one candidate (in any dimension) carrying that `pattern`/`surface`.
 - `DERIVED` needs `oracle_source` in Functional Authority; `CHARACTERIZATION` in implementation evidence or a test asset; `EXPLORATORY` links a Question. Every non-E2E test anchors to design claims with destination `TEST`.
 - `ALREADY_COVERED` needs the candidate intent; alignment against the target test is checked (actor/state/trigger containment ≥ 0.34, failure domain Jaccard ≥ 0.4, expected Jaccard ≥ 0.34) and the scores are kept for audit.
