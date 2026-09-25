@@ -72,15 +72,10 @@ class InstructionsTemplateTests(unittest.TestCase):
             self.assertIn(phrase, text)
 
 
-
 class PostGenerationDocsTests(unittest.TestCase):
     def test_follow_up_actions_are_documented_as_free_form_and_local(self) -> None:
         readme, skill, template = read("README.md"), read("SKILL.md"), read("docs/instructions.md")
-        self.assertIn("## Depois da run
-- fazer chaos
-- converter azure", readme.replace("
-", "
-"))
+        self.assertIn("## Depois da run\n- fazer chaos\n- converter azure", readme.replace("\r\n", "\n"))
         self.assertIn("`/ftd-azure-publish` nunca roda sozinho", readme)
         self.assertIn("Any Azure wording means the local export", skill)
         self.assertIn("publishing to Azure DevOps is never automatic", template)
