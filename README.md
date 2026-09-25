@@ -8,7 +8,7 @@ Agent Skill que projeta **Test Cases funcionais rastreáveis e executáveis** a 
 
 O modelo faz o raciocínio de QA; o runtime protege escopo, rastreabilidade, validação e publicação. Nada é inventado: o que as fontes não dizem vira Question ou pendência.
 
-> Versão publicada: 2.3.0. O branch `develop` prepara a 2.4 (ainda não lançada).
+> Versão publicada: 2.4.0.
 
 ## Início rápido
 

@@ -1,8 +1,8 @@
 # Changelog
 
-## Unreleased (targeting 2.4.0)
+## 2.4.0 - 2026-09-25
 
-Optional post-suite challenge, additive to the frozen v2.3.0 pipeline. Not yet released or tagged; `VERSION` stays at 2.3.0.
+Optional post-suite challenge, additive to the frozen v2.3.0 pipeline.
 
 - Added `ftd-challenge` and `scripts/challenge.py`: a start → submit → finalize workflow that runs only after `finalize` (`run-state.json` status `VALIDATED`) and never modifies the parent canonical suite, `run-manifest.json` or `TC-*` identities. The parent's canonical digest is captured at `start` and re-checked at `submit`, `finalize` and `verify`.
 - New cases use a separate `CH-*` namespace under `<run>/challenges/<challenge-id>/`. Any number of independent challenge runs can target the same frozen parent.
@@ -12,7 +12,7 @@ Optional post-suite challenge, additive to the frozen v2.3.0 pipeline. Not yet r
 - A challenge case may carry an advisory `canonical_gap_candidate`; it never patches the parent suite. Reviewing it and, if accepted, running a new canonical generation is the only way to change canonical output.
 - No new gates: canonical immutability, reference integrity and explicit-only remote publication are checked directly, the same way the existing integrity contracts are.
 
-Corrective/additive round on top of the above, still targeting 2.4.0:
+Corrective/additive round on top of the above:
 
 - Challenge work orders now reuse the parent run's saved `domain_model`, requirement titles and authority excerpts instead of a shallow summary. Every eligible selected source is snapshotted once at `start_run` (`<run>/evidence/source-catalog.json` + `evidence/text/*.txt`), bound to its digest; `scripts/challenge.py lookup` resolves a real, bounded, scope-checked excerpt from that snapshot, and only a recorded lookup — never the mere presence of an `evidence_ref` — counts toward `runtime_targeted_lookups`. `runtime_full_source_rereads` is always 0 by construction; `model_source_rereads` is reported as `NOT_OBSERVABLE`.
 - `evidence_refs` on a challenge case now get real scope/provenance validation (known selected source, non-empty locator, a line range that fits the source).
@@ -24,7 +24,7 @@ Corrective/additive round on top of the above, still targeting 2.4.0:
 - Added default multi-agent source reading/cataloging for the first canonical generation of a new or invalidated corpus: `sources.plan_reading_tasks` plans one lightweight reading/cataloging task per eligible selected source (`<run>/reading-task-plan.json`), with bounded concurrency, honoring an explicit `--reading-strategy`/`--reading-model`/`--reading-concurrency` override (including a `SEQUENTIAL` opt-out). The runtime only plans the work and records honest per-source dispositions; a host agent (preferring Haiku workers on Claude) executes it and always remains the sole owner of semantic synthesis. An unchanged source (by digest) already catalogued under the same artifact root is marked reusable.
 - Added `ftd-azure` and `scripts/azure_export.py`: a canonical-plus-Challenge, requirement-by-requirement Azure DevOps packaging workflow, consuming only a run's own validated JSON state. `azure_export.py` owns FTD-side aggregation only (run/Challenge selection, scoped export keys, requirement↔case relationships); every Azure-specific concern (payload mapping, Suite placement, create/update/unchanged/conflict diffing, external ids, content hashes, integration state, transport/publish) stays owned by `integrations/azure_devops.py`, extended with a generic `build_group_suite_mapping`. A Challenge case keeps its local `CH-*` identity forever; only its scoped export key (`challenge:<challenge_id>:CH-nnn`) identifies it to Azure, preventing collisions across Challenge runs. `ftd-mcp` is unchanged and stays backward compatible.
 
-Final rework round, still targeting 2.4.0 (unified commands):
+Final rework round (unified commands):
 
 - **Public commands** are now `/ftd-gen`, `/ftd-chaos`, `/ftd-azure`, `/ftd-clarify`, `/ftd-check` and `/ftd-render`.
   - `ftd-challenge` was renamed to `ftd-chaos`, and `ftd-mcp` was replaced by `ftd-azure`. Both old names only raise a migration message.
@@ -61,7 +61,7 @@ Final rework round, still targeting 2.4.0 (unified commands):
   - It selects chaos runs with `--chaos-id` or `--canonical-only`.
   - No Azure call is ever made. `azure_devops.py` remains the single Azure owner.
 
-Source-selector reader round, still targeting 2.4.0:
+Source-selector reader round:
 
 - **Reader unit.** The reader unit is now the source selector the user declared. A selected directory is one reader responsibility, not one reader per physical file, and the runtime still keeps a per-file ledger (digest, role, state) for every file beneath it.
   - Overlapping selectors never double-own a file: the most specific selector wins.
@@ -73,7 +73,7 @@ Source-selector reader round, still targeting 2.4.0:
 - **Semantic barrier.** Documented: an authority-only skeleton may be prepared while readers run, while Design is decided and submitted only after reconciliation. Readers use ordinary file tools and never generate helper scripts to automate cataloging.
 - **Bug fixes.** A zero-byte selected file gets the `EMPTY` state instead of an unreachable reader task, and submitted JSON written with a UTF-8 BOM is accepted.
 
-Corrective round after the benchmark audit, still targeting 2.4.0:
+Corrective round after the benchmark audit:
 
 - **Report family review.** "View Test Cases" on a family card opens on every unique Test Case the card counts ("All (N)"), not on its first identifier. Identifier pages remain as refinements through previous/next and a page selector, and a Test Case linked to several identifiers appears once in the family view.
 - **Existing tests inside implementation trees.** Conventional test files (by ecosystem naming, in several languages) inside an `IMPLEMENTATION_EVIDENCE` selection are discovered as test assets and challenge the suite. The file keeps its role (`source_role`), never becomes authority, and an unparseable implementation-side test file is a warning.
@@ -87,7 +87,7 @@ Corrective round after the benchmark audit, still targeting 2.4.0:
 - **Reuse.** Facts a selector reader reported only at selector level are folded into the reusable file catalog of the file they cite. Expansion tests cite each evidence reference once.
 - **CI.** The test suite and domain packs run on Linux and Windows; CI installs the optional PDF reader, and PDF-dependent tests skip with a stated reason without it.
 
-Execution views round, still targeting 2.4.0:
+Execution views round:
 
 - **Organization.** Publication adds `organization.json` and `execution-plan.md`: functional groups ordered by the use-case main flow (alternative flows after the step they branch from, canonical order as fallback), transversal rules, and execution views (E2E, load/concurrency, physical/devices, chaos/resilience, manual/field) derived from each case's semantic category. One case can belong to several groups; nothing is cloned, and chaos cases join their related case's group with their own `CH-*` identity.
 - **Report.** View tabs (by requirement — the default, in placement order — families, each execution view, all); chaos cases open in the same modal; a card counts the unique cases of its group; the modal position reads "View 1 of N". The case body now also shows postconditions, cleanup, the state contract, the request contract and execution variants.
@@ -95,7 +95,7 @@ Execution views round, still targeting 2.4.0:
 - **Execution contracts.** Procedures may carry `execution_variants` and `request_contract`. A step performed as a fixture actor needs that actor's starting context; a load/concurrency experiment on a request its steps name must describe that request (no tool syntax, no undeclared threshold). Published cases state `state_contract` (`SELF_CLEANING` or `REQUIRES_FIXTURE_RESET`).
 - **Frozen runs.** Finalizing a run never edits another run. A revision is a new run started with `--supersedes <run-id>`, recorded on the new run only; it inherits the earlier run's finalized chaos runs by reference.
 
-Final hardening round, still targeting 2.4.0 (no new gate, stage or model pass):
+Final hardening round (no new gate, stage or model pass):
 
 - **Test-asset intents** (`ALREADY_COVERED_BY`, `PROMOTE_*`) must restate what the existing test itself names or asserts (its name, docstring or `grounding` excerpts quoted verbatim from its file), so an intent copied from the target Test Case cannot prove coverage.
 - **Membership vs. order.** A use-case flow orders a requirement's members but never adds members; a case tracing only to a use case or flow joins that use case's own group (`USE_CASE`).
@@ -107,6 +107,15 @@ Final hardening round, still targeting 2.4.0 (no new gate, stage or model pass):
 - **`/ftd-azure-publish`.** A new, explicit two-phase publisher: `--prepare` (read-only, target-locked `publication-plan.json`) and `--apply` (revalidated target and versions, typed approval). Non-destructive: no deletes, no removals, no plan creation, no overwrite of unmanaged or remotely changed items; runtime-only credentials. `/ftd-azure` stays local.
 - **Post-generation orchestration.** The instructions file may ask, in any wording, for follow-up actions (`post_generation`: `CHAOS`, `AZURE_LOCAL_EXPORT`); `--after chaos,azure|none` overrides it. finalize → optional chaos → refreshed publication → optional local Azure export → stop. Remote publication is never automatic.
 - **Docs.** README and `docs/instructions.md` rewritten as a quick start with a command table that says which commands can write remotely.
+
+Current-run resolution round:
+
+- **Automatic current validated run.** After a canonical run reaches `VALIDATED`, the runtime atomically records it as the current run (`<artifact-root>/.ftd/current-run.json`: run id, run directory, canonical digest, validated timestamp). `/ftd-chaos`, `/ftd-azure`, `/ftd-check`, `/ftd-render` and `/ftd-azure-publish --prepare` resolve their run from this pointer when `--run` is omitted, so a normal follow-up command no longer needs a copied run id; an explicit `--run` always wins. Failed, incomplete and chaos/post-suite runs never become current, and the pointer is revalidated every time it is used (the run exists, is `VALIDATED`, its manifest is intact and its canonical suite matches the recorded digest) rather than trusted blindly or selected by folder time or name.
+
+Azure publisher authentication round:
+
+- **Reliable Azure CLI discovery.** `/ftd-azure-publish --auth azure-cli` now resolves the installed Azure CLI executable safely on every platform, including the `az.cmd` shim Windows installs, instead of assuming a bare `az` command is directly runnable. A missing CLI and an unauthenticated CLI now report distinct, actionable errors instead of a raw subprocess failure.
+- **One interactive sign-in per session.** `--auth interactive` reuses one interactive credential for the whole publisher run instead of reopening a browser sign-in for every remote read; a cancelled or failed sign-in reports a clear error. Credentials and tokens remain runtime-only and are never written to the plan, mapping, logs or reports.
 
 ## 2.3.0
 
