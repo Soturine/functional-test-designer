@@ -167,7 +167,7 @@ python -m unittest discover -s tests
 
 A FTD não executa testes, não cria Shared Steps, não faz indexação global do repositório e, na publicação, não apaga nem move nada no Azure DevOps.
 
-Veja também `CHANGELOG.md`.
+Veja também [`CHANGELOG.md`](CHANGELOG.md), os [guias de migração](docs/migrations/README.md) e o [histórico](docs/history/v2.3-simplification-report.md).
 
 ## License and Attribution
 

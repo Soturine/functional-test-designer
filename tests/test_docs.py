@@ -81,5 +81,42 @@ class PostGenerationDocsTests(unittest.TestCase):
         self.assertIn("publishing to Azure DevOps is never automatic", template)
 
 
+
+class RepositoryLayoutTests(unittest.TestCase):
+    ROOT_FILES = {"README.md", "SKILL.md", "CHANGELOG.md", "LICENSE", "ATTRIBUTION.md", "VERSION", "requirements.txt",
+                  ".gitignore"}
+
+    def test_the_root_holds_only_current_entry_point_files(self) -> None:
+        files = {p.name for p in ROOT.iterdir() if p.is_file()}
+        self.assertEqual(set(), files - self.ROOT_FILES)
+        self.assertFalse(list(ROOT.glob("MIGRATION-*.md")))
+        self.assertFalse((ROOT / "SIMPLIFICATION_REPORT.md").exists())
+
+    def test_historical_documents_are_kept_and_indexed(self) -> None:
+        index = read("docs/migrations/README.md")
+        for version in ("v2.2", "v2.2.1", "v2.2.2", "v2.3.0"):
+            self.assertTrue((ROOT / "docs" / "migrations" / f"{version}.md").is_file())
+            self.assertIn(f"({version}.md)", index)
+        self.assertTrue((ROOT / "docs" / "history" / "v2.3-simplification-report.md").is_file())
+
+    def test_no_document_or_script_points_at_the_old_root_paths(self) -> None:
+        stale = re.compile(r"MIGRATION-v2|SIMPLIFICATION_REPORT")
+        for path in [*ROOT.glob("*.md"), *(ROOT / "docs").rglob("*.md"), *(ROOT / "references").glob("*.md"),
+                     *(ROOT / "entrypoints").glob("*.md"), *(ROOT / "scripts").rglob("*.py")]:
+            with self.subTest(path=path.relative_to(ROOT).as_posix()):
+                self.assertIsNone(stale.search(path.read_text(encoding="utf-8")))
+
+    def test_every_relative_markdown_link_resolves(self) -> None:
+        link = re.compile(r"\]\(([^)\s]+)\)")
+        folders = (ROOT, ROOT / "docs", ROOT / "references", ROOT / "entrypoints")
+        documents = {p for folder in folders for p in (folder.rglob("*.md") if folder != ROOT else folder.glob("*.md"))}
+        for document in sorted(documents):
+            for target in link.findall(document.read_text(encoding="utf-8")):
+                if re.match(r"[a-z]+:", target) or target.startswith("#"):
+                    continue
+                with self.subTest(document=document.relative_to(ROOT).as_posix(), link=target):
+                    self.assertTrue((document.parent / target.split("#", 1)[0]).exists())
+
+
 if __name__ == "__main__":
     unittest.main()

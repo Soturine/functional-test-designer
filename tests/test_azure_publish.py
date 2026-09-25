@@ -340,5 +340,36 @@ class SafetyContractTests(PublisherTestCase):
         self.assertEqual([], self.azure.writes())
 
 
+
+class PrepareCommandLineTests(unittest.TestCase):
+    """Missing target values are reported at once, before any credential or connection."""
+
+    def prepare(self, *args: str) -> str:
+        import contextlib
+        import io
+        out = io.StringIO()
+        with mock.patch.object(pub, "remote_for", side_effect=AssertionError("no remote before validation")), \
+                contextlib.redirect_stdout(out):
+            code = pub.main(["--prepare", *args])
+        self.assertEqual(1, code)
+        return out.getvalue()
+
+    def test_a_missing_project_is_rejected_immediately(self) -> None:
+        text = self.prepare("--run", "runs/r", "--organization", ORG, "--plan", "Release")
+        self.assertIn("TARGET_REQUIRED", text)
+        self.assertIn("--project", text)
+        self.assertNotIn("--plan,", text)
+
+    def test_a_missing_plan_is_rejected_immediately(self) -> None:
+        text = self.prepare("--run", "runs/r", "--organization", ORG, "--project", "Shop")
+        self.assertIn("TARGET_REQUIRED", text)
+        self.assertIn("--plan", text)
+
+    def test_every_missing_value_is_named(self) -> None:
+        text = self.prepare()
+        for flag in ("--run", "--organization", "--project", "--plan"):
+            self.assertIn(flag, text)
+
+
 if __name__ == "__main__":
     unittest.main()

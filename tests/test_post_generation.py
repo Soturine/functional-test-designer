@@ -37,6 +37,12 @@ class RequestContractTests(unittest.TestCase):
         self.assertTrue(any("remote publication is never automatic" in e for e in errors))
         self.assertTrue(instructions.validate_request({"post_generation": ["DEPLOY"]}, None))
 
+    def test_refreshing_the_publication_is_derived_never_requested(self) -> None:
+        errors = instructions.validate_request({"post_generation": ["CHAOS", "REFRESH_PUBLICATION"]}, None)
+        self.assertTrue(any("derived automatically after a chaos pass" in e for e in errors))
+        self.assertEqual(["CHAOS", "REFRESH_PUBLICATION"], instructions.normalize_post_generation(["CHAOS"]))
+        self.assertEqual(["AZURE_LOCAL_EXPORT"], instructions.normalize_post_generation(["AZURE_LOCAL_EXPORT"]))
+
     def test_the_host_is_told_to_read_any_wording_and_keep_azure_local(self) -> None:
         document = {"path": "x/instructions.md", "digest": "d", "text": "## Depois da run\n- fazer chaos\n- converter azure\n"}
         contract = instructions.normalization_order(document, {}, command="gen")["contract"]["post_generation"]

@@ -176,6 +176,9 @@ def raise_if(stage: str, errors: list[str]) -> None:
 # Optional follow-up actions after a canonical run, in execution order. Publication to a remote
 # system is never one of them: /ftd-azure-publish runs only on an explicit user request.
 POST_GENERATION_ACTIONS = ("CHAOS", "REFRESH_PUBLICATION", "AZURE_LOCAL_EXPORT")
+# What a user (or the host, reading the instructions) may ask for. Refreshing the publication
+# is derived internally whenever a chaos pass is requested; it is never requested directly.
+USER_POST_GENERATION_ACTIONS = ("CHAOS", "AZURE_LOCAL_EXPORT")
 
 
 def normalize_post_generation(actions: Any) -> list[str]:

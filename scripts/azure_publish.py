@@ -115,8 +115,11 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         if args.prepare:
-            if not (args.run and args.organization):
-                raise PublicationError("TARGET_REQUIRED", "--prepare needs --run, --organization, --project and --plan")
+            missing = [flag for flag, value in (("--run", args.run), ("--organization", args.organization),
+                                                ("--project", args.project), ("--plan", args.plan)) if not value]
+            if missing:
+                raise PublicationError("TARGET_REQUIRED", f"--prepare needs {', '.join(missing)}; the destination is "
+                                                          "never guessed")
             result = prepare(args.run, {"organization": args.organization, "project": args.project, "plan": args.plan,
                                         "root_suite": args.root_suite}, remote_for(args.organization, args.auth))
             print(result["preview"])

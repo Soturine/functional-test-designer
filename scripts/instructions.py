@@ -24,7 +24,7 @@ from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any
 
-from common import POST_GENERATION_ACTIONS, normalize_post_generation
+from common import USER_POST_GENERATION_ACTIONS, normalize_post_generation
 
 INPUT_NAMES = ("instructions.md", "instructions.txt", "instructions.html")  # preference order
 INPUT_BASENAME = INPUT_NAMES[0]
@@ -242,9 +242,10 @@ def validate_request(request: dict[str, Any], input_doc: dict[str, Any] | None) 
             if remote:
                 errors.append(f"post_generation cannot contain {remote}: remote publication is never automatic; "
                               "/ftd-azure-publish runs only when the user explicitly asks for it")
-            unknown = sorted(set(values) - set(POST_GENERATION_ACTIONS) - set(remote))
+            unknown = sorted(set(values) - set(USER_POST_GENERATION_ACTIONS) - set(remote))
             if unknown:
-                errors.append(f"post_generation accepts only {list(POST_GENERATION_ACTIONS)} (got {unknown})")
+                errors.append(f"post_generation accepts only {list(USER_POST_GENERATION_ACTIONS)} (got {unknown}); "
+                              "refreshing the publication is derived automatically after a chaos pass")
     output = request.get("output") or {}
     if not isinstance(output, dict) or set(output) - OUTPUT_KEYS:
         errors.append(f"output accepts only {sorted(OUTPUT_KEYS)}")

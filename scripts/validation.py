@@ -26,7 +26,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SCHEMA_DIR = ROOT / "schemas"
 
 # Each retained gate protects an invariant whose failure makes the suite invalid.
-# Everything else is a metric or a warning (see SIMPLIFICATION_REPORT.md).
+# Everything else is a metric or a warning (see docs/history/v2.3-simplification-report.md).
 GATES = (
     ("SCOPE_VALID",
      "Only selected sources were read and every physical source has one record with status and reason."),
