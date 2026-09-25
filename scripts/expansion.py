@@ -10,6 +10,7 @@ Nothing here edits the frozen normative baseline; expansion is additive.
 from __future__ import annotations
 
 import json
+import re
 from typing import Any
 
 from common import StageError, jaccard, normalize, normalize_identifier, similarity
@@ -94,6 +95,33 @@ def intent_alignment(intent: dict[str, Any], target: dict[str, Any]) -> dict[str
     }
     misaligned = [field for field, minimum in ALIGNMENT_THRESHOLDS.items() if scores[field] < minimum]
     return {"scores": scores, "aligned": not misaligned, "misaligned_fields": misaligned}
+
+
+# Words that name the testing act itself, not the behavior a test exercises.
+_TEST_WORDS = {"test", "tests", "should", "when", "then", "given", "case", "spec", "check", "verify",
+               "assert", "ensure", "works", "does", "can", "cannot", "not", "the", "and", "with", "for"}
+
+
+def _stems(text: str) -> set[str]:
+    words = re.findall(r"[a-zà-ÿ]+", re.sub(r"([a-z])([A-Z])", r"\1 \2", str(text or "")).replace("_", " ").lower())
+    stems = set()
+    for word in words:
+        if len(word) < 3 or word in _TEST_WORDS:
+            continue
+        if len(word) > 4 and word.endswith("s"):
+            word = word[:-1]
+        stems.add(word[:5])
+    return stems
+
+
+def asset_grounding(intent: dict[str, Any], asset: dict[str, Any], excerpts: list[str]) -> float:
+    """How much of an existing test's own meaning (its name, docstring or quoted excerpts of
+    its file) the submitted intent restates. The intent must come from the test asset, not
+    from the canonical Test Case it is later compared to."""
+    said = _stems(" ".join(str(intent.get(field, "")) for field in ("trigger", "failure_domain", "expected")))
+    sources = [asset.get("reference", "").split("::")[-1], asset.get("docstring", ""), *excerpts]
+    scores = [len(_stems(text) & said) / len(_stems(text)) for text in sources if len(_stems(text)) >= 2]
+    return max(scores) if scores else -1.0
 
 
 def _copied(intent: dict[str, Any], target: dict[str, Any]) -> bool:
@@ -328,6 +356,26 @@ def validate_expansion(payload: dict[str, Any], context: dict[str, Any]) -> dict
             else:
                 for field in ("trigger", "failure_domain", "expected"):
                     check_locale(f"{label}.intent.{field}", record["intent"][field], locale, errors)
+                # The intent must be read from the existing test itself. Quoted excerpts
+                # (assertions, arrange steps) count only when they occur in that test's file.
+                asset_text = context.get("asset_texts", {}).get(assets[asset]["source"])
+                excerpts = [_text(value) for value in item.get("grounding", []) or [] if _text(value)]
+                if asset_text is not None:
+                    missing = [value for value in excerpts if value not in asset_text]
+                    if missing:
+                        errors.append(f"{label} grounding excerpts do not occur in {assets[asset]['source']}: {missing[:3]}")
+                        excerpts = [value for value in excerpts if value in asset_text]
+                record["grounding"] = excerpts
+                score = asset_grounding(record["intent"], assets[asset], excerpts)
+                if score < 0:
+                    errors.append(
+                        f"{label} has no self-describing name or docstring; quote the test's own assertions or "
+                        "arrange steps in `grounding` so its intent is read from the test, not from the suite")
+                elif score < 0.5:
+                    errors.append(
+                        f"{label} intent is not grounded in the existing test: it restates too little of what "
+                        f"{asset.split('::')[-1]} itself names or asserts. Describe what that test exercises (quote "
+                        "its assertions in `grounding` if its name is terse), never the Test Case it is compared to")
         if disposition == "ALREADY_COVERED_BY":
             covered = [str(value) for value in item.get("covered_by", []) or []]
             record["covered_by"] = covered

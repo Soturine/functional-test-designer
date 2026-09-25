@@ -465,9 +465,14 @@ def submit_stage(run_dir: Path, stage: str, payload: dict[str, Any]) -> dict[str
                 test["id"] = f"TC-{number:03d}"
         elif stage == "expansion":
             design = _result(run_dir, "design")
+            asset_sources = {asset["source"] for asset in source_state["test_assets"]}
+            catalog = {e["path"]: e for e in read_json(run_dir / "evidence" / "source-catalog.json")["sources"]}
+            asset_texts = {
+                source: (run_dir / "evidence" / catalog[source]["text_ref"]).read_text(encoding="utf-8")
+                for source in asset_sources if catalog.get(source, {}).get("text_ref")}
             result = expansion_stage.validate_expansion(payload, {
                 **base, "design": design, "taken_keys": _taken_keys(design),
-                "test_assets": source_state["test_assets"],
+                "test_assets": source_state["test_assets"], "asset_texts": asset_texts,
             })
             offset = len(design["tests"])
             for number, test in enumerate(result["tests"], offset + 1):

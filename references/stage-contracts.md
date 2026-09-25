@@ -65,6 +65,7 @@ Complete worked payloads for six domains live in `benchmarks/domains/*.json` (`s
   }],
   "test_assets": [{"asset": "path::test_name", "disposition": "ALREADY_COVERED_BY | PROMOTE_DERIVED | PROMOTE_CHARACTERIZATION | QUESTION_REQUIRED | TECHNICAL_ONLY | DUPLICATE | OUT_OF_SCOPE_WITH_REASON",
                    "intent": {"actor": "", "state": "", "trigger": "", "failure_domain": "", "expected": ""},
+                   "grounding": ["optional excerpts quoted verbatim from the test file"],
                    "covered_by": ["T1"], "test": {}, "dimension": "for promotions", "question": "", "duplicate_of": "", "reason": ""}],
   "questions": [], "findings": []
 }
@@ -76,6 +77,7 @@ Complete worked payloads for six domains live in `benchmarks/domains/*.json` (`s
 - Coverage is semantic, not lexical: an intent identical to the target's (4 of 5 fields) is rejected as copied; the description must relate to the target (containment ≥ 0.25); candidates in adversarial dimensions (`NEGATIVE`, `BOUNDARY`, `OPERATOR_ERROR`, `MISUSE`, `CONCURRENCY`, `RACE_CONDITION`, `IDEMPOTENCY`, `INTEGRATION`, `RECOVERY`, `CHAOS`, `SECURITY`, `AUTHORIZATION`) or carrying a pattern/surface cannot be covered only by happy-path Acceptance tests (primary type `FUNCTIONAL`, `FIELD` or `PERFORMANCE`). Test assets that converge on the same target must share its failure domain or expected result (Jaccard ≥ 0.4).
 - Failure surfaces are not collapsed: several surfaces resolved by one Question need `shared_policy` (≥ 5 words) naming the single decision they share.
 - E2E: `dimension: "E2E"` candidates. A `MATERIALIZED` journey's test has `stages: [{"name", "test", "trigger", "observation"}]` over at least two distinct atomic tests; each stage's observation must match the composed test's expected result. Every `USE_CASE` identifier needs an E2E candidate with `use_case`; `ALREADY_COVERED` journeys list at least two atomic tests and a reason.
+- A test asset's intent (`ALREADY_COVERED_BY`, `PROMOTE_DERIVED`, `PROMOTE_CHARACTERIZATION`) is read from that existing test, never from the Test Case it is compared to: its trigger, failure domain and expected result must restate at least half of what the test's own name, docstring or quoted `grounding` excerpts say. Excerpts must occur verbatim in the test file; a test with a terse name and no docstring needs them.
 - Every discovered test asset (listed in the work order) needs exactly one disposition. Test assets come from explicit `TEST_ASSET` selections and from conventional test files found inside `IMPLEMENTATION_EVIDENCE` selections (by ecosystem naming: `test_*.py`, `*_test.go`, `*.spec.ts`, `*Test.java`, `*_spec.rb`, `*.feature`, files below `tests/`, `__tests__/`, `spec/`...). The file keeps its role — `source_role` records it — and existing tests are never authority.
 
 ## reading (before design)

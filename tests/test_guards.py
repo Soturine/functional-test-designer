@@ -253,5 +253,67 @@ class TraceabilityTests(unittest.TestCase):
             run.submit("design")
 
 
+
+class TestAssetGroundingTests(unittest.TestCase):
+    """An existing test's intent is read from that test, never manufactured from the canonical
+    Test Case it is later compared to."""
+
+    ASSET = "tests/test_invitations.py::test_invite_rejected_when_seats_full"
+
+    def reach(self, mutate):
+        run = PackRun("saas-accounts", mutate)
+        self.addCleanup(run.close)
+        run.through("design")
+        return run
+
+    @staticmethod
+    def asset(pack, key):
+        return next(a for a in expansion(pack)["test_assets"] if a["asset"] == key)
+
+    def test_a_failure_test_cannot_borrow_a_happy_path_intent(self) -> None:
+        def borrowed(pack):
+            item = self.asset(pack, self.ASSET)
+            item["covered_by"] = ["T1"]
+            item["intent"] = {"actor": "owner fixture", "state": "account fixture with free seats",
+                              "trigger": "the owner sends an invitation to a new address",
+                              "failure_domain": "invitation creation", "expected": "a pending invitation is listed"}
+        run = self.reach(borrowed)
+        with self.assertRaisesRegex(StageError, "intent is not grounded in the existing test"):
+            run.submit("expansion")
+
+    @staticmethod
+    def terse(pack):
+        source = pack["sources"]["tests/test_invitations.py"]
+        source["text"] = source["text"].replace("test_invite_rejected_when_seats_full", "test_case_2")
+        TestAssetGroundingTests.asset(pack, TestAssetGroundingTests.ASSET)["asset"] = "tests/test_invitations.py::test_case_2"
+
+    def test_a_terse_test_name_needs_quoted_grounding(self) -> None:
+        run = self.reach(self.terse)
+        with self.assertRaisesRegex(StageError, "has no self-describing name or docstring"):
+            run.submit("expansion")
+
+    def test_grounding_must_be_quoted_from_the_test_file(self) -> None:
+        def invented(pack):
+            self.terse(pack)
+            self.asset(pack, "tests/test_invitations.py::test_case_2")["grounding"] = [
+                "assert invite(full_account, owner).rejected_for_full_seats"]
+        run = self.reach(invented)
+        with self.assertRaisesRegex(StageError, "grounding excerpts do not occur in tests/test_invitations.py"):
+            run.submit("expansion")
+
+    def test_quoted_assertions_ground_a_terse_test(self) -> None:
+        def quoted(pack):
+            self.terse(pack)
+            self.asset(pack, "tests/test_invitations.py::test_case_2")["grounding"] = [
+                "with pytest.raises(ValueError):", 'invite(full_account, owner, "b@example.com")']
+        run = self.reach(quoted)
+        run.submit("expansion")
+
+    def test_intents_read_from_well_named_tests_stay_accepted(self) -> None:
+        run = self.reach(None)
+        result = run.submit("expansion")
+        self.assertTrue(result)
+
+
 if __name__ == "__main__":
     unittest.main()
