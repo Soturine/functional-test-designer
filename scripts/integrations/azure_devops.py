@@ -431,6 +431,7 @@ def publication_preview(plan: dict[str, Any]) -> str:
         f"Test Plan: {t['plan']['name']} ({t['plan']['id']})",
         f"Root Suite: {root}",
         f"Source: {plan['source'].get('run_id')} + {str(plan['source'].get('package_digest'))[:12]}",
+        f"Canonical digest: {plan['source'].get('canonical_digest')}",
         "",
         f"CREATE test cases       {s['create_test_cases']}",
         f"UPDATE test cases       {s['update_test_cases']}",

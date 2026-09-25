@@ -22,9 +22,9 @@ This works for any project: logistics, ERP, SaaS, APIs, IoT, industrial, aerospa
 
 ```text
 /ftd-gen   --input-file "<path>/instructions.md" --output json,md,html [--diagnostics] [--output-dir <dir>] [--locale <tag>]
-/ftd-chaos --run "<run>" [--input-file "<path>/instructions.md"] [--output json,md,html]
-/ftd-azure --run "<run>" --output json [--chaos-id <id> ...]             # local JSON only, never remote
-/ftd-azure-publish --run "<run>" --prepare --organization <url> --project <id|name> --plan <id|name> --auth <...>
+/ftd-chaos [--run <run-id>] [--input-file "<path>/instructions.md"] [--output json,md,html]
+/ftd-azure [--run <run-id>] --output json [--chaos-id <id> ...]          # local JSON only, never remote
+/ftd-azure-publish [--run <run-id>] --prepare --organization <url> --project <id|name> --plan <id|name> --auth <...>
 /ftd-azure-publish --apply "<output>/azure/publication-plan.json" --auth <...>   # writes only after approval
 /ftd-clarify · /ftd-check · /ftd-render
 ```
@@ -38,6 +38,7 @@ This works for any project: logistics, ERP, SaaS, APIs, IoT, industrial, aerospa
   - If a source's authority role is materially ambiguous, ask one concise question instead of promoting evidence.
   - **Follow-up actions.** Wording such as "depois da run: fazer chaos, converter azure" or "no final quero chaos + Azure local", under any heading, goes into `post_generation` (`CHAOS`, `AZURE_LOCAL_EXPORT`). It is workflow guidance, not authority and not a coverage ceiling. Any Azure wording means the local export; never map it to `/ftd-azure-publish`, which runs only on an explicit request to publish. `--after chaos,azure|none` (or what the user says now) overrides the file.
   - After `finalize`, follow `post_generation.next_actions`: run `/ftd-chaos` when asked (its finalize refreshes the publication and then writes the local Azure package if requested), otherwise the local export has already run. Then stop.
+- **Current run.** `--run` is optional: without it the command uses the current validated run of the artifact root (`--output-dir`, default `./ftd-output`), recorded in `.ftd/current-run.json` when a canonical run is VALIDATED and verified again on use. An explicit `--run <run-id>` (or run directory) always wins. Applies to `/ftd-chaos`, `/ftd-azure`, `/ftd-check`, `/ftd-render` and `/ftd-azure-publish --prepare`; never pick a run by folder time or name. Post-generation actions started by `/ftd-gen` already carry their run.
 - **Orchestration.** `/ftd-gen` then drives the pipeline below end to end. Do not ask the user to run stages by hand. Details: [workflow.md](references/workflow.md).
 
 ## The pipeline

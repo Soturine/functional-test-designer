@@ -105,7 +105,8 @@ def main(argv: list[str] | None = None) -> int:
     phase = parser.add_mutually_exclusive_group(required=True)
     phase.add_argument("--prepare", action="store_true", help="read the target and write publication-plan.json (no writes)")
     phase.add_argument("--apply", type=Path, metavar="PLAN", help="apply a prepared publication-plan.json")
-    parser.add_argument("--run", type=Path, help="finalized run (with --prepare)")
+    parser.add_argument("--run", type=Path, help="finalized run (with --prepare); default: the current validated run")
+    parser.add_argument("--output-dir", type=Path, help="artifact root holding .ftd/current-run.json (default ./ftd-output)")
     parser.add_argument("--organization", help="organization URL, e.g. https://dev.azure.com/<org>")
     parser.add_argument("--project", help="project id or exact name")
     parser.add_argument("--plan", help="Test Plan id or exact name")
@@ -115,13 +116,19 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         if args.prepare:
-            missing = [flag for flag, value in (("--run", args.run), ("--organization", args.organization),
-                                                ("--project", args.project), ("--plan", args.plan)) if not value]
+            missing = [flag for flag, value in (("--organization", args.organization), ("--project", args.project),
+                                                ("--plan", args.plan)) if not value]
+            try:
+                run_dir = pipeline.resolve_run(args.run, args.output_dir)
+            except pipeline.IntegrityError as exc:
+                missing.insert(0, f"--run ({exc})")
             if missing:
                 raise PublicationError("TARGET_REQUIRED", f"--prepare needs {', '.join(missing)}; the destination is "
                                                           "never guessed")
-            result = prepare(args.run, {"organization": args.organization, "project": args.project, "plan": args.plan,
-                                        "root_suite": args.root_suite}, remote_for(args.organization, args.auth))
+            # Which suite would be published is shown before any credential or remote call.
+            print(f"Run: {run_dir.name}\nCanonical digest: {_canonical_digest(run_dir)}")
+            result = prepare(run_dir, {"organization": args.organization, "project": args.project, "plan": args.plan,
+                                       "root_suite": args.root_suite}, remote_for(args.organization, args.auth))
             print(result["preview"])
         else:
             plan = read_json(args.apply)

@@ -1,8 +1,10 @@
 # ftd-chaos
 
 ```text
-/ftd-chaos --run "<run>" [--input-file "<path>/instructions.md"] [--output json,md,html] [--chaos-id <id>]
+/ftd-chaos [--run <run-id>] [--input-file "<path>/instructions.md"] [--output json,md,html] [--chaos-id <id>]
 ```
+
+- **Run:** `--run` is optional: without it the command uses the current validated run of the artifact root (`--output-dir`, default `./ftd-output`), recorded in `.ftd/current-run.json` when a canonical run is VALIDATED and verified again on use. An explicit `--run <run-id>` (or run directory) always wins.
 
 Intent: the post-suite real-world, adverse, field, physical and absurd-scenario pass over an already-**finalized** canonical run. It is not limited to the CHAOS expansion dimension. It can cover operator mistakes, device and manual work, recovery, external dependencies, load ideas and unexpected sequences — whatever this project's own evidence supports, never a closed list.
 

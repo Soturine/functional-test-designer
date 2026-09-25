@@ -1368,6 +1368,7 @@ def finalize_run(run_dir: Path, formats: Any = None, baseline: dict[str, Any] | 
             outputs=_manifest(run_dir)["publication"])
     verify_manifest(run_dir / "run-manifest.json")
     _save_state(run_dir, status="VALIDATED", next_stage=None)
+    _mark_current_run(run_dir, Path(run["artifact_root"]), document)
     # A validated run is frozen: a newer publication never edits it. Supersession is an
     # explicit relation recorded by the newer run (run.json "supersedes"), nothing more.
     return {"run_dir": str(run_dir), "canonical_path": str(canonical_path), "render": rendered,
@@ -1415,6 +1416,52 @@ def reading_metrics(run_dir: Path, records: list[dict[str, Any]]) -> dict[str, i
         "reused_file_catalogs": states["REUSED"],
         "source_digest_checks": len(records),
     }
+
+
+CURRENT_RUN_FILE = "current-run.json"
+
+
+def _mark_current_run(run_dir: Path, artifact_root: Path, canonical: dict[str, Any]) -> Path:
+    """The canonical run later commands use when --run is omitted. Written only here, after a
+    run is VALIDATED, and atomically (a reader never sees a half-written pointer). Chaos
+    runs, failed or unfinished runs never reach this point."""
+    target = Path(artifact_root).resolve() / ".ftd" / CURRENT_RUN_FILE
+    target.parent.mkdir(parents=True, exist_ok=True)
+    temporary = target.with_name(f".{CURRENT_RUN_FILE}.{run_dir.name}.tmp")
+    write_json(temporary, {"run_id": run_dir.name, "run_dir": str(run_dir),
+                           "canonical_digest": canonical.get("semantic_fingerprint"), "validated_at": now()})
+    temporary.replace(target)
+    return target
+
+
+def resolve_run(run: Any = None, artifact_root: Any = None) -> Path:
+    """explicit --run > <artifact-root>/.ftd/current-run.json > a clear error. Never the
+    newest-looking directory. The pointer must still name a VALIDATED run with the same
+    canonical digest; otherwise it is refused rather than trusted."""
+    root = Path(artifact_root).resolve() if artifact_root not in (None, "") else (Path.cwd() / "ftd-output").resolve()
+    if run not in (None, ""):
+        # A run directory, or just a run id under the artifact root.
+        if Path(run).is_dir():
+            return Path(run).resolve()
+        by_id = root / ".ftd" / "runs" / str(run)
+        if (by_id / "run.json").is_file():
+            return by_id
+        raise IntegrityError(f"--run {run!r} is neither a run directory nor a run id under {root / '.ftd' / 'runs'}")
+    pointer = root / ".ftd" / CURRENT_RUN_FILE
+    if not pointer.is_file():
+        raise IntegrityError(f"no --run given and no current validated run in {root}; run /ftd-gen first, pass "
+                             "--run <run-dir>, or pass --output-dir <artifact-root>")
+    try:
+        current = read_json(pointer)
+        run_dir = Path(current["run_dir"])
+        if _state(run_dir).get("status") != "VALIDATED":
+            raise IntegrityError("not a validated run")
+        verify_manifest(run_dir / "run-manifest.json", require_publication=False)
+        if read_canonical(run_dir / "canonical-suite.json").get("semantic_fingerprint") != current.get("canonical_digest"):
+            raise IntegrityError("the canonical suite no longer matches the recorded digest")
+    except (OSError, ValueError, KeyError, TypeError) as exc:  # IntegrityError is a ValueError
+        raise IntegrityError(f"the current-run pointer {pointer} cannot be trusted ({exc}); pass --run explicitly") from exc
+    return run_dir
 
 
 def post_generation_actions(run_dir: Path) -> list[str]:
@@ -1649,7 +1696,8 @@ def main(argv: list[str] | None = None) -> int:
     final.add_argument("--formats", help="defaults to the formats requested at start")
     final.add_argument("--baseline", type=Path, help="benchmark-only historical baseline")
     again = commands.add_parser("render", help="re-render a validated run from canonical state")
-    again.add_argument("--run", required=True, type=Path)
+    again.add_argument("--run", type=Path, help="default: the current validated run of --output-dir")
+    again.add_argument("--output-dir", type=Path, help="artifact root holding .ftd/current-run.json (default ./ftd-output)")
     again.add_argument("--formats", default=",".join(DEFAULT_FORMATS))
     for name in ("status", "verify", "reading-reconcile"):
         sub = commands.add_parser(name)
@@ -1676,7 +1724,7 @@ def main(argv: list[str] | None = None) -> int:
             result = finalize_run(args.run, args.formats, read_json(args.baseline) if args.baseline else None)
             result.pop("metrics", None)
         elif args.command == "render":
-            result = render_run(args.run, args.formats.split(","))
+            result = render_run(resolve_run(args.run, args.output_dir), args.formats.split(","))
             result.pop("files", None)
         elif args.command == "status":
             result = status(args.run)

@@ -21,7 +21,9 @@ O modelo faz o raciocínio de QA; o runtime protege escopo, rastreabilidade, val
 
 3. Abra `./ftd-output/output/report.html`.
 
-`--output-dir ./ftd-output` significa "salve todos os artefatos da FTD em `./ftd-output`" (o padrão é `<workspace>/ftd-output`). Sem `--run-id`, a FTD cria um id como `ftd-20260925-143000`; o estado da execução fica em `./ftd-output/.ftd/runs/<run-id>/`, e é esse caminho que os comandos seguintes recebem em `--run`.
+`--output-dir ./ftd-output` significa "salve todos os artefatos da FTD em `./ftd-output`" (o padrão é `<workspace>/ftd-output`). Sem `--run-id`, a FTD cria um id como `ftd-20260925-143000`; o estado da execução fica em `./ftd-output/.ftd/runs/<run-id>/`.
+
+Você normalmente não precisa copiar esse id: depois de uma geração bem-sucedida, a FTD lembra a **execução validada atual** (`./ftd-output/.ftd/current-run.json`), e os comandos seguintes a usam quando `--run` é omitido. Só uma execução canônica VALIDATED vira a atual — nunca uma execução que falhou, ficou incompleta ou um chaos —, e ela é conferida de novo a cada uso. Para uma execução mais antiga ou específica, passe `--run <run-id>`.
 
 ## O arquivo `instructions.md`
 
@@ -76,9 +78,11 @@ Pedidos em linguagem natural também funcionam ("rode o chaos", "gere o pacote d
 
 ```text
 /ftd-gen   --input-file ./docs/instructions.md --output json,md,html --output-dir ./ftd-output
-/ftd-chaos --run ./ftd-output/.ftd/runs/<run-id> --input-file ./docs/instructions.md --output json,md,html
-/ftd-azure --run ./ftd-output/.ftd/runs/<run-id> --output json
+/ftd-chaos --input-file ./docs/instructions.md --output json,md,html
+/ftd-azure
 ```
+
+Para uma execução específica: `/ftd-azure --run <run-id>` (vale para `/ftd-chaos`, `/ftd-check`, `/ftd-render` e `/ftd-azure-publish --prepare`). Se o artefato estiver em outra pasta, use `--output-dir`.
 
 - `/ftd-chaos` nunca altera a suíte canônica; ao finalizar, o relatório, a organização e o plano de execução são atualizados para mostrar os casos `CH-*`.
 - `/ftd-azure` escreve `output/azure/azure-export-package.json` e `azure-preview.json`: um work item por caso, várias Suites por caso quando preciso, nunca clones.
@@ -86,7 +90,7 @@ Pedidos em linguagem natural também funcionam ("rode o chaos", "gere o pacote d
 ### Publicar no Azure DevOps (opcional, explícito)
 
 ```text
-/ftd-azure-publish --run ./ftd-output/.ftd/runs/<run-id> --prepare \
+/ftd-azure-publish --prepare \
     --organization https://dev.azure.com/<sua-org> --project <projeto> --plan <test-plan> --auth azure-cli
 ```
 
@@ -96,7 +100,7 @@ Revise a prévia (organização, projeto, Test Plan, quantidades de CREATE/UPDAT
 /ftd-azure-publish --apply ./ftd-output/output/azure/publication-plan.json --auth azure-cli
 ```
 
-- `--prepare` só lê; gera `publication-plan.json` preso ao destino escolhido.
+- `--prepare` mostra primeiro qual execução e qual digest canônico serão usados, depois só lê o destino e gera `publication-plan.json` preso a ele.
 - `--apply` confere de novo o destino e as versões remotas e só escreve depois que você digita `PUBLISH <projeto> / <plano>` (ou passa `--approved` em modo não interativo).
 - O destino nunca é adivinhado, nada é apagado, Test Cases que a FTD não gerencia não são sobrescritos e credenciais nunca são salvas. Detalhes: [`entrypoints/azure-publish.md`](entrypoints/azure-publish.md).
 

@@ -118,5 +118,18 @@ class RepositoryLayoutTests(unittest.TestCase):
                     self.assertTrue((document.parent / target.split("#", 1)[0]).exists())
 
 
+class CurrentRunDocsTests(unittest.TestCase):
+    def test_docs_explain_the_current_run_and_keep_both_examples(self) -> None:
+        readme = read("README.md")
+        self.assertIn(".ftd/current-run.json", readme)
+        self.assertIn("/ftd-azure\n```", readme.replace("\r\n", "\n"))
+        self.assertIn("/ftd-azure --run <run-id>", readme)
+        for name in ("SKILL.md", "references/workflow.md", "entrypoints/chaos.md", "entrypoints/azure.md",
+                     "entrypoints/azure-publish.md", "entrypoints/check.md", "entrypoints/render.md"):
+            with self.subTest(document=name):
+                self.assertIn("current", read(name))
+                self.assertIn("--run", read(name))
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -1,8 +1,10 @@
 # ftd-azure
 
 ```text
-/ftd-azure --run "<run>" --output json [--chaos-id <id> ...] [--canonical-only]
+/ftd-azure [--run <run-id>] --output json [--chaos-id <id> ...] [--canonical-only]
 ```
+
+- **Run:** `--run` is optional: without it the command uses the current validated run of the artifact root (`--output-dir`, default `./ftd-output`), recorded in `.ftd/current-run.json` when a canonical run is VALIDATED and verified again on use. An explicit `--run <run-id>` (or run directory) always wins.
 
 Intent: convert a finalized run's validated FTD state into **local** Azure DevOps Test Plans input JSON (never remote), organized like the publication (functional groups in operational order, transversal rules, execution views), with requirements kept as traceability.
 

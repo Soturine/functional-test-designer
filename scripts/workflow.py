@@ -146,14 +146,14 @@ def selected_sources(request: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def _canonical(request: dict[str, Any]) -> dict[str, Any]:
-    path = Path(request.get("canonical_path") or Path(request["run_dir"]) / "canonical-suite.json")
+    path = Path(request["canonical_path"]) if request.get("canonical_path") else _run_dir(request) / "canonical-suite.json"
     return pipeline.read_canonical(path)
 
 
 def _run_dir(request: dict[str, Any]) -> Path:
-    if request.get("run_dir"):
-        return Path(request["run_dir"])
-    return Path(request["canonical_path"]).parent
+    """explicit run (run_dir or canonical_path) > the current validated run > a clear error."""
+    explicit = request.get("run_dir") or (Path(request["canonical_path"]).parent if request.get("canonical_path") else None)
+    return pipeline.resolve_run(explicit, request.get("output_dir") or request.get("artifact_root"))
 
 
 def _formats(request: dict[str, Any]) -> list[str] | None:
@@ -426,7 +426,8 @@ def main(argv: list[str] | None = None) -> int:
     gen.add_argument("--reading-worker-model")
     gen.add_argument("--reading-concurrency", type=int)
     chaos_cmd = commands.add_parser("chaos", help="/ftd-chaos: post-suite pass over a finalized run")
-    chaos_cmd.add_argument("--run", required=True, type=Path)
+    chaos_cmd.add_argument("--run", type=Path, help="default: the current validated run of --output-dir")
+    chaos_cmd.add_argument("--output-dir", type=Path, help="artifact root holding .ftd/current-run.json (default ./ftd-output)")
     chaos_cmd.add_argument("--input-file")
     chaos_cmd.add_argument("--output", help="json,md,html (default json,md,html)")
     chaos_cmd.add_argument("--chaos-id")
@@ -434,7 +435,17 @@ def main(argv: list[str] | None = None) -> int:
     chaos_cmd.add_argument("--focus", default="")
     chaos_cmd.add_argument("--workspace", type=Path)
     azure = commands.add_parser("azure", help="/ftd-azure: local Azure DevOps input JSON")
-    azure.add_argument("--run", required=True, type=Path)
+    azure.add_argument("--run", type=Path, help="default: the current validated run of --output-dir")
+    azure.add_argument("--output-dir", type=Path, help="artifact root holding .ftd/current-run.json (default ./ftd-output)")
+    for name, text in (("check", "/ftd-check: read-only audit of a validated suite"),
+                       ("render", "/ftd-render: re-render a validated run from persisted state")):
+        sub = commands.add_parser(name, help=text)
+        sub.add_argument("--run", type=Path, help="default: the current validated run of --output-dir")
+        sub.add_argument("--output-dir", type=Path, help="artifact root holding .ftd/current-run.json (default ./ftd-output)")
+        if name == "check":
+            sub.add_argument("--focus", default="everything")
+        else:
+            sub.add_argument("--output", help="json,md,html (default: the run's formats)")
     azure.add_argument("--output", default="json")
     azure.add_argument("--chaos-id", action="append", default=None)
     azure.add_argument("--canonical-only", action="store_true")
@@ -452,12 +463,19 @@ def main(argv: list[str] | None = None) -> int:
             )
         elif args.command == "chaos":
             result = chaos(
-                args.run, input_file=args.input_file, normalized=read_json(args.normalized) if args.normalized else None,
+                pipeline.resolve_run(args.run, args.output_dir), input_file=args.input_file,
+                normalized=read_json(args.normalized) if args.normalized else None,
                 output=args.output, chaos_id=args.chaos_id, focus=args.focus, workspace=args.workspace,
             )
+        elif args.command == "check":
+            result = dispatch("ftd-check", run_dir=args.run, output_dir=args.output_dir, focus=args.focus)
+        elif args.command == "render":
+            result = dispatch("ftd-render", run_dir=args.run, output_dir=args.output_dir, output=args.output)
+            result.pop("files", None)
         else:
             result = azure_export.convert_run(
-                args.run, chaos_ids=[] if args.canonical_only else args.chaos_id, output=args.output,
+                pipeline.resolve_run(args.run, args.output_dir), chaos_ids=[] if args.canonical_only else args.chaos_id,
+                output=args.output,
             )
     except (ValueError, OSError) as exc:
         errors = getattr(exc, "errors", None) or [str(exc)]

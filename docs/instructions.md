@@ -11,6 +11,8 @@ How to use this file
 
 Run:
   /ftd-gen --input-file ./docs/instructions.md --output json,md,html --diagnostics --output-dir ./ftd-output
+After a successful run, the FTD remembers it as the current validated run: later commands such as
+/ftd-chaos or /ftd-azure need no run id (pass --run <run-id> only for an older or specific run).
 -->
 
 ## Sources
