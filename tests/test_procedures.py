@@ -465,5 +465,74 @@ class ExecutionContractTests(unittest.TestCase):
             run.submit("procedures")
 
 
+
+class ProcedureBoilerplateTests(unittest.TestCase):
+    """Low-information procedures are rejected; Design and the Test Case count never change."""
+
+    def submit(self, name, mutate):
+        run = PackRun(name, mutate)
+        self.addCleanup(run.close)
+        run.through("expansion")
+        return run
+
+    def test_a_semantically_empty_outcome_is_rejected(self) -> None:
+        def empty(pack):
+            procedure(pack, "T1")["steps"][0]["expected_result"] = "An observable result is shown on the affected resource."
+        with self.assertRaisesRegex(StageError, "step 1 expected result names nothing specific"):
+            self.submit("saas-accounts", empty).submit("procedures")
+
+    def test_specific_outcomes_and_semantic_fixtures_stay_valid(self) -> None:
+        from procedures import semantically_empty
+        self.assertTrue(semantically_empty("The expected behavior is observed in the system.", set()))
+        self.assertTrue(semantically_empty("O resultado esperado fica visível no recurso afetado.", set()))
+        self.assertFalse(semantically_empty("The invite form is shown.", set()))
+        self.assertFalse(semantically_empty("The result is shown for USER_A.", {"USER_A"}))
+        self.assertFalse(semantically_empty('The system shows "Seat limit reached".', set()))
+        self.assertFalse(semantically_empty("The response has status 409.", set()))
+
+    def test_truncated_or_unbalanced_prose_is_rejected(self) -> None:
+        def truncated(pack):
+            procedure(pack, "T1")["steps"][1]["action"] = "Submit an invitation for EMAIL_NEW and"
+        with self.assertRaisesRegex(StageError, "step 2 action is truncated or unbalanced"):
+            self.submit("saas-accounts", truncated).submit("procedures")
+
+        def unbalanced(pack):
+            procedure(pack, "T1")["steps"][0]["expected_result"] = "The page shows the invite form (with the email field."
+        with self.assertRaisesRegex(StageError, "step 1 expected result is truncated or unbalanced"):
+            self.submit("saas-accounts", unbalanced).submit("procedures")
+
+    def test_the_oracle_step_keeps_the_designed_message_number_or_code(self) -> None:
+        def paraphrased(pack):
+            procedure(pack, "T2")["steps"][-1]["expected_result"] = "The API returns an error saying the amount exceeds the capture."
+        with self.assertRaisesRegex(StageError, r"drops what the designed oracle states exactly \['422', 'AMOUNT_EXCEEDS_CAPTURE'\]"):
+            self.submit("api-refunds", paraphrased).submit("procedures")
+
+    def test_one_oracle_wording_for_different_oracles_is_boilerplate(self) -> None:
+        def boilerplate(pack):
+            for key in ("T1", "T2", "T5"):
+                procedure(pack, key)["steps"][-1]["expected_result"] = "The API answers the request with its documented status."
+        with self.assertRaisesRegex(StageError, "3 procedures designed for different oracles observe the same result"):
+            self.submit("api-refunds", boilerplate).submit("procedures")
+
+    def test_a_rejected_procedure_never_changes_design_or_the_test_case_count(self) -> None:
+        import pipeline
+        from common import file_digest
+
+        def empty(pack):
+            procedure(pack, "T1")["steps"][0]["expected_result"] = "An observable result is shown on the affected resource."
+        run = self.submit("api-refunds", empty)
+        stages = run.run_dir / "stages"
+        before = {name: file_digest(stages / name) for name in ("design.result.json", "expansion.result.json")}
+        with self.assertRaises(StageError):
+            run.submit("procedures")
+        self.assertEqual(before, {name: file_digest(stages / name) for name in before})
+        designed = len(pipeline._result(run.run_dir, "design")["tests"]) + len(pipeline._result(run.run_dir, "expansion")["tests"])
+        from support import load_pack
+        run.pack["stages"]["procedures"] = load_pack("api-refunds")["stages"]["procedures"]
+        run.submit("procedures")
+        pipeline.finalize_run(run.run_dir, ["JSON"])
+        self.assertEqual(designed, len(run.output("test-cases.json")["test_cases"]))
+
+
 if __name__ == "__main__":
     unittest.main()

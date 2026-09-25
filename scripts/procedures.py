@@ -12,7 +12,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from common import StageError, similarity
+from common import StageError, normalize, similarity
 from design import check_locale, unknown_keys
 
 
@@ -54,6 +54,55 @@ TOOL_SYNTAX = re.compile(
     r"\b(?:curl\s+-|http\.(?:get|post|put|patch|delete)\s*\(|k6\s+run|jmeter\s+-|locust\s+-|"
     r"artillery\s+run|ab\s+-[nc]|wrk\s+-[tcd])", re.IGNORECASE)
 STATE_CONTRACTS = ("SELF_CLEANING", "REQUIRES_FIXTURE_RESET")
+# Words that talk about an outcome without saying what it is. An expected result made only of
+# these (plus function words) carries no oracle: "an observable result on the affected resource".
+_META_OUTCOME = {
+    "result", "resul", "outco", "resou", "recur", "syste", "siste", "behav", "behavi", "comport", "data", "dado",
+    "dato", "recor", "regis", "item", "iten", "state", "estad", "respo", "opera", "affec", "afeta", "afect",
+    "obser", "visib", "visív", "expec", "esper", "corre", "valid", "válid", "appro", "adequ", "value", "valor",
+    "relev", "prope", "entit", "entid", "objec", "objet", "eleme", "actio", "ação", "acció", "chang", "mudan",
+    "cambi", "effec", "efeit", "efect", "outpu", "saída", "salid", "targe", "alvo", "objetiv", "shown", "displ",
+    "prese", "retur", "happe", "occur", "appli", "updat", "refle", "exibi", "mostr", "apres", "retor", "atual",
+    "alter", "aplic", "ocorr", "the", "and", "with", "for", "its", "are", "was", "were", "has", "have", "been",
+    "into", "from", "that", "this", "não", "uma", "com", "são", "fica", "ficam", "como", "pelo", "pela", "para",
+    "sobre", "esta", "está", "every", "each", "all", "todo", "toda", "after", "após", "then", "some", "any",
+    "algum", "qualq", "del", "los", "las", "una", "est",
+}
+# Literals a designed oracle may state: a quoted message, a number, a code. Fixture-shaped
+# names (USER_A, ORDER_1) are excluded: stages may legitimately rename semantic fixtures.
+ORACLE_LITERAL = re.compile(r'"[^"]+"|“[^”]+”|\b\d+(?:[.,]\d+)?\b|\b[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+\b')
+TRUNCATED = re.compile(
+    r"(?:\b(?:and|or|the|of|to|with|e|ou|de|do|da|com|para|que|y|o|del|con)|[,:;(\-])\s*$|\.\.\.\s*$|…\s*$",
+    re.IGNORECASE)
+BOILERPLATE_ORACLE_LIMIT = 3
+
+
+def _outcome_stems(text: str) -> set[str]:
+    stems = set()
+    for word in re.findall(r"[a-zà-ÿ]+", str(text).lower()):
+        if len(word) < 3:
+            continue
+        if len(word) > 4 and word.endswith("s"):
+            word = word[:-1]
+        stems.add(word[:5])
+    return stems
+
+
+def semantically_empty(expected: str, fixtures: set[str]) -> bool:
+    """True when an expected result names no specific thing: no content word beyond talk about
+    'a result', no literal, no fixture."""
+    if ORACLE_LITERAL.search(expected) or any(name in expected for name in fixtures):
+        return False
+    return not (_outcome_stems(expected) - _META_OUTCOME)
+
+
+def malformed_prose(text: str) -> bool:
+    """Cut-off or unbalanced prose: a trailing connector or ellipsis, or unmatched brackets/quotes."""
+    if not text:
+        return False
+    if TRUNCATED.search(text):
+        return True
+    return any(text.count(a) != text.count(b) for a, b in ("()", "[]", "{}")) or text.count('"') % 2 == 1
 # A step performed on behalf of a fixture actor ("As USER_A, ...", "Como USER_A, ...").
 ACTING_FIXTURE = re.compile(
     r"^\s*(?:As|Como)\s+(?:(?:the|o|a|os|as|el|la)\s+)?([A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+)\b")
@@ -274,6 +323,7 @@ def validate_procedures(payload: dict[str, Any], context: dict[str, Any]) -> dic
     blocking_questions = set(context.get("blocking_questions", set()))
     source_tokens = set(context.get("source_tokens", set()))
     procedures: dict[str, dict[str, Any]] = {}
+    oracle_texts: dict[str, set[str]] = {}
     for item in payload.get("procedures", []) or []:
         ref = _text(item.get("test"))
         test = by_ref.get(ref)
@@ -349,6 +399,13 @@ def validate_procedures(payload: dict[str, Any], context: dict[str, Any]) -> dic
                 errors.append(f"{label} step {number} action is abstract; say who does which atomic action to which target (and where, with which semantic data) as the evidence supports, or keep the known intent and declare MISSING_EXECUTION_SURFACE / UNKNOWN_SETUP_PATH")
             if expected and ABSTRACT_OBSERVATION.search(expected):
                 errors.append(f"{label} step {number} expected result is not observable")
+            elif expected and semantically_empty(expected, {row["name"] for row in normalized_data}):
+                errors.append(
+                    f"{label} step {number} expected result names nothing specific ({expected!r}); say which "
+                    "state, message, record, counter or outcome becomes observable")
+            for part, text in (("action", action), ("expected result", expected)):
+                if malformed_prose(text):
+                    errors.append(f"{label} step {number} {part} is truncated or unbalanced: {text[-60:]!r}")
             if expected and ACTION_ECHO.search(expected):
                 errors.append(
                     f"{label} step {number} expected result only says the action happened; state what becomes "
@@ -449,6 +506,13 @@ def validate_procedures(payload: dict[str, Any], context: dict[str, Any]) -> dic
                     errors.append(
                         f"{label} step {oracle_step} does not observe the designed oracle {test['expected']!r}"
                     )
+                lost = [value for value in ORACLE_LITERAL.findall(str(test["expected"]))
+                        if not FIXTURE_SHAPE.search(value) and value not in observed and value.strip('"“”') not in observed]
+                if lost:
+                    errors.append(
+                        f"{label} step {oracle_step} drops what the designed oracle states exactly {lost}; keep the "
+                        "message, number or code the Test Case is judged by")
+                oracle_texts.setdefault(normalize(observed), set()).add(normalize(str(test["expected"])))
         automation = item.get("automation") if isinstance(item.get("automation"), dict) else {}
         suitability = str(automation.get("suitability", ""))
         layer = str(automation.get("layer", ""))
@@ -484,6 +548,13 @@ def validate_procedures(payload: dict[str, Any], context: dict[str, Any]) -> dic
         }
         if missing_oracle and not any(u["question"] for u in unknowns if u["kind"] == "MISSING_ORACLE"):
             errors.append(f"{label} MISSING_ORACLE requires the Question that asks for the oracle")
+    # One oracle wording shared by procedures designed for different oracles is boilerplate
+    # standing in for per-case semantics.
+    for observed, designs in oracle_texts.items():
+        if observed and len(designs) >= BOILERPLATE_ORACLE_LIMIT:
+            errors.append(
+                f"{len(designs)} procedures designed for different oracles observe the same result {observed!r}; "
+                "each oracle step must observe its own Test Case's oracle")
     missing = [test["id"] for test in tests if test["id"] not in procedures]
     if missing:
         errors.append(f"{len(missing)} Test Case(s) have no procedure: " + ", ".join(missing[:20]))
