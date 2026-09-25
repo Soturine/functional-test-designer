@@ -23,7 +23,9 @@ This works for any project: logistics, ERP, SaaS, APIs, IoT, industrial, aerospa
 ```text
 /ftd-gen   --input-file "<path>/instructions.md" --output json,md,html [--diagnostics] [--output-dir <dir>] [--locale <tag>]
 /ftd-chaos --run "<run>" [--input-file "<path>/instructions.md"] [--output json,md,html]
-/ftd-azure --run "<run>" --output json [--chaos-id <id> ...]
+/ftd-azure --run "<run>" --output json [--chaos-id <id> ...]             # local JSON only, never remote
+/ftd-azure-publish --run "<run>" --prepare --organization <url> --project <id|name> --plan <id|name> --auth <...>
+/ftd-azure-publish --apply "<output>/azure/publication-plan.json" --auth <...>   # writes only after approval
 /ftd-clarify · /ftd-check · /ftd-render
 ```
 
@@ -130,11 +132,20 @@ Generate the canonical suite first; run `/ftd-chaos` second. It is the real-worl
 
 `/ftd-azure --run <run> --output json` converts validated FTD state into local JSON under `output/azure/`: the canonical suite plus all finalized chaos runs, or only those picked with `--chaos-id`.
 
-- `azure-export-package.json` is grouped requirement by requirement, titled `identifier — official title`, with `Unassigned` last.
+- `azure-export-package.json` holds suites that follow the publication organization, requirement groups as traceability, and one record per case with its full execution context.
 - `azure-preview.json` holds the create/update/unchanged diff and the Suite placements.
 - Keys are `canonical:TC-001` and `chaos:<id>:CH-001`; older `challenge:` keys are migrated. A multi-requirement case is one work item with several placements.
 - `scripts/azure_export.py` aggregates; `scripts/integrations/azure_devops.py` alone owns Azure mapping, Suites, diffing, idempotency and transport.
-- It never contacts Azure DevOps. Live publication needs a future, explicit user request.
+- It never contacts Azure DevOps.
+
+## /ftd-azure-publish — guarded remote publication (explicit only)
+
+The only command that can write to Azure DevOps. Run it only when the user explicitly asks to publish — never because of `/ftd-azure`, vague "convert/generate/prepare Azure" wording or available credentials. Details: [entrypoints/azure-publish.md](entrypoints/azure-publish.md).
+
+- `--prepare` reads the explicitly named organization, project and Test Plan (exact id, or an exact unambiguous name; never guessed) and writes a local `publication-plan.json`. Zero remote writes.
+- Show the user the preview (destination, CREATE/UPDATE/UNCHANGED/CONFLICT counts, suites, placements, `DELETE operations 0`).
+- `--apply` revalidates digests, target ids and remote versions and writes only after the user types `PUBLISH <project> / <plan>` (or passes `--approved` non-interactively).
+- Non-destructive: no deletes, no membership removal, no plan creation, no overwrite of unmanaged or remotely changed Test Cases. Credentials are runtime-only and never persisted.
 
 ## Completion
 

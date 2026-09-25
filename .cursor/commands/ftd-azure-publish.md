@@ -1,0 +1,1 @@
+Use `entrypoints/azure-publish.md` as the intent contract and the functional-test-designer shared core. Explicit publication requests only: prepare read-only, preview, then apply only after the user approves that exact target.

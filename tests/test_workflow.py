@@ -43,7 +43,7 @@ def minimal_pdf(path: Path, lines: list[str]) -> None:
 
 
 class CommandSurfaceTests(unittest.TestCase):
-    PUBLIC = ("ftd-gen", "ftd-chaos", "ftd-azure", "ftd-clarify", "ftd-check", "ftd-render")
+    PUBLIC = ("ftd-gen", "ftd-chaos", "ftd-azure", "ftd-azure-publish", "ftd-clarify", "ftd-check", "ftd-render")
 
     def test_exact_aliases_resolve_deterministically(self) -> None:
         for intent in self.PUBLIC:
@@ -51,7 +51,7 @@ class CommandSurfaceTests(unittest.TestCase):
                 with self.subTest(form=form):
                     self.assertEqual(intent, resolve_intent(form))
 
-    def test_public_intents_are_exactly_the_six_commands(self) -> None:
+    def test_public_intents_are_exactly_the_seven_commands(self) -> None:
         self.assertEqual(self.PUBLIC, workflow.INTENTS)
 
     def test_retired_names_only_emit_a_migration_message(self) -> None:
@@ -69,7 +69,7 @@ class CommandSurfaceTests(unittest.TestCase):
             names = {path.stem for path in (ROOT / folder).glob("*.md")}
             self.assertEqual(set(self.PUBLIC), names, folder)
         entrypoints = {path.stem for path in (ROOT / "entrypoints").glob("*.md")}
-        self.assertEqual({"gen", "chaos", "azure", "clarify", "check", "render"}, entrypoints)
+        self.assertEqual({"gen", "chaos", "azure", "azure-publish", "clarify", "check", "render"}, entrypoints)
 
     def test_host_resolved_intent_is_handed_off_without_a_phrase_catalog(self) -> None:
         # The host model decides meaning in context; the dispatcher only validates it.

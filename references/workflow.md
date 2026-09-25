@@ -166,6 +166,15 @@ python scripts/challenge.py verify --run <run> --challenge-id <id>
   - `scripts/azure_export.py` owns FTD aggregation: run and chaos selection, export keys and requirement↔case relationships.
   - `scripts/integrations/azure_devops.py` remains the single owner of Azure payload mapping, Suite placement, diffing, idempotency, integration state and the transport contract. Its `apply_preview` stays approval-gated and is never called by `/ftd-azure`.
 
+## /ftd-azure-publish (guarded remote publication)
+
+`/ftd-azure` never connects. `/ftd-azure-publish` is the only remote-writing command and runs only on an explicit publication request; see [entrypoints/azure-publish.md](../entrypoints/azure-publish.md).
+
+- **Prepare** (`--prepare`): runtime credentials (Azure CLI session, Entra interactive sign-in, or a named environment variable), read-only calls against the explicitly selected organization/project/plan (exact id or exact unambiguous name), then a local `publication-plan.json` bound to those ids, the run id, the package and canonical digests and the remote versions used. Zero writes; the plan is never applied implicitly.
+- **Apply** (`--apply <plan>`): digests unchanged, same target ids (`TARGET_MISMATCH` otherwise), remote versions unchanged (`CONFLICTS` otherwise), preview shown, approval typed as `PUBLISH <project> / <plan>` or given with `--approved`. Without approval, zero writes.
+- **Operations:** CREATE Test Case, UPDATE an FTD-managed one (local mapping export key → project id → work item id → last revision and content hash), CREATE child static suites under the destination, ADD placements in order. No DELETE of any kind, no membership removal, no Test Plan creation, no move between projects, no overwrite of an unmapped look-alike or a remotely changed item.
+- **Ownership:** `integrations/azure_devops.py` owns target resolution, diffing, placements and the REST transport (GET/POST/PATCH only); `scripts/azure_publish.py` binds them to a finalized run. Tests use a fake transport only.
+
 ## Output selection
 
 - **Formats:** `HTML`, `JSON`, `MARKDOWN`, `DIAGNOSTICS` and `OPERATIONAL`. The default is `HTML,JSON,MARKDOWN`, and the command-line tokens `json,md,html` map to the first three.

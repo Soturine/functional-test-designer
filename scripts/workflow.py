@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """Exact-intent dispatcher behind the public ftd-* commands and natural language.
 
-Public commands: /ftd-gen, /ftd-chaos, /ftd-azure, /ftd-clarify, /ftd-check, /ftd-render.
+Public commands: /ftd-gen, /ftd-chaos, /ftd-azure, /ftd-azure-publish, /ftd-clarify, /ftd-check, /ftd-render.
+/ftd-azure is local only; /ftd-azure-publish is the only command that can write to Azure DevOps,
+and only after an explicit target, a prepared plan and explicit approval.
 
 Natural language is understood by the host model, not here: the host resolves what the
 user means in context (a new generation vs. challenging an already-finalized suite vs.
@@ -16,6 +18,8 @@ CLI (the explicit form of the three primary commands):
   workflow.py chaos --run RUN [--input-file PATH] [--output json,md,html]
                     [--chaos-id ID] [--normalized FILE] [--focus TEXT]
   workflow.py azure --run RUN [--output json] [--chaos-id ID ...]
+  workflow.py azure-publish --prepare --run RUN --organization URL --project P --plan PLAN [--auth ...]
+  workflow.py azure-publish --apply PLAN.json [--approved] [--auth ...]
 
 `gen`/`chaos` with an instructions file (.md/.txt) are two-phase: without --normalized they print the
 normalization order (the file's text plus the handoff contract) for the host model;
@@ -40,12 +44,13 @@ if str(SCRIPT_DIR) not in sys.path:
 import pipeline  # noqa: E402
 import challenge as challenge_stage  # noqa: E402
 import azure_export  # noqa: E402
+import azure_publish  # noqa: E402
 import instructions  # noqa: E402
 from common import read_json  # noqa: E402
 from procedures import audit_case  # noqa: E402
 
 
-INTENTS = ("ftd-gen", "ftd-chaos", "ftd-azure", "ftd-clarify", "ftd-check", "ftd-render")
+INTENTS = ("ftd-gen", "ftd-chaos", "ftd-azure", "ftd-azure-publish", "ftd-clarify", "ftd-check", "ftd-render")
 # Retired public names: they only explain where the behavior moved.
 RETIRED = {
     "ftd-challenge": "ftd-challenge was renamed: use /ftd-chaos --run <run> [--input-file instructions.md]",
@@ -272,6 +277,19 @@ def dispatch(intent: str, **request: Any) -> Any:
             output=request.get("output"), chaos_id=request.get("chaos_id"), focus=request.get("focus", ""),
             seeds=[Path(p) for p in request.get("seeds", []) or []], workspace=request.get("workspace"),
         )
+    if intent == "ftd-azure-publish":
+        # Never reached implicitly: the host dispatches it only on an explicit publication request.
+        phase = request.get("phase")
+        if phase == "prepare":
+            target = {key: request.get(key) for key in ("organization", "project", "plan", "root_suite")}
+            remote = request.get("remote") or azure_publish.remote_for(str(target["organization"] or ""), request.get("auth", ""))
+            return azure_publish.prepare(_run_dir(request), target, remote)
+        if phase == "apply":
+            plan = read_json(Path(request["plan_file"]))
+            remote = request.get("remote") or azure_publish.remote_for(plan["target"]["organization"]["url"], request.get("auth", ""))
+            return azure_publish.apply(Path(request["plan_file"]), remote, confirmation=request.get("confirmation"),
+                                       approved=bool(request.get("approved")))
+        raise ValueError("ftd-azure-publish needs phase 'prepare' or 'apply'; /ftd-azure alone never publishes")
     return azure_export.convert_run(
         _run_dir(request), chaos_ids=request.get("chaos_ids"), output=request.get("output", "json"),
         requirement_mapping=request.get("requirement_mapping"),
@@ -369,6 +387,9 @@ def privacy_safe_metrics(answers: list[dict[str, Any]]) -> dict[str, int]:
 # --- CLI --------------------------------------------------------------------------------
 
 def main(argv: list[str] | None = None) -> int:
+    argv = list(sys.argv[1:] if argv is None else argv)
+    if argv[:1] == ["azure-publish"]:
+        return azure_publish.main(argv[1:])
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     commands = parser.add_subparsers(dest="command", required=True)
     gen = commands.add_parser("gen", help="/ftd-gen: canonical suite from instructions.md/.txt")

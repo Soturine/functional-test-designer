@@ -1,0 +1,1 @@
+Follow `entrypoints/azure-publish.md` and delegate to the shared core. Run only when the user explicitly asks to publish to Azure DevOps: prepare (read-only) first, show the preview, and apply only after the user approves that exact target. Never run it from `/ftd-azure` or vague Azure wording.
