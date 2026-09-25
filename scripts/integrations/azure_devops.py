@@ -541,30 +541,111 @@ class EnvironmentCredential:
         return f"EnvironmentCredential({self.variable!r})"
 
 
-class AzureCliCredential:
-    """The user's existing Azure CLI session (`az login`)."""
+AZURE_DEVOPS_RESOURCE = "499b84ac-1321-427f-aa17-267ca6975798"  # Azure DevOps application id (public)
 
-    RESOURCE = "499b84ac-1321-427f-aa17-267ca6975798"  # Azure DevOps application id (public)
+
+def _find_azure_cli() -> str:
+    """Locate the installed Azure CLI executable/shim for this platform.
+
+    On Windows the CLI is installed as `az.cmd` (a batch shim), not `az.exe`. A bare
+    `subprocess.run(["az", ...])` fails there with `[WinError 2] The system cannot find the
+    file specified`, because `CreateProcess` does not apply `PATHEXT` resolution the way a
+    shell does. `shutil.which` performs that same resolution (checking `PATHEXT` on Windows)
+    without a shell and without building a command string, so every platform resolves the
+    real executable path through it before it is placed in a structured argument list.
+    """
+    import shutil
+    executable = shutil.which("az")
+    if not executable:
+        raise PublicationError(
+            "AZURE_CLI_UNAVAILABLE",
+            "the Azure CLI ('az') was not found on PATH. Install it "
+            "(https://learn.microsoft.com/cli/azure/install-azure-cli) or use --auth interactive "
+            "or --auth env:<VARIABLE> instead."
+        )
+    return executable
+
+
+class AzureCliCredential:
+    """The user's existing Azure CLI session (`az login`).
+
+    The executable is resolved once per token fetch with `shutil.which` — never a shell,
+    never a concatenated command string — and the resulting access token is cached in memory
+    for a short, conservative window so repeated REST calls do not each spawn a new `az`
+    process. Nothing is written to disk or logged.
+    """
+
+    RESOURCE = AZURE_DEVOPS_RESOURCE
+    _CACHE_SECONDS = 300  # conservative; az itself also caches/refreshes independently
+
+    def __init__(self) -> None:
+        self._token: str | None = None
+        self._token_until: float = 0.0
 
     def authorization_header(self) -> str:
+        import time
+        now = time.monotonic()
+        if self._token is None or now >= self._token_until:
+            self._token = self._fetch_token()
+            self._token_until = now + self._CACHE_SECONDS
+        return "Bearer " + self._token
+
+    def _fetch_token(self) -> str:
         import subprocess
-        token = subprocess.run(["az", "account", "get-access-token", "--resource", self.RESOURCE,
-                                "--query", "accessToken", "-o", "tsv"], capture_output=True, text=True, check=True).stdout.strip()
-        return "Bearer " + token
+        executable = _find_azure_cli()
+        try:
+            result = subprocess.run(
+                [executable, "account", "get-access-token", "--resource", self.RESOURCE,
+                 "--query", "accessToken", "-o", "tsv"],
+                capture_output=True, text=True, check=False,
+            )
+        except OSError as exc:
+            raise PublicationError("AZURE_CLI_UNAVAILABLE", f"could not run the Azure CLI ({executable}): {exc}") from exc
+        token = result.stdout.strip()
+        if result.returncode != 0 or not token:
+            detail = (result.stderr or result.stdout or "").strip()
+            raise PublicationError(
+                "AZURE_CLI_NOT_AUTHENTICATED",
+                "the Azure CLI has no usable session for Azure DevOps. Run `az login` (Azure "
+                "DevOps-only accounts without an Azure subscription: `az login "
+                "--allow-no-subscriptions`)." + (f" Detail: {detail[:300]}" if detail else "")
+            )
+        return token
 
     def __repr__(self) -> str:
         return "AzureCliCredential()"
 
 
 class InteractiveCredential:
-    """Microsoft Entra interactive sign-in through the optional azure-identity package."""
+    """Microsoft Entra interactive sign-in through the optional azure-identity package.
+
+    One `InteractiveBrowserCredential` is created lazily and kept for the lifetime of this
+    object; azure-identity's own token cache then serves later `get_token` calls, refreshing
+    silently only when a token nears expiry. `RestAzureRemote` asks for a fresh Authorization
+    header on every REST call, so without this reuse each of those calls built a brand new
+    credential and forced a fresh interactive browser sign-in — the browser opens at most
+    once per publisher session instead. The token itself is never written anywhere.
+    """
+
+    def __init__(self) -> None:
+        self._credential: Any = None  # the real InteractiveBrowserCredential, built once
+
+    def _browser_credential(self) -> Any:
+        if self._credential is None:
+            try:
+                from azure.identity import InteractiveBrowserCredential  # type: ignore
+            except ImportError as exc:
+                raise PublicationError("CREDENTIAL_UNAVAILABLE", "install azure-identity for interactive sign-in") from exc
+            self._credential = InteractiveBrowserCredential()
+        return self._credential
 
     def authorization_header(self) -> str:
+        credential = self._browser_credential()
         try:
-            from azure.identity import InteractiveBrowserCredential  # type: ignore
-        except ImportError as exc:
-            raise PublicationError("CREDENTIAL_UNAVAILABLE", "install azure-identity for interactive sign-in") from exc
-        return "Bearer " + InteractiveBrowserCredential().get_token(f"{AzureCliCredential.RESOURCE}/.default").token
+            token = credential.get_token(f"{AZURE_DEVOPS_RESOURCE}/.default")
+        except Exception as exc:  # azure.core.exceptions.ClientAuthenticationError and friends
+            raise PublicationError("INTERACTIVE_AUTH_FAILED", f"interactive sign-in failed or was cancelled: {exc}") from exc
+        return "Bearer " + token.token
 
     def __repr__(self) -> str:
         return "InteractiveCredential()"
