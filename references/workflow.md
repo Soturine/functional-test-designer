@@ -139,6 +139,8 @@ python scripts/challenge.py verify --run <run> --challenge-id <id>
 
   A `canonical_gap_candidate` is advisory only.
 
+  After finalizing, the suite's own publication (`report.html`, `organization.json`, `execution-plan.md`) is re-rendered from persisted state so the new CH cases appear without a manual `/ftd-render`. It is the parent run's, or that of a run that explicitly supersedes it — whichever currently owns `output/`. The canonical suite stays byte-identical, no source is read and no stage is regenerated; only the publication proof is refreshed.
+
 ## /ftd-azure (local Azure DevOps input)
 
 `/ftd-azure` converts a finalized run's validated state into **local** JSON. It never authenticates, never reads tokens and never calls Azure.

@@ -1380,6 +1380,28 @@ def render_run(run_dir: Path, formats: Any = None) -> dict[str, Any]:
     return rendered
 
 
+def refresh_publication_after_post_suite(parent_run_dir: Path) -> list[str]:
+    """After a post-suite run finalizes, re-render the publication that shows it: the parent
+    run, or a successor that explicitly supersedes it, whichever currently owns the published
+    output. Canonical state is never touched and nothing is read or regenerated; a run whose
+    publication was already replaced by another run is left as it is."""
+    parent = Path(parent_run_dir).resolve()
+    candidates = [parent] + sorted(
+        path.parent for path in parent.parent.glob("*/run.json")
+        if path.parent != parent and read_json(path).get("supersedes") == parent.name)
+    refreshed = []
+    for run_dir in candidates:
+        if _state(run_dir).get("status") != "VALIDATED":
+            continue
+        try:
+            verify_manifest(run_dir / "run-manifest.json", require_publication=True)
+        except IntegrityError:
+            continue  # its published files are no longer the current output
+        render_run(run_dir)
+        refreshed.append(run_dir.name)
+    return refreshed
+
+
 def status(run_dir: Path) -> dict[str, Any]:
     run_dir = Path(run_dir).resolve()
     return {"state": _state(run_dir), "stages": [item["stage"] for item in _manifest(run_dir)["stages"]]}

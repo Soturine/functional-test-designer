@@ -722,8 +722,11 @@ def finalize_challenge(
     lineage.update({"outputs": files})  # picks up azure-devops-preview.json when it was produced above
     write_json(challenge_dir / "challenge-run.json", lineage)
     published = publish_outputs(run_dir, challenge_id, lineage.get("formats") or ["JSON", "MARKDOWN", "HTML"])
+    # The suite's own projections (report, organization, execution plan) now include these
+    # cases; they are re-rendered from persisted state, the canonical suite stays byte-identical.
+    refreshed = pipeline.refresh_publication_after_post_suite(run_dir)
     return {"challenge_dir": str(challenge_dir), "files": files, "cases": len(result["cases"]),
-            "published": [str(path) for path in published]}
+            "published": [str(path) for path in published], "publication_refreshed": refreshed}
 
 
 def _inline_html(text: str) -> str:

@@ -3,6 +3,8 @@ targeted lookup, evidence validation, state machine, grounding and the manual pl
 
 from __future__ import annotations
 
+import json
+import shutil
 import sys
 import tempfile
 import unittest
@@ -94,7 +96,12 @@ class CanonicalImmutabilityTests(unittest.TestCase):
         ch.finalize_challenge(run.run_dir, "run")
 
         self.assertEqual(canonical_before, file_digest(run.run_dir / "canonical-suite.json"))
-        self.assertEqual(manifest_before, (run.run_dir / "run-manifest.json").read_text(encoding="utf-8"))
+        # Only the publication proof is refreshed (the report now shows the CH case); the
+        # stage chain and the canonical binding are untouched.
+        before, after = json.loads(manifest_before), json.loads((run.run_dir / "run-manifest.json").read_text(encoding="utf-8"))
+        self.assertEqual({k: v for k, v in before.items() if k != "publication"},
+                         {k: v for k, v in after.items() if k != "publication"})
+        ch.pipeline.verify_manifest(run.run_dir / "run-manifest.json")
         self.assertEqual(tc_count_before, len(run.output("test-cases.json")["test_cases"]))
 
     def test_challenge_cases_follow_the_canonical_step_rules(self) -> None:
@@ -520,6 +527,70 @@ class VerifyTests(unittest.TestCase):
         verified = ch.verify_challenge(run.run_dir, "run")
         self.assertTrue(verified["verified"])
         self.assertEqual(file_digest(run.run_dir / "canonical-suite.json"), verified["parent_canonical_digest"])
+
+
+
+class PublicationRefreshTests(unittest.TestCase):
+    """/ftd-gen, then /ftd-chaos: the published report, organization and execution plan show
+    the finalized CH cases without a manual /ftd-render."""
+
+    @staticmethod
+    def chaos(run, challenge_id: str = "night") -> dict:
+        related = ch.pipeline.read_canonical(run.run_dir / "canonical-suite.json")["cases"][0]["id"]
+        ch.start_challenge(run.run_dir, challenge_id, seeds=[])
+        ch.submit_challenge(run.run_dir, challenge_id, {"cases": [_case(related_test_cases=[related])], "seed_dispositions": []})
+        return ch.finalize_challenge(run.run_dir, challenge_id)
+
+    def published(self, run) -> dict:
+        output = run.artifacts / "output"
+        return {name: (output / name).read_bytes() for name in ("report.html", "organization.json", "execution-plan.md",
+                                                                "test-cases.json")}
+
+    def test_finalizing_a_chaos_run_refreshes_the_suite_projections(self) -> None:
+        run = PackRun("saas-accounts")
+        self.addCleanup(run.close)
+        run.finalize()
+        canonical = file_digest(run.run_dir / "canonical-suite.json")
+        before = self.published(run)
+        shutil.rmtree(run.workspace)  # nothing may read project sources from here on
+        result = self.chaos(run)
+        self.assertEqual([run.run_dir.name], result["publication_refreshed"])
+        after = self.published(run)
+        self.assertEqual(canonical, file_digest(run.run_dir / "canonical-suite.json"))
+        self.assertEqual(before["test-cases.json"], after["test-cases.json"])
+        self.assertIn(b'id="tc-tpl-night:CH-001"', after["report.html"])
+        self.assertIn(b"night:CH-001", after["organization.json"])
+        self.assertIn(b"CH-001", after["execution-plan.md"])
+        self.assertNotIn(b"CH-001", before["execution-plan.md"])
+        ch.pipeline.verify_manifest(run.run_dir / "run-manifest.json")
+
+    def test_rendering_again_is_idempotent(self) -> None:
+        run = PackRun("saas-accounts")
+        self.addCleanup(run.close)
+        run.finalize()
+        self.chaos(run)
+        first = self.published(run)
+        ch.pipeline.render_run(run.run_dir)
+        self.assertEqual(first, self.published(run))
+
+    def test_the_live_successor_is_refreshed_and_the_replaced_parent_is_left_alone(self) -> None:
+        run = PackRun("saas-accounts")
+        self.addCleanup(run.close)
+        run.finalize()
+        result = ch.pipeline.start_run(
+            workspace=run.workspace, artifact_root=run.artifacts, run_id="revision",
+            sources_selected=[{"path": path, "role": item["role"]} for path, item in run.pack["sources"].items()],
+            locale=run.pack.get("locale"), request_text=run.pack.get("request", ""),
+            reading={"strategy": "SEQUENTIAL"}, supersedes=run.run_dir.name)
+        revision = Path(result["run_dir"])
+        for stage in ("design", "expansion", "procedures"):
+            ch.pipeline.submit_stage(revision, stage, run.pack["stages"][stage])
+        ch.pipeline.finalize_run(revision)
+        parent_manifest = (run.run_dir / "run-manifest.json").read_bytes()
+        outcome = self.chaos(run)
+        self.assertEqual(["revision"], outcome["publication_refreshed"])
+        self.assertEqual(parent_manifest, (run.run_dir / "run-manifest.json").read_bytes())
+        self.assertIn(b"night:CH-001", (run.artifacts / "output" / "organization.json").read_bytes())
 
 
 if __name__ == "__main__":
