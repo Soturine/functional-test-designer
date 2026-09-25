@@ -63,8 +63,9 @@ There are never `subtests`: independent variants are separate Test Cases; depend
 
 How the same cases are grouped for execution. Nothing here copies a case; `diagnostics.cloned_cases` is always 0.
 
-- `groups[]`: `id`, `kind` (`FUNCTIONAL`, `TRANSVERSAL`, `EXECUTION_VIEW`), `label` (run locale), `identifier`, `flow_reference`, `order_source` and ordered `members[{case, origin, via, order, chaos_run_id?}]`.
+- `groups[]`: `id`, `kind` (`FUNCTIONAL`, `USE_CASE`, `TRANSVERSAL`, `EXECUTION_VIEW`), `label` (run locale), `identifier`, `flow_reference`, `order_source` and ordered `members[{case, origin, via, order, chaos_run_id?}]`.
   - A `FUNCTIONAL` group holds the cases of one functional requirement. Its order follows explicit guidance, then the main flow of the use case the requirement is exercised with (`USE_CASE_MAIN_FLOW`); an alternative-flow case sits right after the step it branches from; otherwise the canonical order (`CANONICAL_ORDER`) is kept.
+  - Membership is traceability: a case joins a requirement group only when it traces to that requirement. A flow only orders members. A case that traces to a use case or one of its flows but to no requirement joins that use case's own group (`USE_CASE`, ordered by that use case's flow).
   - `TRANSVERSAL` holds rule-only cases. Execution views (`E2E`, `LOAD_CONCURRENCY`, `PHYSICAL_DEVICE`, `CHAOS_RESILIENCE`, `MANUAL_FIELD`) are derived from each case's semantic category (primary type, automation layer, execution variants, chaos execution tags), never from where it came from. `MANUAL_FIELD` is omitted when it would repeat the physical view.
   - `origin` is `CANONICAL` or `POST_SUITE`. A finalized chaos case joins its related case's group right after it, and its execution views; it keeps its `CH-*` identity.
 - `memberships`: case key (`TC-001` or `<chaos-id>:CH-001`) → `[{group, order}]`.

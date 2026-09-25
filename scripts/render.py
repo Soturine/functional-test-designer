@@ -988,7 +988,7 @@ def _organization_views(organization: dict[str, Any], cases: list[dict[str, Any]
             f'</div>{pages}</section>'
         )
 
-    functional = [g for g in organization["groups"] if g["kind"] in {"FUNCTIONAL", "TRANSVERSAL"}]
+    functional = [g for g in organization["groups"] if g["kind"] in {"FUNCTIONAL", "USE_CASE", "TRANSVERSAL"}]
     views = [("functional", labels["view_functional"], "".join(card("functional", g) for g in functional))]
     for group in organization["groups"]:
         if group["kind"] == "EXECUTION_VIEW":

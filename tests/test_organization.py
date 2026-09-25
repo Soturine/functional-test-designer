@@ -69,7 +69,7 @@ class FunctionalOrderTests(unittest.TestCase):
         self.assertEqual("USE_CASE_MAIN_FLOW", group(organize(cases), "FR01")["order_source"])
 
     def test_an_alternative_flow_case_sits_after_the_step_it_branches_from(self) -> None:
-        cases = [case(1, "Declined card keeps the order open", ["AF-1.1", "UC-01"]),
+        cases = [case(1, "Declined card keeps the order open", ["FR-01", "AF-1.1", "UC-01"]),
                  case(2, "Payment confirmation closes the order", ["FR-01", "UC-01"]),
                  case(3, "Cart opens with the shopper items", ["FR-01", "UC-01"]),
                  case(4, "Shipping address entered is kept", ["FR-01", "UC-01"])]
@@ -90,6 +90,42 @@ class FunctionalOrderTests(unittest.TestCase):
         self.assertEqual(["TC-001"], [m["case"] for m in group(organization, "TRANSVERSAL")["members"]])
         self.assertEqual(["TC-002"], [m["case"] for m in group(organization, "E2E")["members"]])
         self.assertNotIn("TC-002", [m["case"] for m in group(organization, "FR01")["members"]])
+
+
+class MembershipVersusOrderTests(unittest.TestCase):
+    """A flow orders a requirement's real members; it never makes a case a member."""
+
+    def test_a_flow_alone_cannot_make_a_case_a_requirement_member(self) -> None:
+        cases = [case(1, "Declined card keeps the order open", ["AF-1.1", "UC-01"]),
+                 case(2, "Cart opens with the shopper items", ["FR-01", "UC-01"]),
+                 case(3, "Payment confirmation closes the order", ["FR-01", "UC-01"])]
+        organization = organize(cases)
+        self.assertEqual(["TC-002", "TC-003"], [m["case"] for m in group(organization, "FR01")["members"]])
+        uc = group(organization, "UC01")
+        self.assertEqual(("USE_CASE", ["TC-001"]), (uc["kind"], [m["case"] for m in uc["members"]]))
+        self.assertEqual(["UC01"], [m["group"] for m in organization["memberships"]["TC-001"]])
+        self.assertEqual(3, len(organization["memberships"]))  # every case placed, none added or dropped
+
+    def test_the_use_case_group_follows_its_own_flow(self) -> None:
+        cases = [case(1, "Payment confirmation closes the order", ["UC-01"]),
+                 case(2, "Declined card keeps the order open", ["AF-1.1"]),
+                 case(3, "Cart opens with the shopper items", ["UC-01"])]
+        uc = group(organize(cases), "UC01")
+        self.assertEqual(["TC-003", "TC-001", "TC-002"], [m["case"] for m in uc["members"]])
+        self.assertEqual("USE_CASE_MAIN_FLOW", uc["order_source"])
+
+    def test_requirement_groups_come_before_use_case_groups(self) -> None:
+        cases = [case(1, "Declined card keeps the order open", ["AF-1.1"]), case(2, "Search by name", ["FR-02"])]
+        ids = [g["id"] for g in organize(cases)["groups"]]
+        self.assertLess(ids.index("FR02"), ids.index("UC01"))
+
+    def test_the_fallback_order_is_stable(self) -> None:
+        cases = [case(3, "Empty search", ["FR-02"]), case(1, "Search by name", ["FR-02"]),
+                 case(2, "Search by category", ["FR-02"])]
+        first, second = organize(cases), organize(list(cases))
+        self.assertEqual(first, second)
+        self.assertEqual(["TC-003", "TC-001", "TC-002"], [m["case"] for m in group(first, "FR02")["members"]])
+        self.assertEqual("CANONICAL_ORDER", group(first, "FR02")["order_source"])
 
 
 class MembershipTests(unittest.TestCase):

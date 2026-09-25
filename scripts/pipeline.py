@@ -890,10 +890,13 @@ def build_organization(
 ) -> dict[str, Any]:
     """Placements of canonical and post-suite cases in functional groups and execution
     views. Functional groups are the authority's functional requirements (or, when it has
-    none, its use cases, else the scenario families). Inside a functional group, cases
-    follow the main flow of the use case most associated with that requirement, with an
-    alternative flow's cases right after the step it challenges; without a derivable flow
-    the canonical order is kept. A case appears in several groups by reference only."""
+    none, its use cases, else the scenario families). Membership is traceability: a case
+    joins a requirement group only when it traces to that requirement. A use-case flow only
+    ORDERS a group's members (main flow, an alternative flow's cases right after the step it
+    challenges); it never adds members. A case that traces to a use case or flow but to no
+    requirement joins that use case's own group; one tracing to neither is transversal.
+    Without a derivable flow the canonical order is kept. A case appears in several groups
+    by reference only."""
     language = (locale or canonical["index"].get("output_locale") or "en").split("-")[0].lower()
     labels = ORGANIZATION_LABELS.get(language, ORGANIZATION_LABELS["en"])
     cases = canonical["cases"]
@@ -913,15 +916,15 @@ def build_organization(
         ids = {normalize_identifier(v) for v in case.get("source_identifiers", [])}
         for uc in (i for i in ids if kind_of.get(i) == "USE_CASE"):
             co.setdefault(uc, Counter()).update(i for i in ids if kind_of.get(i) == functional_kind)
-    uc_group = {uc: sorted(counter.items(), key=lambda kv: (-kv[1], kv[0]))[0][0] for uc, counter in co.items() if counter}
-    # Several requirements may share one documented flow: each follows the use case its
-    # Test Cases co-occur with most.
+    # Several requirements may share one documented flow: each is ORDERED by the use case its
+    # own Test Cases co-occur with most. This never decides who belongs to the requirement.
     group_flow: dict[str, str] = {}
     if functional_kind == "FUNCTIONAL_REQUIREMENT":
         for group in {g for counter in co.values() for g in counter}:
             group_flow[group] = sorted(co, key=lambda u: (-co[u][group], u))[0]
-    if functional_kind == "USE_CASE":
-        group_flow = {uc: uc for uc in kind_of if kind_of[uc] == "USE_CASE"}
+    # A use case's own group follows its own flow.
+    for uc in {*flows, *(i for i in kind_of if kind_of[i] == "USE_CASE")}:
+        group_flow.setdefault(uc, uc)
 
     def functional_groups(case: dict[str, Any]) -> tuple[list[str], str]:
         if case.get("test_basis") == "E2E":
@@ -932,12 +935,10 @@ def build_organization(
         direct = [i for i in ids if kind_of.get(i) == functional_kind]
         if direct:
             return list(dict.fromkeys(direct)), "IDENTIFIER"
-        via = []
-        for i in ids:
-            uc = i if kind_of.get(i) == "USE_CASE" else owner_use_case.get(i)
-            target = uc if functional_kind == "USE_CASE" else uc_group.get(uc or "")
-            if target:
-                via.append(target)
+        # No requirement it traces to: its use case (directly, or as the owner of the flow it
+        # exercises) is its home — never a requirement merely sharing that use case.
+        via = [i if kind_of.get(i) == "USE_CASE" else owner_use_case.get(i) for i in ids]
+        via = [uc for uc in via if uc]
         if via:
             return list(dict.fromkeys(via)), "USE_CASE"
         return ["TRANSVERSAL"], "TRANSVERSAL"
@@ -1033,7 +1034,14 @@ def build_organization(
         display, title = title_of.get(group, (group, None))
         return f"{display} — {title.strip()}" if title and title.strip() and title.strip() != display else display
 
-    functional_order = sorted((g for g in members if g not in labels), key=lambda g: (g.startswith("FAMILY:"), g))
+    def group_kind(group: str) -> str:
+        if group == "TRANSVERSAL":
+            return "TRANSVERSAL"
+        return "USE_CASE" if functional_kind == "FUNCTIONAL_REQUIREMENT" and kind_of.get(group) == "USE_CASE" \
+            or (functional_kind == "FUNCTIONAL_REQUIREMENT" and group in flows) else "FUNCTIONAL"
+
+    functional_order = sorted((g for g in members if g not in labels),
+                              key=lambda g: (g.startswith("FAMILY:"), group_kind(g) == "USE_CASE", g))
     groups_out = []
     for group in [*functional_order, "TRANSVERSAL"]:
         if group not in ordered_groups:
@@ -1042,7 +1050,7 @@ def build_organization(
         ordered = [{**e, "order": i} for i, e in enumerate(ordered_groups[group], 1)]
         matched = any(positions.get((group, e["case"])) is not None for e in ordered)
         groups_out.append({
-            "id": group, "kind": "TRANSVERSAL" if group == "TRANSVERSAL" else "FUNCTIONAL", "label": group_label(group),
+            "id": group, "kind": group_kind(group), "label": group_label(group),
             "identifier": title_of.get(group, (None,))[0], "flow_reference": flows[flow_uc]["identifier"] if flow_uc in flows else None,
             "order_source": "USE_CASE_MAIN_FLOW" if matched else "CANONICAL_ORDER", "members": ordered,
         })

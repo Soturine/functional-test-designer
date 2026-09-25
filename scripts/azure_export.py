@@ -187,7 +187,7 @@ def suite_name(identifier: str | None, title: str | None) -> str:
     return identifier or title or UNASSIGNED
 
 
-SUITE_TYPES = {"FUNCTIONAL": "REQUIREMENT_BASED", "TRANSVERSAL": "STATIC", "EXECUTION_VIEW": "STATIC"}
+SUITE_TYPES = {"FUNCTIONAL": "REQUIREMENT_BASED", "USE_CASE": "STATIC", "TRANSVERSAL": "STATIC", "EXECUTION_VIEW": "STATIC"}
 
 
 def _placements(suites: list[dict[str, Any]]) -> dict[str, int]:
