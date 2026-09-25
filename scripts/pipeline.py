@@ -1371,7 +1371,7 @@ def finalize_run(run_dir: Path, formats: Any = None, baseline: dict[str, Any] | 
     # A validated run is frozen: a newer publication never edits it. Supersession is an
     # explicit relation recorded by the newer run (run.json "supersedes"), nothing more.
     return {"run_dir": str(run_dir), "canonical_path": str(canonical_path), "render": rendered,
-            "metrics": metrics, "supersedes": run.get("supersedes")}
+            "metrics": metrics, "supersedes": run.get("supersedes"), "post_generation": run_post_generation(run_dir)}
 
 
 def _publish(run_dir: Path, artifact_root: Path, files: list[str]) -> None:
@@ -1415,6 +1415,32 @@ def reading_metrics(run_dir: Path, records: list[dict[str, Any]]) -> dict[str, i
         "reused_file_catalogs": states["REUSED"],
         "source_digest_checks": len(records),
     }
+
+
+def post_generation_actions(run_dir: Path) -> list[str]:
+    """The follow-up actions the user asked for (instructions file or current request)."""
+    path = Path(run_dir) / "normalized-request.json"
+    return list((read_json(path).get("effective") or {}).get("post_generation") or []) if path.is_file() else []
+
+
+def run_post_generation(run_dir: Path) -> dict[str, Any]:
+    """After the canonical finalize: canonical → optional chaos → refresh → optional local Azure
+    export → stop. A chaos pass is semantic work for the host, so it is returned as the next
+    action (its own finalize refreshes the publication and runs the local export). Remote
+    publication is never part of this sequence."""
+    actions = post_generation_actions(run_dir)
+    if "CHAOS" in actions:
+        steps = ["finalize chaos (refreshes the publication)"]
+        if "AZURE_LOCAL_EXPORT" in actions:
+            steps.append("local /ftd-azure export")
+        return {"requested": actions, "done": [], "next_actions": [{
+            "action": "CHAOS", "command": f'python scripts/workflow.py chaos --run "{Path(run_dir)}"',
+            "then": steps}, "STOP"]}
+    done = {}
+    if "AZURE_LOCAL_EXPORT" in actions:
+        import azure_export
+        done["AZURE_LOCAL_EXPORT"] = azure_export.convert_run(run_dir)
+    return {"requested": actions, "done": done, "next_actions": ["STOP"]}
 
 
 def refresh_publication_after_post_suite(parent_run_dir: Path) -> list[str]:

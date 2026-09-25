@@ -36,6 +36,8 @@ This works for any project: logistics, ERP, SaaS, APIs, IoT, industrial, aerospa
   - Run `scripts/workflow.py gen --input-file ...` to get its text and the handoff contract. Interpret it **semantically** into a normalized request: sources with roles and order, output, reading preferences, guidance and seeds. Then rerun with `--normalized <file>`, which persists `<run>/normalized-request.json`.
   - Explicit command options and what the user says now win over the file; the file wins over defaults. Seeds provoke reasoning and never limit it.
   - If a source's authority role is materially ambiguous, ask one concise question instead of promoting evidence.
+  - **Follow-up actions.** Wording such as "depois da run: fazer chaos, converter azure" or "no final quero chaos + Azure local", under any heading, goes into `post_generation` (`CHAOS`, `AZURE_LOCAL_EXPORT`). It is workflow guidance, not authority and not a coverage ceiling. Any Azure wording means the local export; never map it to `/ftd-azure-publish`, which runs only on an explicit request to publish. `--after chaos,azure|none` (or what the user says now) overrides the file.
+  - After `finalize`, follow `post_generation.next_actions`: run `/ftd-chaos` when asked (its finalize refreshes the publication and then writes the local Azure package if requested), otherwise the local export has already run. Then stop.
 - **Orchestration.** `/ftd-gen` then drives the pipeline below end to end. Do not ask the user to run stages by hand. Details: [workflow.md](references/workflow.md).
 
 ## The pipeline

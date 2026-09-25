@@ -13,7 +13,7 @@ holds no phrase catalog — it never tries to enumerate human language.
 
 CLI (the explicit form of the three primary commands):
 
-  workflow.py gen   [--input-file PATH] [--output json,md,html] [--diagnostics]
+  workflow.py gen   [--input-file PATH] [--output json,md,html] [--diagnostics] [--after chaos,azure|none]
                     [--output-dir DIR] [--locale L] [--normalized FILE] [--run-id ID]
   workflow.py chaos --run RUN [--input-file PATH] [--output json,md,html]
                     [--chaos-id ID] [--normalized FILE] [--focus TEXT]
@@ -46,7 +46,7 @@ import challenge as challenge_stage  # noqa: E402
 import azure_export  # noqa: E402
 import azure_publish  # noqa: E402
 import instructions  # noqa: E402
-from common import read_json  # noqa: E402
+from common import normalize_post_generation, read_json  # noqa: E402
 from procedures import audit_case  # noqa: E402
 
 
@@ -62,6 +62,25 @@ LEGACY_REQUEST_FIELDS = {
     "test_asset_inventory", "scenario_profiles", "evidence_packs", "selected_evidence",
 }
 VALID_FOCI = {"everything", "procedure", "automation", "coverage", "outputs"}
+
+
+# `--after` tokens: a command-line contract (the instructions file is read semantically by
+# the host). Remote publication is deliberately absent: it is never a follow-up action.
+AFTER_TOKENS = {"chaos": "CHAOS", "azure": "AZURE_LOCAL_EXPORT"}
+
+
+def parse_after(value: Any) -> list[str] | None:
+    """`--after chaos,azure` / `--after none`; None when the option was not given."""
+    if value in (None, ""):
+        return None
+    tokens = [t.strip().casefold() for t in (value.split(",") if isinstance(value, str) else value) if str(t).strip()]
+    if tokens == ["none"]:
+        return []
+    unknown = [t for t in tokens if t not in AFTER_TOKENS]
+    if unknown:
+        raise ValueError(f"--after accepts chaos, azure or none (got {unknown}); remote publication is never "
+                         "automatic — use /ftd-azure-publish explicitly")
+    return normalize_post_generation(AFTER_TOKENS[t] for t in tokens)
 
 
 class IntentUnresolved(ValueError):
@@ -242,6 +261,7 @@ def dispatch(intent: str, **request: Any) -> Any:
                 input_file=request.get("input_file"), normalized=request.get("normalized"),
                 explicit={"output": request.get("output"), "diagnostics": request.get("diagnostics"),
                           "locale": request.get("locale"), "output_dir": request.get("output_dir"),
+                          "post_generation": parse_after(request.get("after")),
                           **{f"reading_{k}": v for k, v in (request.get("reading") or {}).items()}},
                 workspace=request.get("workspace"), run_id=request.get("run_id"),
             )
@@ -400,6 +420,7 @@ def main(argv: list[str] | None = None) -> int:
     gen.add_argument("--locale")
     gen.add_argument("--normalized", type=Path, help="the host model's normalized request JSON")
     gen.add_argument("--run-id")
+    gen.add_argument("--after", help="follow-up after the run: chaos,azure (local export) or none; overrides the file")
     gen.add_argument("--workspace", type=Path, help="current workspace (default: cwd)")
     gen.add_argument("--reading-strategy", choices=instructions.STRATEGIES)
     gen.add_argument("--reading-worker-model")
@@ -423,7 +444,8 @@ def main(argv: list[str] | None = None) -> int:
             result = generate(
                 input_file=args.input_file, normalized=read_json(args.normalized) if args.normalized else None,
                 explicit={"output": args.output, "diagnostics": args.diagnostics or None, "locale": args.locale,
-                          "output_dir": args.output_dir, "reading_strategy": args.reading_strategy,
+                          "output_dir": args.output_dir, "post_generation": parse_after(args.after),
+                          "reading_strategy": args.reading_strategy,
                           "reading_worker_model": args.reading_worker_model,
                           "reading_concurrency": args.reading_concurrency},
                 workspace=args.workspace, run_id=args.run_id,

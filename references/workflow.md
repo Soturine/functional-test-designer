@@ -57,6 +57,8 @@ Natural language stays first-class, but Python does not interpret it.
 6. `finalize` in the requested formats, including diagnostics when asked;
 7. `verify`.
 
+**Optional follow-up.** The normalized request may carry `post_generation` (`CHAOS`, `AZURE_LOCAL_EXPORT`), read semantically from any wording or heading in the instructions file, or given as `--after chaos,azure|none` (which overrides the file). The sequence is canonical finalize → optional chaos → finalize chaos → refresh publication → optional local `/ftd-azure` export → stop. `finalize` returns `post_generation` with `done` and `next_actions`: without chaos the local export runs immediately; with chaos it runs when the chaos run finalizes. Remote publication is never a follow-up action: a request containing one is rejected, and `/ftd-azure-publish` runs only on an explicit request. No stage or gate is added.
+
 A `VALIDATED` run is frozen: nothing later edits its files. To publish a revision, start a new run id with `--supersedes <earlier-run-id>`; the relation is recorded in the new run's `run.json` only. With unchanged sources every file catalog is reused, so a revision needs no reader, and accepted stage payloads can be resubmitted through the normal validators.
 
 The direct form `dispatch("ftd-gen", workspace=..., sources=[{path, role}], ...)` still exists for programmatic callers. A pre-v2.3 request carrying `scenario_profiles`, `evidence_packs`, `risk_conditions` or similar pre-authored semantics is rejected.

@@ -748,8 +748,15 @@ def finalize_challenge(
     # The suite's own projections (report, organization, execution plan) now include these
     # cases; they are re-rendered from persisted state, the canonical suite stays byte-identical.
     refreshed = pipeline.refresh_publication_after_post_suite(run_dir)
-    return {"challenge_dir": str(challenge_dir), "files": files, "cases": len(result["cases"]),
-            "published": [str(path) for path in published], "publication_refreshed": refreshed}
+    outcome = {"challenge_dir": str(challenge_dir), "files": files, "cases": len(result["cases"]),
+               "published": [str(path) for path in published], "publication_refreshed": refreshed}
+    # Requested follow-up (instructions or current request): the local Azure package of the
+    # live publication, then stop. Never a remote publication.
+    if "AZURE_LOCAL_EXPORT" in pipeline.post_generation_actions(run_dir):
+        import azure_export
+        live = [run_dir.parent / name for name in refreshed] or [run_dir]
+        outcome["azure_local_export"] = [azure_export.convert_run(path) for path in live]
+    return outcome
 
 
 def _inline_html(text: str) -> str:

@@ -51,6 +51,17 @@ Roles, one sentence each:
 
 - anything else that matters: actors, environments, integrations, known risks, review priorities
 
+## After the run (optional)
+
+- run chaos
+- convert to Azure
+
+<!--
+Optional follow-up, in any words or language ("depois da run: fazer chaos, converter azure",
+"no final quero chaos + Azure local"). Order: suite → chaos → report refreshed → local Azure package → stop.
+Azure wording always means the LOCAL package; publishing to Azure DevOps is never automatic.
+-->
+
 ## Output
 
 - Language: the language of the requirements

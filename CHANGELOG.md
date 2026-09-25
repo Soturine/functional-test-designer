@@ -105,6 +105,7 @@ Final hardening round, still targeting 2.4.0 (no new gate, stage or model pass):
 - **Honest reading metrics:** `source_files_accounted`, `runtime_source_reads` (actual reads this run), `reused_file_catalogs`, `source_digest_checks`.
 - **Semantic stages.** Templated Design/Expansion items are rejected, and files other than official stage state in a run's `stages/` stop submission and finalize.
 - **`/ftd-azure-publish`.** A new, explicit two-phase publisher: `--prepare` (read-only, target-locked `publication-plan.json`) and `--apply` (revalidated target and versions, typed approval). Non-destructive: no deletes, no removals, no plan creation, no overwrite of unmanaged or remotely changed items; runtime-only credentials. `/ftd-azure` stays local.
+- **Post-generation orchestration.** The instructions file may ask, in any wording, for follow-up actions (`post_generation`: `CHAOS`, `AZURE_LOCAL_EXPORT`); `--after chaos,azure|none` overrides it. finalize → optional chaos → refreshed publication → optional local Azure export → stop. Remote publication is never automatic.
 - **Docs.** README and `docs/instructions.md` rewritten as a quick start with a command table that says which commands can write remotely.
 
 ## 2.3.0

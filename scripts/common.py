@@ -171,3 +171,16 @@ class StageError(ValueError):
 def raise_if(stage: str, errors: list[str]) -> None:
     if errors:
         raise StageError(stage, errors)
+
+
+# Optional follow-up actions after a canonical run, in execution order. Publication to a remote
+# system is never one of them: /ftd-azure-publish runs only on an explicit user request.
+POST_GENERATION_ACTIONS = ("CHAOS", "REFRESH_PUBLICATION", "AZURE_LOCAL_EXPORT")
+
+
+def normalize_post_generation(actions: Any) -> list[str]:
+    """Execution order; a chaos pass always refreshes the publication it adds cases to."""
+    chosen = {str(a).upper() for a in actions or []}
+    if POST_GENERATION_ACTIONS[0] in chosen:
+        chosen.add(POST_GENERATION_ACTIONS[1])
+    return [action for action in POST_GENERATION_ACTIONS if action in chosen]

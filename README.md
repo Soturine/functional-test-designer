@@ -45,6 +45,16 @@ Do not read anything else.
 - Cada ideia recebe uma resposta explícita (materializada, já coberta, usada para ordenar, Question ou não aplicável com motivo) — nunca some em silêncio.
 - O que você diz na conversa ou passa na linha de comando vale mais que o arquivo.
 
+Ações depois da run também podem ir no arquivo, com as palavras que você quiser:
+
+```markdown
+## Depois da run
+- fazer chaos
+- converter azure
+```
+
+A FTD entende o pedido pelo sentido (títulos e frases livres) e segue: suíte → chaos → relatório atualizado → pacote **local** do Azure → para. "Converter/gerar/preparar Azure" é sempre o pacote local; `/ftd-azure-publish` nunca roda sozinho. Na linha de comando, `--after chaos,azure` ou `--after none` substitui o arquivo.
+
 Modelo completo e comentado: [`docs/instructions.md`](docs/instructions.md).
 
 ## Comandos

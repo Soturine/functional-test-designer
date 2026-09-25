@@ -24,6 +24,8 @@ from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any
 
+from common import POST_GENERATION_ACTIONS, normalize_post_generation
+
 INPUT_NAMES = ("instructions.md", "instructions.txt", "instructions.html")  # preference order
 INPUT_BASENAME = INPUT_NAMES[0]
 SCHEMA_VERSION = "1"
@@ -33,8 +35,9 @@ DEFAULT_OUTPUT = ("JSON", "MARKDOWN", "HTML")
 STRATEGIES = ("MULTI_AGENT_PER_SOURCE", "MULTI_AGENT_BATCHED", "SEQUENTIAL")
 REQUEST_KEYS = {
     "schema_version", "input_file", "scope_root", "sources", "source_order", "output", "reading",
-    "guidance", "seeds", "ambiguities", "transcriptions",
+    "guidance", "seeds", "ambiguities", "transcriptions", "post_generation",
 }
+
 OUTPUT_KEYS = {"formats", "diagnostics", "locale", "output_dir"}
 READING_KEYS = {"strategy", "worker_model", "concurrency"}
 
@@ -192,6 +195,10 @@ def normalization_order(input_doc: dict[str, Any], explicit: dict[str, Any], *, 
             "guidance": "[text] — any other user guidance, in the user's words",
             "seeds": "[{text, section?}] — one entry per idea; section is the user's own heading, verbatim",
             "ambiguities": "[text] — what you could not resolve; ask the user when it blocks source roles",
+            "post_generation": "optional [CHAOS | AZURE_LOCAL_EXPORT] — follow-up actions the user asks for after the "
+                               "run, in any wording or heading ('depois da run: fazer chaos, converter azure', "
+                               "'no final quero chaos + Azure local'). Any Azure wording means AZURE_LOCAL_EXPORT; "
+                               "remote publication is never a post-generation action",
         },
         "rules": [
             "Interpret every section by meaning; headings are free-form and may be anything.",
@@ -225,6 +232,19 @@ def validate_request(request: dict[str, Any], input_doc: dict[str, Any] | None) 
         extra = sorted(set(source) - {"path", "role", "purpose"})
         if extra:
             errors.append(f"sources[{index}] has unknown fields {extra}")
+    post = request.get("post_generation")
+    if post is not None:
+        values = [str(v).upper() for v in post] if isinstance(post, list) else None
+        if values is None:
+            errors.append("post_generation must be a list of actions")
+        else:
+            remote = [v for v in values if "PUBLISH" in v or "REMOTE" in v]
+            if remote:
+                errors.append(f"post_generation cannot contain {remote}: remote publication is never automatic; "
+                              "/ftd-azure-publish runs only when the user explicitly asks for it")
+            unknown = sorted(set(values) - set(POST_GENERATION_ACTIONS) - set(remote))
+            if unknown:
+                errors.append(f"post_generation accepts only {list(POST_GENERATION_ACTIONS)} (got {unknown})")
     output = request.get("output") or {}
     if not isinstance(output, dict) or set(output) - OUTPUT_KEYS:
         errors.append(f"output accepts only {sorted(OUTPUT_KEYS)}")
@@ -275,9 +295,14 @@ def effective_request(
     for key in sorted(READING_KEYS):
         value, provenance[f"reading.{key}"] = _layer(explicit.get(f"reading_{key}"), reading.get(key), None)
         effective_reading[key] = value
+    if explicit.get("post_generation") is not None:  # an explicit "none" ([]) still wins over the file
+        after, provenance["post_generation"] = explicit["post_generation"], "EXPLICIT"
+    else:
+        after, provenance["post_generation"] = _layer(None, request.get("post_generation"), [])
     return {
         "formats": formats, "diagnostics": bool(diagnostics), "locale": locale,
-        "output_dir": str(output_dir), "reading": effective_reading, "provenance": provenance,
+        "output_dir": str(output_dir), "reading": effective_reading,
+        "post_generation": normalize_post_generation(after), "provenance": provenance,
     }
 
 
