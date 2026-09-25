@@ -914,12 +914,14 @@ def render_post_suite_template(case: dict[str, Any], labels: dict[str, str]) -> 
         (labels["test_data"], f"<table class='data'>{data}</table>" if data else ""),
         (labels["steps"], f"<ol>{steps}</ol>" if steps else ""),
         (labels["postconditions"], listing(case.get("postconditions", []))),
+        (labels["cleanup"], listing(case.get("cleanup", []))),
         (labels["blockers"], listing(unknowns)),
         (labels["notes"], listing(case.get("notes", []))),
         (labels["post_suite_related"], esc(", ".join(case.get("related_test_cases", [])))),
         (labels["post_suite_lineage"], esc(f"{case.get('chaos_run_id')} · {case.get('parent_run_id')}")),
     ]
     body = "".join(f"<h4>{esc(title)}</h4>{content}" for title, content in sections if content)
+    body += _execution_context_html(case, labels)
     search = " ".join([case["id"], case["title"], case.get("rationale", ""), " ".join(case.get("execution_tags", []))]).casefold()
     return (
         f'<template class="tc-template" id="tc-tpl-{esc(case["key"])}" data-id="{esc(case["key"])}" '

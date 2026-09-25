@@ -31,7 +31,8 @@ from design import check_locale, unknown_keys
 from procedures import (
     ABSTRACT_ACTION, ABSTRACT_OBSERVATION, ACTION_ECHO, ALTERNATIVE_OUTCOMES, AUTH_ONLY, ENVIRONMENT_CONTROL,
     FIXTURE_NAME, GENERIC_PRECONDITION, LOAD_THRESHOLD, PLACEHOLDER, SUITABILITY, MATERIAL_UNKNOWNS,
-    AUTOMATION_UNKNOWNS, PATH_UNKNOWNS, compressed_action, hidden_subtest, source_vocabulary,
+    AUTOMATION_UNKNOWNS, PATH_UNKNOWNS, NAMED_REQUEST, check_execution_variants, check_request_contract,
+    compressed_action, hidden_subtest, source_vocabulary, state_contract,
 )
 import pipeline
 
@@ -53,7 +54,10 @@ CASE_FIELDS = {
     "related_findings", "related_questions", "rationale", "execution_tags", "automation_suitability",
     "priority", "required_resources", "environment_requirements", "preconditions", "test_data", "steps",
     "postconditions", "evidence_refs", "unknowns", "canonical_gap_candidate", "notes",
+    "cleanup", "execution_variants", "request_contract",
 }
+# Execution tags that make a post-suite case a load or concurrency experiment.
+LOAD_TAGS = {"LOAD", "PERFORMANCE", "CONCURRENCY", "RACE_CONDITION"}
 PAYLOAD_KEYS = {"cases", "seed_dispositions"}
 BULLET = re.compile(r"^\s*[-*]\s+(.*\S)\s*$")
 
@@ -455,7 +459,23 @@ def validate_challenge_payload(payload: dict[str, Any], context: dict[str, Any])
                         errors.append(
                             f"{label} step {step['step']} asserts the threshold {threshold.group(0)!r}, which no related "
                             "canonical Test Case states; record observed values instead")
-            used = " ".join([*preconditions, *(s["action"] + " " + (s["expected_result"] or "") for s in normalized_steps)])
+        # The same execution contracts canonical procedures may carry: other ways to run the
+        # case, the request a load experiment repeats, and how state is restored afterwards.
+        stated = " ".join(context.get("case_texts", {}).get(ref, "") for ref in related_tests)
+        related_numbers = {n.replace(",", ".") for n in re.findall(r"\d+(?:[.,]\d+)?", stated)}
+        cleanup = [_text(v) for v in item.get("cleanup", []) or [] if _text(v)]
+        variants = check_execution_variants(
+            item.get("execution_variants"), label, {row["name"] for row in test_data},
+            " ".join([*preconditions, *(s["action"] for s in normalized_steps)]), locale, errors)
+        contract = check_request_contract(item.get("request_contract"), label, related_numbers, errors)
+        if set(tags) & LOAD_TAGS and contract is None and any(NAMED_REQUEST.search(s["action"]) for s in normalized_steps):
+            errors.append(
+                f"{label} is a load or concurrency case on a request its steps name; describe that request in "
+                "request_contract (method, endpoint, parameters, body, fixture_pool, varies, measurements)")
+        if steps:
+            used = " ".join([*preconditions, *(s["action"] + " " + (s["expected_result"] or "") for s in normalized_steps),
+                             *cleanup, *(v["description"] for v in variants),
+                             *([str(contract.get("body") or ""), str(contract.get("fixture_pool") or "")] if contract else [])])
             undefined = sorted(set(FIXTURE_NAME.findall(used)) - {row["name"] for row in test_data}
                                - set(context.get("source_tokens", set())))
             if undefined:
@@ -472,6 +492,9 @@ def validate_challenge_payload(payload: dict[str, Any], context: dict[str, Any])
             "environment_requirements": [_text(v) for v in item.get("environment_requirements", []) or [] if _text(v)],
             "preconditions": preconditions, "test_data": test_data, "steps": normalized_steps,
             "postconditions": [_text(v) for v in item.get("postconditions", []) or [] if _text(v)],
+            "cleanup": cleanup, "state_contract": state_contract(cleanup),
+            **({"execution_variants": variants} if variants else {}),
+            **({"request_contract": contract} if contract else {}),
             "evidence_refs": evidence_refs, "unknowns": unknowns,
             "canonical_gap_candidate": gap if isinstance(gap, dict) else None,
             "notes": [_text(v) for v in item.get("notes", []) or [] if _text(v)],

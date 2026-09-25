@@ -593,5 +593,88 @@ class PublicationRefreshTests(unittest.TestCase):
         self.assertIn(b"night:CH-001", (run.artifacts / "output" / "organization.json").read_bytes())
 
 
+
+class PostSuiteExecutionContractTests(unittest.TestCase):
+    """A CH case can carry the same execution context as a canonical case; nothing is
+    required where it does not apply."""
+
+    EVIDENCE = [{"source": "api/payments-api.md", "reference": "REQ-1"}]
+
+    def burst(self, **over):
+        base = dict(
+            title="Burst of refund requests against one captured payment", execution_tags=["LOAD", "AUTOMATABLE"],
+            evidence_refs=self.EVIDENCE,
+            preconditions=["CLIENT_A owns PAYMENT_CAPTURED_100 with no refunds."],
+            test_data=[{"name": "CLIENT_A", "description": "API client with valid credentials"},
+                       {"name": "PAYMENT_CAPTURED_100", "description": "payment captured for 100.00 owned by CLIENT_A"}],
+            steps=[{"action": "Send fifty POST /refunds of 1.00 for PAYMENT_CAPTURED_100 within one second.",
+                    "expected_result": "Every accepted refund appears once in the refund list of PAYMENT_CAPTURED_100."}],
+            cleanup=["Void the refunds created for PAYMENT_CAPTURED_100."],
+            request_contract={"method": "POST", "endpoint": "/refunds", "parameters": ["payment PAYMENT_CAPTURED_100"],
+                              "body": "a refund of 1.00 for PAYMENT_CAPTURED_100 with its own key",
+                              "fixture_pool": "CLIENT_A credentials", "varies": ["the key of each request"],
+                              "measurements": ["status of each response", "refunds listed for PAYMENT_CAPTURED_100"]},
+            execution_variants=[{"kind": "PHYSICAL_DEVICE", "evidence_refs": self.EVIDENCE,
+                                 "description": "Send the burst from the point-of-sale terminal CLIENT_A runs on."}])
+        base.update(over)
+        return _case(**base)
+
+    def run_chaos(self, case):
+        run = PackRun("api-refunds")
+        self.addCleanup(run.close)
+        run.finalize()
+        ch.start_challenge(run.run_dir, "burst", seeds=[])
+        ch.submit_challenge(run.run_dir, "burst", {"cases": [case], "seed_dispositions": []})
+        ch.finalize_challenge(run.run_dir, "burst")
+        return run
+
+    def test_a_ch_carries_its_contract_variants_and_cleanup_to_every_projection(self) -> None:
+        import azure_export as az
+        run = self.run_chaos(self.burst())
+        stored = json.loads((run.run_dir / "challenges" / "burst" / "challenge-cases.json").read_text(encoding="utf-8"))["cases"][0]
+        self.assertEqual(("POST", "SELF_CLEANING", "PHYSICAL_DEVICE"),
+                         (stored["request_contract"]["method"], stored["state_contract"], stored["execution_variants"][0]["kind"]))
+        package = az.build_export_package(run.run_dir)
+        preview = az.preview_export(package, project="P", plan="L", suite="S")
+        payload = next(i["payload"] for i in preview["create"] if i["local_id"] == "chaos:burst:CH-001")
+        self.assertEqual("/refunds", payload["execution"]["request_contract"]["endpoint"])
+        self.assertEqual(["Void the refunds created for PAYMENT_CAPTURED_100."], payload["cleanup"])
+        self.assertEqual("SELF_CLEANING", payload["execution"]["state_contract"])
+        report = (run.artifacts / "output" / "report.html").read_text(encoding="utf-8")
+        start = report.index('id="tc-tpl-burst:CH-001"')
+        self.assertIn("Request contract", report[start:report.index("</template>", start)])
+        organization = json.loads((run.artifacts / "output" / "organization.json").read_text(encoding="utf-8"))
+        physical = next(g for g in organization["groups"] if g["id"] == "PHYSICAL_DEVICE")
+        self.assertIn("CH-001", [m["case"] for m in physical["members"]])
+
+    def test_a_load_ch_naming_a_request_needs_its_contract(self) -> None:
+        run = PackRun("api-refunds")
+        self.addCleanup(run.close)
+        run.finalize()
+        ch.start_challenge(run.run_dir, "burst", seeds=[])
+        with self.assertRaisesRegex(StageError, "load or concurrency case on a request its steps name"):
+            ch.submit_challenge(run.run_dir, "burst", {"cases": [self.burst(request_contract=None)], "seed_dispositions": []})
+
+    def test_a_ch_variant_needs_evidence(self) -> None:
+        run = PackRun("api-refunds")
+        self.addCleanup(run.close)
+        run.finalize()
+        ch.start_challenge(run.run_dir, "burst", seeds=[])
+        variant = [{"kind": "PHYSICAL_DEVICE", "description": "Send the burst from the point-of-sale terminal CLIENT_A runs on."}]
+        with self.assertRaisesRegex(StageError, "needs evidence_refs showing that this case can run that way"):
+            ch.submit_challenge(run.run_dir, "burst", {"cases": [self.burst(execution_variants=variant)], "seed_dispositions": []})
+
+    def test_irrelevant_contract_fields_are_never_required(self) -> None:
+        run = PackRun("api-refunds")
+        self.addCleanup(run.close)
+        run.finalize()
+        ch.start_challenge(run.run_dir, "plain", seeds=[])
+        ch.submit_challenge(run.run_dir, "plain", {"cases": [_case()], "seed_dispositions": []})
+        ch.finalize_challenge(run.run_dir, "plain")
+        stored = json.loads((run.run_dir / "challenges" / "plain" / "challenge-cases.json").read_text(encoding="utf-8"))["cases"][0]
+        self.assertEqual("REQUIRES_FIXTURE_RESET", stored["state_contract"])
+        self.assertNotIn("request_contract", stored)
+
+
 if __name__ == "__main__":
     unittest.main()

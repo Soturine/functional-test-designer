@@ -445,56 +445,10 @@ def validate_procedures(payload: dict[str, Any], context: dict[str, Any]) -> dic
                 "step": number, "action": action, "expected_result": expected or None,
                 "needs_clarification": not expected,
             })
-        variants = []
         case_text = " ".join([*preconditions, *(s["action"] for s in normalized_steps)])
-        for variant in item.get("execution_variants", []) or []:
-            kind = _text(variant.get("kind")) if isinstance(variant, dict) else ""
-            description = _text(variant.get("description")) if isinstance(variant, dict) else ""
-            evidence = [ref for ref in (variant.get("evidence_refs") or [] if isinstance(variant, dict) else [])
-                        if isinstance(ref, dict) and _text(ref.get("source"))]
-            # The alternative surface is a resource this very case already works with, not one
-            # a neighbouring scenario happens to use.
-            resources = [name for name in FIXTURE_NAME.findall(description)
-                         if name in {row["name"] for row in normalized_data}
-                         and re.search(rf"\b{re.escape(name)}\b", case_text)]
-            if kind not in EXECUTION_VARIANT_KINDS:
-                errors.append(f"{label} execution_variants kind must be one of {EXECUTION_VARIANT_KINDS}")
-            elif len(description.split()) < 4:
-                errors.append(f"{label} execution variant {kind} must describe how that execution differs")
-            elif not evidence:
-                errors.append(
-                    f"{label} execution variant {kind} needs evidence_refs showing that this case can run that way")
-            elif not resources:
-                errors.append(
-                    f"{label} execution variant {kind} must name the concrete resource it runs through: a fixture "
-                    "described in test_data that this case's preconditions or steps already use")
-            else:
-                check_locale(f"{label}.execution_variant", description, locale, errors)
-                variants.append({"kind": kind, "description": description})
-        contract = None
-        raw_contract = item.get("request_contract")
-        if raw_contract is not None:
-            if not isinstance(raw_contract, dict) or set(raw_contract) - set(REQUEST_CONTRACT_FIELDS):
-                errors.append(f"{label} request_contract accepts only {REQUEST_CONTRACT_FIELDS}")
-                raw_contract = {}
-            contract = {}
-            for field in REQUEST_CONTRACT_FIELDS:
-                value = raw_contract.get(field)
-                contract[field] = ([_text(v) for v in value if _text(v)] if isinstance(value, list)
-                                   else _text(value) or None)
-            for field in REQUEST_CONTRACT_REQUIRED:
-                if not contract[field]:
-                    errors.append(f"{label} request_contract.{field} is required")
-            contract_text = " ".join(v if isinstance(v, str) else " ".join(v) for v in contract.values() if v)
-            if TOOL_SYNTAX.search(contract_text):
-                errors.append(f"{label} request_contract describes the request, not a tool invocation")
-            for threshold in LOAD_THRESHOLD.finditer(" ".join(contract["measurements"] or [])
-                                                      if isinstance(contract["measurements"], list)
-                                                      else contract["measurements"] or ""):
-                if threshold.group("number").replace(",", ".") not in designed_numbers:
-                    errors.append(
-                        f"{label} request_contract.measurements asserts {threshold.group(0)!r}, which the designed "
-                        "Test Case does not state; measure and record the value instead")
+        variants = check_execution_variants(item.get("execution_variants"), label,
+                                            {row["name"] for row in normalized_data}, case_text, locale, errors)
+        contract = check_request_contract(item.get("request_contract"), label, designed_numbers, errors)
         defined = {row["name"] for row in normalized_data}
         used_text = " ".join([*preconditions, *(s["action"] + " " + (s["expected_result"] or "") for s in normalized_steps),
                               *[variant["description"] for variant in variants],
@@ -580,6 +534,62 @@ def validate_procedures(payload: dict[str, Any], context: dict[str, Any]) -> dic
     if errors:
         raise StageError("procedures", errors)
     return {"procedures": procedures, "warnings": procedure_warnings(procedures), "metrics": procedure_metrics(procedures)}
+
+
+def check_execution_variants(raw: Any, label: str, fixtures: set[str], case_text: str, locale: str,
+                             errors: list[str]) -> list[dict[str, str]]:
+    """Other ways to run the same case. Each cites evidence and names the concrete resource it
+    runs through: a described fixture the case itself already uses, never one a neighbouring
+    scenario happens to use. Shared by canonical procedures and post-suite cases."""
+    variants = []
+    for variant in raw or []:
+        variant = variant if isinstance(variant, dict) else {}
+        kind, description = _text(variant.get("kind")), _text(variant.get("description"))
+        evidence = [ref for ref in variant.get("evidence_refs") or [] if isinstance(ref, dict) and _text(ref.get("source"))]
+        resources = [name for name in FIXTURE_NAME.findall(description)
+                     if name in fixtures and re.search(rf"\b{re.escape(name)}\b", case_text)]
+        if kind not in EXECUTION_VARIANT_KINDS:
+            errors.append(f"{label} execution_variants kind must be one of {EXECUTION_VARIANT_KINDS}")
+        elif len(description.split()) < 4:
+            errors.append(f"{label} execution variant {kind} must describe how that execution differs")
+        elif not evidence:
+            errors.append(f"{label} execution variant {kind} needs evidence_refs showing that this case can run that way")
+        elif not resources:
+            errors.append(
+                f"{label} execution variant {kind} must name the concrete resource it runs through: a fixture "
+                "described in test_data that this case's preconditions or steps already use")
+        else:
+            check_locale(f"{label}.execution_variant", description, locale, errors)
+            variants.append({"kind": kind, "description": description})
+    return variants
+
+
+def check_request_contract(raw: Any, label: str, stated_numbers: set[str], errors: list[str]) -> dict[str, Any] | None:
+    """The request a load or concurrency experiment repeats: a description, not a tool
+    invocation, asserting no threshold the design (or related cases) does not state."""
+    if raw is None:
+        return None
+    if not isinstance(raw, dict) or set(raw) - set(REQUEST_CONTRACT_FIELDS):
+        errors.append(f"{label} request_contract accepts only {REQUEST_CONTRACT_FIELDS}")
+        raw = {}
+    contract: dict[str, Any] = {}
+    for field in REQUEST_CONTRACT_FIELDS:
+        value = raw.get(field)
+        contract[field] = [_text(v) for v in value if _text(v)] if isinstance(value, list) else _text(value) or None
+    for field in REQUEST_CONTRACT_REQUIRED:
+        if not contract[field]:
+            errors.append(f"{label} request_contract.{field} is required")
+    contract_text = " ".join(v if isinstance(v, str) else " ".join(v) for v in contract.values() if v)
+    if TOOL_SYNTAX.search(contract_text):
+        errors.append(f"{label} request_contract describes the request, not a tool invocation")
+    measurements = contract["measurements"]
+    measured = " ".join(measurements) if isinstance(measurements, list) else measurements or ""
+    for threshold in LOAD_THRESHOLD.finditer(measured):
+        if threshold.group("number").replace(",", ".") not in stated_numbers:
+            errors.append(
+                f"{label} request_contract.measurements asserts {threshold.group(0)!r}, which the designed "
+                "Test Case does not state; measure and record the value instead")
+    return contract
 
 
 def source_vocabulary(texts: Any) -> set[str]:

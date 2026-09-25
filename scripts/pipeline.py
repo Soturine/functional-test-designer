@@ -834,7 +834,7 @@ _VIEW_TYPES = {"LOAD_CONCURRENCY": {"PERFORMANCE", "CONCURRENCY", "RACE_CONDITIO
 _VIEW_TAGS = {"LOAD_CONCURRENCY": {"LOAD", "PERFORMANCE", "CONCURRENCY"},
               "PHYSICAL_DEVICE": {"PHYSICAL_DEVICE", "HARDWARE", "DEVICE"},
               "CHAOS_RESILIENCE": {"CHAOS_RECOVERY", "CHAOS", "RESILIENCE"},
-              "MANUAL_FIELD": {"MANUAL", "FIELD"}}
+              "MANUAL_FIELD": {"MANUAL", "FIELD", "MANUAL_FIELD"}}
 _STEP_LINE = re.compile(r"^\s*(\d{1,2})[.)]\s+(\S.*)$")
 
 
@@ -1086,6 +1086,7 @@ def build_organization(
     load_ids = {e["case"] for e in by_view["LOAD_CONCURRENCY"]}
     for record in chaos_records:
         tags = set(record["raw"].get("execution_tags", []))
+        tags |= {v.get("kind") for v in record["raw"].get("execution_variants", []) or []}
         related = set(record["raw"].get("related_test_cases", []))
         for view, recognized in _VIEW_TAGS.items():
             inherited = view == "LOAD_CONCURRENCY" and related and related <= load_ids

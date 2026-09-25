@@ -20,6 +20,7 @@ Intent: the post-suite real-world, adverse, field, physical and absurd-scenario 
   - JSON: `chaos-cases.json` and `seed-dispositions.json`.
   - Markdown: `chaos-plan.md`, the Manual/Physical/Field plan.
   - HTML: `chaos-plan.html`.
+- **Execution contracts:** a CH case may carry `cleanup`, `execution_variants` and `request_contract` under the same rules as canonical procedures (variants cite evidence and name a resource the case uses; a contract describes the request without tool syntax or unstated thresholds). A load or concurrency CH whose steps name a request must carry its `request_contract`. Each CH gets a derived `state_contract`; nothing irrelevant is required, and finalized chaos runs are never rewritten. The report, organization and `/ftd-azure` payload carry these fields.
 - **Suite publication:** After finalizing, the suite's own publication (`report.html`, `organization.json`, `execution-plan.md`) is re-rendered from persisted state so the new CH cases appear without a manual `/ftd-render`. It is the parent run's, or that of a run that explicitly supersedes it — whichever currently owns `output/`. The canonical suite stays byte-identical, no source is read and no stage is regenerated; only the publication proof is refreshed.
 
 `ftd-challenge` was renamed to this command and only prints a migration message. Natural language reaches the same dispatcher via the host's `resolved_intent="ftd-chaos"`.
