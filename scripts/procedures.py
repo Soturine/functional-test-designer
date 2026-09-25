@@ -103,6 +103,8 @@ def malformed_prose(text: str) -> bool:
     if TRUNCATED.search(text):
         return True
     return any(text.count(a) != text.count(b) for a, b in ("()", "[]", "{}")) or text.count('"') % 2 == 1
+
+
 # A step performed on behalf of a fixture actor ("As USER_A, ...", "Como USER_A, ...").
 ACTING_FIXTURE = re.compile(
     r"^\s*(?:As|Como)\s+(?:(?:the|o|a|os|as|el|la)\s+)?([A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+)\b")
@@ -118,6 +120,8 @@ def state_contract(cleanup: list[str]) -> str:
     """Who restores state after the case: its own cleanup steps, or a harness that resets
     the fixtures its test_data declares before the next case."""
     return "SELF_CLEANING" if cleanup else "REQUIRES_FIXTURE_RESET"
+
+
 # Unknowns that honestly explain why a procedure cannot cite its execution path yet.
 PATH_UNKNOWNS = {"MISSING_EXECUTION_SURFACE", "UNKNOWN_SETUP_PATH"}
 
@@ -442,13 +446,28 @@ def validate_procedures(payload: dict[str, Any], context: dict[str, Any]) -> dic
                 "needs_clarification": not expected,
             })
         variants = []
+        case_text = " ".join([*preconditions, *(s["action"] for s in normalized_steps)])
         for variant in item.get("execution_variants", []) or []:
             kind = _text(variant.get("kind")) if isinstance(variant, dict) else ""
             description = _text(variant.get("description")) if isinstance(variant, dict) else ""
+            evidence = [ref for ref in (variant.get("evidence_refs") or [] if isinstance(variant, dict) else [])
+                        if isinstance(ref, dict) and _text(ref.get("source"))]
+            # The alternative surface is a resource this very case already works with, not one
+            # a neighbouring scenario happens to use.
+            resources = [name for name in FIXTURE_NAME.findall(description)
+                         if name in {row["name"] for row in normalized_data}
+                         and re.search(rf"\b{re.escape(name)}\b", case_text)]
             if kind not in EXECUTION_VARIANT_KINDS:
                 errors.append(f"{label} execution_variants kind must be one of {EXECUTION_VARIANT_KINDS}")
             elif len(description.split()) < 4:
                 errors.append(f"{label} execution variant {kind} must describe how that execution differs")
+            elif not evidence:
+                errors.append(
+                    f"{label} execution variant {kind} needs evidence_refs showing that this case can run that way")
+            elif not resources:
+                errors.append(
+                    f"{label} execution variant {kind} must name the concrete resource it runs through: a fixture "
+                    "described in test_data that this case's preconditions or steps already use")
             else:
                 check_locale(f"{label}.execution_variant", description, locale, errors)
                 variants.append({"kind": kind, "description": description})

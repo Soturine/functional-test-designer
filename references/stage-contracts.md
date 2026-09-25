@@ -117,7 +117,7 @@ Resuming a run id (`start` again with the same `--run-id`) is allowed only when 
   "single_step_reason": "required when there is one step",
   "unknowns": [{"kind": "MISSING_FIXTURE", "detail": "", "question": "Q key"}],
   "evidence_refs": [{"source": "selected path", "reference": "section, function or screen"}],
-  "execution_variants": [{"kind": "PHYSICAL_DEVICE | SIMULATED_DEVICE | MANUAL_FIELD", "description": "how that run differs"}],
+  "execution_variants": [{"kind": "PHYSICAL_DEVICE | SIMULATED_DEVICE | MANUAL_FIELD", "description": "how that run differs, naming the resource", "evidence_refs": [{"source": "", "reference": ""}]}],
   "request_contract": {"method": "", "endpoint": "", "parameters": [], "body": "", "fixture_pool": "",
                        "varies": [], "measurements": []},
   "automation": {"suitability": "HIGH | MEDIUM | LOW | MANUAL_ONLY",
@@ -136,7 +136,7 @@ Resuming a run id (`start` again with the same `--run-id`) is allowed only when 
 - Low-information output is rejected: an expected result made only of talk about "a result", "the affected resource", "the expected behavior" (no specific state, message, record, counter, outcome, literal or fixture); truncated or unbalanced prose (a trailing connector or ellipsis, unmatched brackets or quotes); an oracle step that drops a message, number or code the designed oracle states exactly (fixture names may be renamed); and one oracle wording shared by three or more procedures designed for different oracles.
 - A step performed as a fixture actor ("As USER_A, …") needs that actor's starting context — an open session, a configured credential or client, a device in hand — in a precondition or an earlier step.
 - A load, concurrency or race experiment on the `API`/`INTEGRATION` layer whose steps name a request (an HTTP method or a resource path) carries `request_contract`: method, endpoint, parameters, body, fixture pool, what varies between requests and what is measured. It describes the request, not a tool invocation, and its measurements assert no threshold the design does not state; fixtures it names are described in `test_data`.
-- `execution_variants` (optional) records other ways to run the same case, for example through a real device instead of a simulated call; the case joins that execution view without being cloned.
+- `execution_variants` (optional) records other ways to run the same case, for example through a real device instead of a simulated call; the case joins that execution view without being cloned. A variant cites `evidence_refs` showing the case can run that way and names the concrete resource it runs through — a fixture described in `test_data` that the case's own preconditions or steps already use. A device used only by neighbouring scenarios does not make a case physical.
 - The published case derives `state_contract` from `cleanup`: `SELF_CLEANING`, or `REQUIRES_FIXTURE_RESET` when the harness must reset the described fixtures.
 - An expected result states what becomes observable; one that only says the action happened ("the request is sent", "the response is received", "the submission is processed") is rejected, and so is one offering alternative outcomes ("the record is shown or access is denied") — declare the unresolved policy instead.
 - Every semantic fixture used in preconditions, steps, postconditions or cleanup (UPPER_SNAKE names such as `USER_OWNER_A`) is described in `test_data`. Codes and constants the selected sources themselves use (for example an error code) are vocabulary, not fixtures.

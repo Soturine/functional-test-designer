@@ -448,8 +448,10 @@ class ExecutionContractTests(unittest.TestCase):
 
     def test_a_physical_execution_variant_places_the_case_in_the_physical_view_without_a_clone(self) -> None:
         def variant(pack):
-            procedure(pack, "T1")["execution_variants"] = [
-                {"kind": "PHYSICAL_DEVICE", "description": "Submit the invitation from a real handheld enrolled to ACCOUNT_A."}]
+            item = procedure(pack, "T1")
+            item["execution_variants"] = [
+                {"kind": "PHYSICAL_DEVICE", "description": "Submit the invitation from a real handheld enrolled to ACCOUNT_A.",
+                 "evidence_refs": [dict(item["evidence_refs"][0])]}]
         run = PackRun("saas-accounts", variant)
         self.addCleanup(run.close)
         run.finalize(("JSON",))
@@ -457,6 +459,31 @@ class ExecutionContractTests(unittest.TestCase):
         physical = next(g for g in organization["groups"] if g["id"] == "PHYSICAL_DEVICE")
         self.assertEqual([("TC-001", "EXECUTION_VARIANT")], [(m["case"], m["via"]) for m in physical["members"]])
         self.assertEqual(len(run.output("test-cases.json")["test_cases"]), len(organization["memberships"]))
+
+    def test_an_execution_variant_needs_evidence(self) -> None:
+        run = self.submit("saas-accounts", lambda pack: procedure(pack, "T1").update(execution_variants=[
+            {"kind": "PHYSICAL_DEVICE", "description": "Submit the invitation from a real handheld enrolled to ACCOUNT_A."}]))
+        with self.assertRaisesRegex(StageError, "needs evidence_refs showing that this case can run that way"):
+            run.submit("procedures")
+
+    def test_an_api_case_cannot_borrow_a_generic_device_variant(self) -> None:
+        def generic(pack):
+            item = procedure(pack, "T1")
+            item["execution_variants"] = [{"kind": "PHYSICAL_DEVICE", "description": "Run it on a real device in the field.",
+                                           "evidence_refs": [dict(item["evidence_refs"][0])]}]
+        run = self.submit("api-refunds", generic)
+        with self.assertRaisesRegex(StageError, "must name the concrete resource it runs through"):
+            run.submit("procedures")
+
+    def test_a_variant_resource_must_belong_to_the_case(self) -> None:
+        def borrowed(pack):
+            item = procedure(pack, "T1")
+            item["test_data"].append({"name": "SCANNER_A", "description": "a handheld scanner used by other scenarios"})
+            item["execution_variants"] = [{"kind": "PHYSICAL_DEVICE", "description": "Scan the request with SCANNER_A at the counter.",
+                                           "evidence_refs": [dict(item["evidence_refs"][0])]}]
+        run = self.submit("api-refunds", borrowed)
+        with self.assertRaisesRegex(StageError, "must name the concrete resource it runs through"):
+            run.submit("procedures")
 
     def test_an_execution_variant_must_say_how_it_differs(self) -> None:
         run = self.submit("saas-accounts", lambda pack: procedure(pack, "T1").update(
