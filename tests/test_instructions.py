@@ -89,8 +89,12 @@ class ResolutionTests(unittest.TestCase):
 
     def test_the_public_template_is_generic_and_says_sections_are_examples(self) -> None:
         text = (ROOT / "docs" / "instructions.md").read_text(encoding="utf-8")
-        self.assertIn("The sections are examples. Add/remove/rename sections freely.", text)
-        self.assertIn("guidance/seeds, not authority or a fixed schema", text)
+        self.assertIn("Headings and wording are free-form: rename, delete or add sections", text)
+        self.assertIn("This file is guidance, not authority", text)
+        for role in ("FUNCTIONAL_AUTHORITY", "TECHNICAL_CONTEXT", "IMPLEMENTATION_EVIDENCE", "TEST_ASSET"):
+            self.assertIn(role, text)
+        self.assertIn("overrides this file", text)
+        self.assertIn("recursively, but only inside itself", text)
 
 
 class TextAndOutputTests(unittest.TestCase):

@@ -1,173 +1,163 @@
-# Functional Test Designer v2.3.0
+# Functional Test Designer
 
-Agent Skill para projetar Test Cases funcionais rastreáveis e executáveis a partir somente das fontes que o usuário selecionou, em qualquer domínio.
+Agent Skill que projeta **Test Cases funcionais rastreáveis e executáveis** a partir somente das fontes que você seleciona — requisitos, documentação, código e testes existentes —, em qualquer domínio.
 
-## Ideia central
+- **Entra:** um arquivo `instructions.md` dizendo o que ler e onde focar.
+- **Sai:** uma suíte de Test Cases em JSON (fonte de verdade), Markdown e um relatório HTML offline, com Questions, Findings, cobertura e rastreabilidade.
+- **Opcional:** uma passada pós-suíte de cenários reais e adversos (`/ftd-chaos`), um pacote local para Azure DevOps (`/ftd-azure`) e, só se você pedir explicitamente, a publicação no Azure DevOps (`/ftd-azure-publish`).
 
-```text
-O LLM faz o raciocínio de QA.
-O runtime protege os poucos invariantes que garantem qualidade.
-```
+O modelo faz o raciocínio de QA; o runtime protege escopo, rastreabilidade, validação e publicação. Nada é inventado: o que as fontes não dizem vira Question ou pendência.
 
-O núcleo semântico é do modelo: entender requisitos, inferir o domínio do projeto, decompor comportamento, encontrar contradições, imaginar erros de operador e falhas, e escrever procedimentos. O runtime cuida de escopo, contabilidade das fontes, identificadores oficiais, ids, validação, estado canônico e publicação. Ele nunca inventa cenários e nunca decide significado de negócio.
+> Versão publicada: 2.3.0. O branch `develop` prepara a 2.4 (ainda não lançada).
 
-A skill não conhece nenhum domínio. O mesmo método produz "pallet errado na posição de armazenagem" em logística, "componente errado na ordem de manutenção" em aeronáutica, "cliente errado na fatura" em um ERP e "conta errada" em um app móvel. O vocabulário vem sempre das fontes selecionadas.
+## Início rápido
 
-## Uso
-
-Escreva um `docs/instructions.md` (ou `.txt`) no seu projeto e rode:
+1. Copie [`docs/instructions.md`](docs/instructions.md) para o seu projeto e edite as fontes.
+2. Rode:
 
 ```text
-/ftd-gen --input-file ./docs/instructions.md --output json,md,html
+/ftd-gen --input-file ./docs/instructions.md --output json,md,html --diagnostics --output-dir ./ftd-output
 ```
 
-Depois, se quiser:
+3. Abra `./ftd-output/output/report.html`.
+
+`--output-dir ./ftd-output` significa "salve todos os artefatos da FTD em `./ftd-output`" (o padrão é `<workspace>/ftd-output`). Sem `--run-id`, a FTD cria um id como `ftd-20260925-143000`; o estado da execução fica em `./ftd-output/.ftd/runs/<run-id>/`, e é esse caminho que os comandos seguintes recebem em `--run`.
+
+## O arquivo `instructions.md`
+
+Um arquivo de configuração humano, não uma DSL. Os títulos são livres; o modelo interpreta o texto semanticamente.
+
+```markdown
+## Sources
+1. `docs/requirements.pdf` — functional authority
+2. `docs/user/` — product context
+3. `src/` — implementation evidence
+4. `tests/` — existing tests
+
+Do not read anything else.
+
+## Things I want you to explore
+- wrong actor or resource
+- interruption and recovery
+```
+
+- É orientação, nunca autoridade: uma ideia que as fontes não sustentam não vira Test Case normativo, e as ideias não limitam a análise.
+- Cada ideia recebe uma resposta explícita (materializada, já coberta, usada para ordenar, Question ou não aplicável com motivo) — nunca some em silêncio.
+- O que você diz na conversa ou passa na linha de comando vale mais que o arquivo.
+
+Modelo completo e comentado: [`docs/instructions.md`](docs/instructions.md).
+
+## Comandos
+
+| Comando | O que faz | Escreve fora da máquina? |
+| --- | --- | --- |
+| `/ftd-gen` | Lê as fontes selecionadas e gera a suíte canônica | Não |
+| `/ftd-chaos` | Opcional: casos pós-suíte reais, adversos, físicos e de campo (`CH-*`) sobre uma suíte finalizada | Não |
+| `/ftd-render` | Re-renderiza a partir do estado salvo, sem reler fontes | Não |
+| `/ftd-check` | Auditoria somente leitura da suíte | Não |
+| `/ftd-clarify` | Lista as Questions mais importantes | Não |
+| `/ftd-azure` | Gera o pacote **local** (JSON) para Azure DevOps | **Não — nunca se conecta** |
+| `/ftd-azure-publish --prepare` | Lê o destino no Azure DevOps e gera um plano local | Não (só leitura remota) |
+| `/ftd-azure-publish --apply` | Publica o plano revisado | **Sim — só após aprovação explícita** |
+
+Pedidos em linguagem natural também funcionam ("rode o chaos", "gere o pacote do Azure"). "Gerar/converter/preparar Azure" significa sempre o pacote local; publicar exige pedido explícito.
+
+## Fluxo completo
 
 ```text
-/ftd-chaos --run <run> --input-file ./docs/instructions.md --output json,md,html
-/ftd-azure --run <run> --output json
+/ftd-gen   --input-file ./docs/instructions.md --output json,md,html --output-dir ./ftd-output
+/ftd-chaos --run ./ftd-output/.ftd/runs/<run-id> --input-file ./docs/instructions.md --output json,md,html
+/ftd-azure --run ./ftd-output/.ftd/runs/<run-id> --output json
 ```
 
-- `--output` aceita `json`, `md`/`markdown` e `html`, sem diferenciar maiúsculas e minúsculas. O padrão é `json,md,html`. Também há `--diagnostics`, `--output-dir` e `--locale`.
-- O arquivo de instruções diz o que ler, em que ordem e com que foco. As seções são livres: renomeie, remova ou crie as que quiser. O modelo as interpreta semanticamente, como orientação e sementes, nunca como autoridade. Veja o modelo em `docs/instructions.md`.
-- O que você passa na linha de comando ou diz na conversa vale mais que o arquivo, e o arquivo vale mais que os padrões da skill.
-- Pedidos em linguagem natural continuam funcionando: "gere os casos absurdos", "prepare isso para o Azure". O modelo entende a intenção no contexto; o Python só valida o alias exato e despacha.
-- `/ftd-clarify`, `/ftd-check` e `/ftd-render` continuam disponíveis.
-- `ftd-challenge` virou `/ftd-chaos`, e `ftd-mcp` virou `/ftd-azure`. Os nomes antigos só mostram uma mensagem de migração.
+- `/ftd-chaos` nunca altera a suíte canônica; ao finalizar, o relatório, a organização e o plano de execução são atualizados para mostrar os casos `CH-*`.
+- `/ftd-azure` escreve `output/azure/azure-export-package.json` e `azure-preview.json`: um work item por caso, várias Suites por caso quando preciso, nunca clones.
+
+### Publicar no Azure DevOps (opcional, explícito)
+
+```text
+/ftd-azure-publish --run ./ftd-output/.ftd/runs/<run-id> --prepare \
+    --organization https://dev.azure.com/<sua-org> --project <projeto> --plan <test-plan> --auth azure-cli
+```
+
+Revise a prévia (organização, projeto, Test Plan, quantidades de CREATE/UPDATE/CONFLICT, `DELETE operations 0`). Só então:
+
+```text
+/ftd-azure-publish --apply ./ftd-output/output/azure/publication-plan.json --auth azure-cli
+```
+
+- `--prepare` só lê; gera `publication-plan.json` preso ao destino escolhido.
+- `--apply` confere de novo o destino e as versões remotas e só escreve depois que você digita `PUBLISH <projeto> / <plano>` (ou passa `--approved` em modo não interativo).
+- O destino nunca é adivinhado, nada é apagado, Test Cases que a FTD não gerencia não são sobrescritos e credenciais nunca são salvas. Detalhes: [`entrypoints/azure-publish.md`](entrypoints/azure-publish.md).
 
 ## Como funciona
 
 ```text
-start       (runtime)  scope lock → registro das fontes → identificadores e títulos oficiais → idioma → ativos de teste
-design      (modelo)   domain model → requisitos → claims atômicos → TCs Acceptance atômicos → disposições
-                       ── baseline normativo congelado ──
-expansion   (modelo)   17 dimensões · padrões de erro de operador · superfícies de falha ·
-                       desafio dos testes existentes · caracterização · jornadas E2E   (somente aditivo)
-procedures  (modelo)   passos executáveis · fixtures semânticas · unknowns · adequação à automação
-finalize    (runtime)  validação (8 gates) → estado canônico → HTML / JSON / Markdown → prova de publicação
+start       (runtime)  escopo → fontes e papéis → identificadores oficiais → idioma → testes existentes
+reading     (leitores) catálogos factuais por fonte (reaproveitados se a fonte não mudou)
+design      (modelo)   requisitos → claims atômicos → TCs Acceptance → baseline normativo congelado
+expansion   (modelo)   17 dimensões, erros de operador, falhas, testes existentes, jornadas E2E (só adiciona)
+procedures  (modelo)   passos executáveis, fixtures semânticas, pendências, automação
+finalize    (runtime)  8 gates → estado canônico → HTML / JSON / Markdown → prova de publicação
 ```
 
-Cada estágio do modelo é um JSON enviado ao runtime. Um estágio inválido é rejeitado com todos os problemas de uma vez e nada é gravado. Depois de cada estágio o runtime escreve um `work-order.json` dizendo o que o próximo precisa contabilizar.
+Cada estágio do modelo é validado pelo runtime; um estágio inválido é rejeitado com todos os problemas de uma vez. Design, Expansion e Procedures são raciocínio semântico — scripts que geram payloads por template são rejeitados.
 
-Por padrão, antes do design, cada fonte elegível é lida por um agente leve próprio: Haiku no Claude, com concorrência limitada. Cada leitor devolve só um catálogo factual, que o runtime valida e reconcilia; conflitos são preservados, sem votação. O modelo principal faz toda a síntese semântica. Catálogos de fontes que não mudaram são reaproveitados entre execuções, e uma fonte alterada invalida só a própria entrada. O usuário pode pedir leitura sequencial, sem subagentes, ou um número fixo de workers. O `/ftd-gen` orquestra tudo isso. Por baixo, os passos são:
+- **Escopo:** só as fontes selecionadas; um diretório é recursivo apenas dentro dele.
+- **Papéis:** `FUNCTIONAL_AUTHORITY` (o que deve acontecer), `TECHNICAL_CONTEXT` (como chegar lá), `IMPLEMENTATION_EVIDENCE` (o que existe), `TEST_ASSET` (testes existentes: desafiam a suíte, nunca são autoridade).
+- **Idioma:** o da autoridade, salvo pedido explícito.
+
+## Saídas
+
+```text
+./ftd-output/
+|-- output/
+|   |-- report.html            relatório offline: por requisito, famílias, E2E, carga, físicos, chaos, todos
+|   |-- test-cases.json        índice: requisitos, cobertura, gaps, gates
+|   |-- test-cases/TC-XXX.json fonte de verdade de cada Test Case
+|   |-- test-cases-md/         versão Markdown de cada Test Case
+|   |-- organization.json      grupos e ordem de execução (referências, sem cópias)
+|   |-- execution-plan.md      cada grupo com seus casos em ordem de execução
+|   |-- questions.json
+|   |-- chaos/<id>/            com /ftd-chaos
+|   `-- azure/                 com /ftd-azure (e o plano de /ftd-azure-publish)
+|-- diagnostics/               com --diagnostics
+`-- .ftd/runs/<run-id>/        estado privado da execução
+```
+
+## Segurança
+
+- A FTD só lê as fontes que você seleciona e nunca executa o código delas.
+- `/ftd-azure` nunca se conecta a nada. Só `/ftd-azure-publish --apply` escreve no Azure DevOps, depois de um destino explícito, um plano revisado e sua aprovação. Não existe operação de exclusão.
+- Credenciais do Azure são usadas só em tempo de execução (sessão do Azure CLI, login interativo Microsoft Entra ou uma variável de ambiente que você nomeia) e nunca são gravadas.
+
+## Avançado
+
+- Contratos e referências: [`SKILL.md`](SKILL.md), [`references/workflow.md`](references/workflow.md), [`references/stage-contracts.md`](references/stage-contracts.md), [`references/output-contract.md`](references/output-contract.md), [`references/validation.md`](references/validation.md).
+- Passos internos (o `/ftd-gen` já orquestra tudo; use só para depurar):
 
 ```bash
-python scripts/pipeline.py start --workspace <raiz> \
-    --source "docs/requisitos.pdf=FUNCTIONAL_AUTHORITY" \
-    --source "apps=IMPLEMENTATION_EVIDENCE" --source "docs/user=TECHNICAL_CONTEXT" \
-    --artifact-root <destino> --run-id <id> --formats HTML,JSON,MARKDOWN --diagnostics
-python scripts/pipeline.py submit --run <run> --stage design --file design.json
-python scripts/pipeline.py submit --run <run> --stage expansion --file expansion.json
-python scripts/pipeline.py submit --run <run> --stage procedures --file procedures.json
+python scripts/pipeline.py start --workspace <raiz> --source "docs/requisitos.pdf=FUNCTIONAL_AUTHORITY" \
+    --source "src=IMPLEMENTATION_EVIDENCE" --artifact-root <destino> --run-id <id>
+python scripts/pipeline.py submit --run <run> --stage design --file design.json      # depois expansion, procedures
 python scripts/pipeline.py finalize --run <run>
 python scripts/pipeline.py verify --run <run>
 ```
 
-## Princípios
-
-- **Escopo:** somente fontes selecionadas. Um diretório é recursivo apenas dentro dele. Imports, links e vizinhos não ampliam o escopo.
-- **Papéis:** `FUNCTIONAL_AUTHORITY` define o que deve acontecer. `IMPLEMENTATION_EVIDENCE` mostra o que existe, `TECHNICAL_CONTEXT` mostra como chegar lá, e `TEST_ASSET` (testes existentes) é um conjunto de desafio, nunca autoridade. Arquivos de teste convencionais dentro de uma seleção `IMPLEMENTATION_EVIDENCE` também desafiam a suíte, sem mudar de papel.
-- **Nada inventado:** oracle, rota, rótulo, campo, mensagem, credencial ou estado sem evidência vira Question ou unknown do procedimento. Divergência entre autoridade e implementação vira Finding.
-- **Idioma:** todo texto humano sai no `output_locale` da execução (pedido explícito > idioma da autoridade > idioma do pedido). Símbolos de código, endpoints e ids ficam literais.
-- **Títulos oficiais:** o título de um TC descreve o comportamento testado, nunca "REQ-A — cabeçalho". Os identificadores ficam em `source_identifiers` e aparecem como chips no card do HTML: `TC-001 Comportamento atômico [REQ-A] [POLICY-B] [FLOW-C]`.
-- **Baseline normativo:** cada claim testável gera um TC Acceptance atômico, que é congelado antes da expansão. A expansão só adiciona, e cada identificador da autoridade termina coberto ou com disposição explícita.
-- **Segunda passada obrigatória:** as 17 dimensões são avaliadas (`NEGATIVE`, `BOUNDARY`, `OPERATOR_ERROR`, `MISUSE`, `STATE_TRANSITION`, `DECISION_TABLE`, `CONCURRENCY`, `RACE_CONDITION`, `IDEMPOTENCY`, `INTEGRATION`, `RECOVERY`, `CHAOS`, `SECURITY`, `AUTHORIZATION`, `DATA_INTEGRITY`, `CROSS_REQUIREMENT`, `E2E`), com 14 padrões universais de erro de operador e 15 superfícies de falha. Cada item é interpretado nos termos do projeto ou marcado como não aplicável com motivo.
-- **Cobertura semântica:** um cenário adversarial não é "coberto" por um TC de caminho feliz, e um intent copiado do alvo é rejeitado. Superfícies de falha independentes não se fundem em uma pergunta genérica.
-- **Procedimentos depois do design:** o test design decide o que testar, e a geração de procedimentos só explica como executar. Procedimentos não criam, apagam, fundem nem mudam TCs. Cada um cita `evidence_refs` ou declara a lacuna de caminho.
-- **Readiness honesto:** `READY` não exige dados literais. Fixtures semânticas (`OPERADOR_A`, `CONTA_B`) bastam. Unknowns materiais tornam o caso `NEEDS_REVIEW`/`BLOCKED`, e unknowns só de automação afetam apenas `automation_readiness`. Adequação à automação (`automation_suitability`) e prontidão para automação (`automation_readiness`) são perguntas diferentes.
-- **"0 gaps" só quando é verdade:** as seis dimensões de `gap_metrics` precisam estar zeradas. Uma baseline histórica não carregada aparece como `NOT_APPLIED`, nunca `PASS`.
-
-## Gates
-
-| Gate | Protege |
-| --- | --- |
-| `SCOPE_VALID` | Somente fontes selecionadas; um registro por fonte física. |
-| `SOURCE_COVERAGE_VALID` | Todo identificador da autoridade coberto ou com disposição. |
-| `NORMATIVE_BASELINE_VALID` | Cada claim testável com TC Acceptance atômico; baseline intacto após a expansão. |
-| `ADDITIVE_EXPANSION_VALID` | Dimensões, padrões, superfícies, ativos de teste e jornadas avaliados; cobertura semanticamente alinhada. |
-| `PROCEDURE_QUALITY_VALID` | Procedimento executável e fundamentado para cada TC, no idioma da execução. |
-| `EVIDENCE_AND_REFERENCE_VALID` | Referências dentro do escopo; Questions/Findings ligados aos TCs. |
-| `PIPELINE_INTEGRITY_VALID` | Estágios em ordem, conferidos pelo manifest com cadeia de hashes. |
-| `PUBLICATION_VALID` | Arquivos públicos validados pelos schemas e presos aos digests de publicação. |
-
-## Saída
-
-```text
-<destino>/
-|-- output/
-|   |-- test-cases.json         índice: requisitos, claims, CPs, famílias, disposições, gaps, gates
-|   |-- questions.json
-|   |-- report.html             relatório offline, agrupado por Scenario Family
-|   |-- test-cases/TC-XXX.json  fonte de verdade de cada TC
-|   `-- test-cases-md/TC-XXX.md versão humana, com fluxo Mermaid
-|-- diagnostics/                com --diagnostics: domain model, candidatos, checklists,
-|                               jornadas, desafio dos testes existentes, run-metrics
-`-- .ftd/runs/<run-id>/         estado privado: estágios, work orders, manifest
-```
-
-O JSON é a fonte de verdade, e Markdown e HTML são projeções do estado canônico. Renderizar não relê fontes nem refaz o test design. O schema público continua 2.2, com campos opcionais novos, e suítes 1.2 continuam validando e renderizando.
-
-## `/ftd-chaos` (opcional, pós-suíte)
-
-Depois de `finalize`, `/ftd-chaos` faz a passada de cenários reais, adversos, físicos, de campo e "absurdos" sobre a suíte congelada, sem nunca reescrevê-la.
-
-- As ideias do arquivo de instruções viram sementes item a item (`instructions.md#seed-001`), sempre inspiração e nunca autoridade. O modelo vai além delas usando o contexto já salvo da execução.
-- Buscas de evidência são pontuais (`challenge.py lookup`), sem reler o projeto.
-- Os casos novos usam `CH-*`, nunca `TC-*`, e seguem `STARTED → SUBMITTED → FINALIZED`.
-- A saída fica em `output/chaos/<id>/`: `chaos-cases.json`, `chaos-plan.md` e `chaos-plan.html`, com o Manual/Physical/Field Test Plan.
-
-## `/ftd-azure` (JSON local para Azure DevOps)
-
-`/ftd-azure --run <run> --output json` converte a suíte canônica e as execuções de chaos finalizadas em JSON local, organizado requisito a requisito.
-
-- Cada grupo tem o título `RF001 — Título oficial`, e há um grupo `Unassigned` no fim.
-- A saída fica em `output/azure/`: `azure-export-package.json` e `azure-preview.json`.
-- As chaves são `canonical:TC-001` e `chaos:<id>:CH-001`. Um TC ligado a vários requisitos é um único work item com várias posições, nunca um clone.
-- O comando nunca se conecta ao Azure DevOps.
-- `scripts/azure_export.py` só agrega o estado da FTD. `scripts/integrations/azure_devops.py` continua sendo o único dono do mapeamento, das Suites, do diff e do transporte.
-
-## Validar e testar
+- Validar e testar:
 
 ```bash
 python -m pip install -r requirements.txt
 python scripts/validation.py <destino>/output --manifest <destino>/.ftd/runs/<run-id>/run-manifest.json
-python scripts/render.py examples/expected-output
-python scripts/benchmark.py packs          # seis packs multi-domínio (A–F)
+python scripts/benchmark.py packs           # seis packs sintéticos multi-domínio
 python -m unittest discover -s tests
 ```
 
-## Estrutura do repositório
+## Limites
 
-```text
-SKILL.md                    workflow da skill
-docs/instructions.md        modelo genérico do arquivo de instruções
-references/                 method, stage-contracts, test-design, validation, workflow, output-contract
-schemas/                    JSON Schema Draft 2020-12
-scripts/common.py           utilidades, idioma, similaridade
-scripts/sources.py          escopo, papéis, leitura, identificadores oficiais, ativos de teste
-scripts/instructions.py     arquivo de instruções: resolução, texto, pedido normalizado, precedência
-scripts/reading.py          leitores leves por fonte: plano, catálogos, reconciliação, reuso
-scripts/design.py           validação do estágio design e baseline
-scripts/expansion.py        validação da segunda passada e do desafio dos testes existentes
-scripts/procedures.py       validação dos procedimentos, readiness e métricas
-scripts/validation.py       gates, gap metrics e validator público
-scripts/pipeline.py         runtime: start, submit, finalize, render, verify
-scripts/render.py           Markdown, HTML offline e catálogo de expansão
-scripts/workflow.py         comandos ftd-* (alias exato + resolved_intent do host) e CLI gen/chaos/azure
-scripts/benchmark.py        packs, comparação com baseline, reconciliação
-scripts/challenge.py        internos do /ftd-chaos (CH-*), sem tocar a suíte canônica
-scripts/azure_export.py     /ftd-azure: agregação FTD (canônico + chaos) em JSON local
-scripts/integrations/       único dono do mapeamento, Suites, diff e publicação no Azure DevOps
-benchmarks/domains/         packs A–F: SaaS, logística, ERP, IoT, aeronáutica, API
-examples/                   exemplo sintético (schema 1.2)
-tests/                      testes de regressão
-```
+A FTD não executa testes, não cria Shared Steps, não faz indexação global do repositório e, na publicação, não apaga nem move nada no Azure DevOps.
 
-## Limites atuais
-
-A skill não executa testes em navegador, não cria Shared Steps reais, não faz indexação global/RAG do repositório e não publica no Azure DevOps (o `/ftd-azure` só gera JSON local).
-
-Veja `CHANGELOG.md`, `MIGRATION-v2.3.0.md` e `SIMPLIFICATION_REPORT.md`.
+Veja também `CHANGELOG.md`.
 
 ## License and Attribution
 

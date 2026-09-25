@@ -95,6 +95,18 @@ Execution views round, still targeting 2.4.0:
 - **Execution contracts.** Procedures may carry `execution_variants` and `request_contract`. A step performed as a fixture actor needs that actor's starting context; a load/concurrency experiment on a request its steps name must describe that request (no tool syntax, no undeclared threshold). Published cases state `state_contract` (`SELF_CLEANING` or `REQUIRES_FIXTURE_RESET`).
 - **Frozen runs.** Finalizing a run never edits another run. A revision is a new run started with `--supersedes <run-id>`, recorded on the new run only; it inherits the earlier run's finalized chaos runs by reference.
 
+Final hardening round, still targeting 2.4.0 (no new gate, stage or model pass):
+
+- **Test-asset intents** (`ALREADY_COVERED_BY`, `PROMOTE_*`) must restate what the existing test itself names or asserts (its name, docstring or `grounding` excerpts quoted verbatim from its file), so an intent copied from the target Test Case cannot prove coverage.
+- **Membership vs. order.** A use-case flow orders a requirement's members but never adds members; a case tracing only to a use case or flow joins that use case's own group (`USE_CASE`).
+- **Procedure quality.** Rejected: expected results that name nothing specific, truncated or unbalanced prose, an oracle step dropping a message/number/code the design states, and one oracle wording shared by three or more different oracles. Execution variants must cite evidence and name a resource the case itself uses.
+- **Guidance accountability.** With an instructions file, every guidance/seed item gets a disposition (`MATERIALIZED`, `ALREADY_COVERED`, `USED_FOR_ORDERING`, `QUESTION_REQUIRED`, `NOT_APPLICABLE_WITH_REASON`), published as `guidance_dispositions`.
+- **Chaos.** Finalizing a chaos run re-renders the live publication (report, organization, execution plan) from persisted state; CH cases may carry `cleanup`, `execution_variants` and `request_contract` under the canonical rules and get a `state_contract`.
+- **Honest reading metrics:** `source_files_accounted`, `runtime_source_reads` (actual reads this run), `reused_file_catalogs`, `source_digest_checks`.
+- **Semantic stages.** Templated Design/Expansion items are rejected, and files other than official stage state in a run's `stages/` stop submission and finalize.
+- **`/ftd-azure-publish`.** A new, explicit two-phase publisher: `--prepare` (read-only, target-locked `publication-plan.json`) and `--apply` (revalidated target and versions, typed approval). Non-destructive: no deletes, no removals, no plan creation, no overwrite of unmanaged or remotely changed items; runtime-only credentials. `/ftd-azure` stays local.
+- **Docs.** README and `docs/instructions.md` rewritten as a quick start with a command table that says which commands can write remotely.
+
 ## 2.3.0
 
 Simplification, quality recovery and model-first design.

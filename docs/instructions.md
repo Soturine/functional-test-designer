@@ -1,54 +1,58 @@
-# Instructions for the Functional Test Designer
+# Functional Test Designer instructions
 
-> The sections are examples. Add/remove/rename sections freely. The model interprets them semantically. They are guidance/seeds, not authority or a fixed schema.
+<!--
+How to use this file
+- Copy it into your project (for example docs/instructions.md) and edit it.
+- Headings and wording are free-form: rename, delete or add sections. The model reads the text by meaning.
+- This file is guidance, not authority. Ideas here provoke analysis; they never force a Test Case
+  and never limit what the analysis explores. Every idea gets an explicit answer in the output.
+- Only the sources listed here are read. A directory is read recursively, but only inside itself.
+- What you type on the command line or say in the conversation overrides this file.
 
-Copy this file into your project as `docs/instructions.md` (or `docs/instructions.txt`) and run:
-
-```text
-/ftd-gen --input-file ./docs/instructions.md --output json,md,html
-```
-
-Explicit command options (`--output`, `--locale`, `--diagnostics`, `--output-dir`) and what you say in the conversation always win over this file.
+Run:
+  /ftd-gen --input-file ./docs/instructions.md --output json,md,html --diagnostics --output-dir ./ftd-output
+-->
 
 ## Sources
 
-Read these, in this order:
-
-1. `path/to/requirements.pdf`: the official requirements (functional authority).
-2. `path/to/docs/`: product and user documentation.
-3. `path/to/src/`: implementation code (evidence, not authority).
-4. `path/to/config/`: configuration.
-5. `path/to/tests/`: existing tests (a challenge set, never authority).
+1. `docs/requirements.pdf` — functional authority
+2. `docs/user/` — technical/product context
+3. `src/` — implementation evidence
+4. `tests/` — existing tests
 
 Do not read anything else.
 
-## Flow ideas
+<!--
+Roles, one sentence each:
+- functional authority (FUNCTIONAL_AUTHORITY): what the system must do; the only source of expected results.
+- technical/product context (TECHNICAL_CONTEXT): how users reach features (screens, manuals, routes).
+- implementation evidence (IMPLEMENTATION_EVIDENCE): what actually exists in code and configuration.
+- existing tests (TEST_ASSET): a challenge set for the new suite, never authority.
+-->
 
-A first idea of the main business flow. Reconstruct the real flow from the requirements and add or reorder steps where they say so.
+## Main flow
 
-- first business action
-- next action
-- final confirmation
+- create the order
+- approve the order
+- ship and finish the order
 
-## Adverse / real-world ideas
+## Things I want you to explore
 
-- an interruption in the middle of an operation
 - the wrong actor or the wrong resource
+- an interruption in the middle of an operation, and recovery
 - the same action done twice
-
-## Physical / manual focus
-
-- interactions with a device or a person that cannot be automated
-
-## Performance focus
-
 - many users doing the same thing at once (never invent a threshold; ask for one)
+
+## Physical/manual focus
+
+- steps done with a device or by a person that cannot be automated
 
 ## Other guidance
 
-Add anything else that matters to this project here: business concerns, actors, environments, integrations, known risks, unusual workflows, review priorities or other context.
+- anything else that matters: actors, environments, integrations, known risks, review priorities
 
 ## Output
 
-- Language: the language of the requirements.
-- Formats: JSON, Markdown and HTML.
+- Language: the language of the requirements
+- Formats: JSON, Markdown, HTML
+- Diagnostics: yes

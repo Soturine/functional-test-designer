@@ -15,7 +15,8 @@ v2.3 publishes schema `2.2` with additive optional fields. Schema `1.2` suites r
 |   `-- operational-scenarios.md (only with OPERATIONAL)
 |   |-- chaos/<chaos-id>/      (/ftd-chaos) chaos-cases.json, seed-dispositions.json,
 |   |                          chaos-plan.md, chaos-plan.html (per requested format)
-|   `-- azure/                 (/ftd-azure) azure-export-package.json, azure-preview.json
+|   `-- azure/                 (/ftd-azure) azure-export-package.json, azure-preview.json;
+|                              (/ftd-azure-publish) publication-plan.json, publication-result.json
 |-- diagnostics/               (only with DIAGNOSTICS)
 `-- .ftd/
     |-- runs/<run-id>/         private: run.json, normalized-request.json, sources.json,

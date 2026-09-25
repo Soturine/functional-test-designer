@@ -1,6 +1,6 @@
 ---
 name: functional-test-designer
-description: Designs traceable, executable functional Test Cases from only user-selected sources for any domain. Use for atomic normative coverage, a mandatory second QA pass (negative, operator error, concurrency, recovery, security, E2E), existing-test challenge, executable procedures, readiness and automation classification, offline HTML/Markdown/JSON, an optional post-suite /ftd-chaos pass over a finalized run, and local Azure DevOps Test Plans input JSON (/ftd-azure).
+description: Designs traceable, executable functional Test Cases from only user-selected sources for any domain. Use for atomic normative coverage, a mandatory second QA pass (negative, operator error, concurrency, recovery, security, E2E), existing-test challenge, executable procedures, readiness and automation classification, offline HTML/Markdown/JSON, an optional post-suite /ftd-chaos pass over a finalized run, local Azure DevOps Test Plans input JSON (/ftd-azure, never remote) and an explicit, approval-gated publication (/ftd-azure-publish).
 ---
 
 # Functional Test Designer
