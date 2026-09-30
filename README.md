@@ -8,7 +8,7 @@ Agent Skill que projeta **Test Cases funcionais rastreáveis e executáveis** a 
 
 O modelo faz o raciocínio de QA; o runtime protege escopo, rastreabilidade, validação e publicação. Nada é inventado: o que as fontes não dizem vira Question ou pendência.
 
-> Versão publicada: 2.4.0.
+> Versão publicada: 2.4.1.
 
 ## Início rápido
 
@@ -102,6 +102,7 @@ Revise a prévia (organização, projeto, Test Plan, quantidades de CREATE/UPDAT
 
 - `--prepare` mostra primeiro qual execução e qual digest canônico serão usados, depois só lê o destino e gera `publication-plan.json` preso a ele.
 - `--apply` confere de novo o destino e as versões remotas e só escreve depois que você digita `PUBLISH <projeto> / <plano>` (ou passa `--approved` em modo não interativo).
+- Cada Test Case publicado leva os metadados de execução da FTD para executores posteriores: status, readiness, suitability, camada/ferramenta de automação, bloqueios e ids das Questions — numa seção legível da descrição, em tags `FTD_STATUS:`/`FTD_READINESS:`/`FTD_SUITABILITY:`/`FTD_LAYER:`/`FTD_TOOL:` e num bloco JSON versionado `FTD_METADATA_V1` (com `request_contract` e casos relacionados preservados estruturalmente). As Questions continuam detalhadas só no relatório HTML; assim o Azure pode servir de fonte operacional de execução sem o corpus original.
 - O destino nunca é adivinhado, nada é apagado, Test Cases que a FTD não gerencia não são sobrescritos e credenciais nunca são salvas. Detalhes: [`entrypoints/azure-publish.md`](entrypoints/azure-publish.md).
 
 ## Como funciona

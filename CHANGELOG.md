@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.4.1 - 2026-09-30
+
+Corrective Azure DevOps → downstream executor contract release. No pipeline stage, gate, Design or Expansion semantics change.
+
+- Azure Test Cases now preserve the FTD execution classification: status, automation suitability, readiness, layer, tool hint, readiness blockers and linked Question ids, in a concise "FTD execution status" description section and as `FTD_STATUS`/`FTD_READINESS`/`FTD_SUITABILITY`/`FTD_LAYER`/`FTD_TOOL` tags. No custom field and no `System.State` mapping. `NEEDS_REVIEW`, `EXPLORATORY` and `BLOCKED_*` cases stay visible as such.
+- Added a versioned machine-readable `FTD_METADATA_V1` JSON block to the description, preserving request contracts, related Test Cases and question/requirement references losslessly; the human request-contract section keeps list structure.
+- Chaos: a step of a non-`EXPLORATORY` case must have an observable expected result, or the case declares `MISSING_ORACLE` and finalizes as `NEEDS_REVIEW`; no oracle is invented and finalized chaos runs are not rewritten.
+- Azure synchronization now hashes the emitted Work Item fields plus a contract version, so changes to the published representation are detected (UPDATE once, then UNCHANGED). Publication stays non-destructive and explicitly approved.
+
 ## 2.4.0 - 2026-09-25
 
 Optional post-suite challenge, additive to the frozen v2.3.0 pipeline.
