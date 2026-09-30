@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -340,6 +341,40 @@ def status_tags(payload: dict[str, Any]) -> list[str]:
     return tags
 
 
+# One versioned, machine-readable block at the end of System.Description, so a downstream executor
+# recovers the FTD classification and structured contracts without parsing the human sections.
+# Compact, key-sorted JSON (deterministic, whitespace-free outside strings), HTML-escaped inside <pre>.
+FTD_METADATA_VERSION = "FTD_METADATA_V1"
+METADATA_BLOCK = re.compile(re.escape(FTD_METADATA_VERSION) + r"(.*?)</pre>", re.S)
+
+
+def ftd_metadata(payload: dict[str, Any], export_key: str) -> dict[str, Any]:
+    """Values the payload has, as they are: an absent value stays null or empty, never invented."""
+    automation = payload.get("automation") or {}
+    trace = payload.get("trace_refs") or {}
+    return {
+        "schema": FTD_METADATA_VERSION, "export_key": export_key, "source_kind": payload.get("source_kind"),
+        "status": payload.get("status"),
+        "automation": {"suitability": automation.get("suitability"), "readiness": automation.get("readiness"),
+                       "readiness_blockers": list(automation.get("readiness_blockers") or []),
+                       "layer": automation.get("layer"), "tool_hint": automation.get("tool_hint")},
+        "question_refs": list(payload.get("question_refs") or []),
+        "requirement_refs": list(trace.get("requirements") or []),
+        "related_test_cases": list(trace.get("related_test_cases") or []),
+        "request_contract": (payload.get("execution") or {}).get("request_contract"),
+    }
+
+
+def read_ftd_metadata(description: str) -> dict[str, Any] | None:
+    """The inverse of the metadata block in `work_item_fields`: None when the description has none
+    (e.g. a Test Case published before the block existed)."""
+    import html as _html
+    match = METADATA_BLOCK.search(description or "")
+    if not match:
+        return None
+    return json.loads(_html.unescape(re.sub(r"<[^>]*>", "", match.group(1))).strip())
+
+
 def work_item_fields(payload: dict[str, Any], export_key: str) -> dict[str, Any]:
     """Azure Test Case fields from a mapped payload. Identity is the local mapping, never the
     title; the export key is added as a non-secret provenance tag. No custom Azure field and no
@@ -357,10 +392,13 @@ def work_item_fields(payload: dict[str, Any], export_key: str) -> dict[str, Any]
         section("Preconditions", payload.get("preconditions", [])), section("Test data", data),
         section("Postconditions", payload.get("postconditions", [])), section("Cleanup", payload.get("cleanup", [])),
         section("State contract", [execution.get("state_contract")] if execution.get("state_contract") else []),
-        section("Request contract", [f"{k}: {v}" for k, v in contract.items() if v]),
+        section("Request contract", [f"{k}: {v if isinstance(v, str) else json.dumps(v, ensure_ascii=False)}"
+                                     for k, v in contract.items() if v]),
         section("Execution variants", [f"{v.get('kind')}: {v.get('description')}" for v in execution.get("variants", [])]),
         section("Required resources", execution.get("required_resources", [])),
         section("Environment", execution.get("environment_requirements", [])),
+        "<h3>FTD metadata</h3><pre>" + FTD_METADATA_VERSION + " " + _html.escape(json.dumps(
+            ftd_metadata(payload, export_key), sort_keys=True, separators=(",", ":"), ensure_ascii=False)) + "</pre>",
     ])
     steps = "".join(
         f'<step id="{n}" type="ValidateStep"><parameterizedString isformatted="true">{_html.escape(s["action"])}'

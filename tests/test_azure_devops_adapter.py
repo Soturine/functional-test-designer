@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import html
 import sys
 import unittest
 from pathlib import Path
@@ -8,7 +9,8 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from integrations.azure_devops import (  # noqa: E402
-    apply_preview, build_preview, map_test_case, persist_integration_state, work_item_fields,
+    FTD_METADATA_VERSION, apply_preview, build_preview, map_test_case, persist_integration_state,
+    read_ftd_metadata, work_item_fields,
 )
 
 
@@ -111,6 +113,56 @@ class ExecutionMetadataTests(unittest.TestCase):
             self.assertIn(f"FTD_STATUS:{status}", tags)
         excluded = build_preview(cases, {}, project="P", plan="Plan", suite="Suite", include_needs_review=False)
         self.assertEqual(["NEEDS_REVIEW"], [s["status"] for s in excluded["skipped"]])
+
+
+CONTRACT = {
+    "method": "POST", "endpoint": "/reservations/{id}/confirm",
+    "parameters": ["id: an eligible reservation", "channel: <web> & \"kiosk\""],
+    "body": "{\"seat\": \"A1\"} </pre> ação", "fixture_pool": None,
+    "varies": ["id", "channel"], "measurements": ["latency per request", "rejections, by code"],
+}
+
+
+class StructuredMetadataTests(unittest.TestCase):
+    """FTD_METADATA_V1: one deterministic, escaped, parseable JSON block in System.Description."""
+
+    def test_the_block_round_trips_every_structured_value_losslessly(self) -> None:
+        source = review_case(request_contract=CONTRACT, related_test_cases=["TC-004", "TC-009"],
+                             source_kind="CHAOS", readiness_blockers=["MISSING_FIXTURE", "AMBIGUOUS_POLICY"])
+        description = work_item_fields(map_test_case(source), "chaos:field:CH-003")["System.Description"]
+        metadata = read_ftd_metadata(description)
+        self.assertEqual({
+            "schema": FTD_METADATA_VERSION, "export_key": "chaos:field:CH-003", "source_kind": "CHAOS",
+            "status": "NEEDS_REVIEW",
+            "automation": {"suitability": "HIGH", "readiness": "NEEDS_FIXTURE", "layer": "UI", "tool_hint": "PLAYWRIGHT",
+                           "readiness_blockers": ["MISSING_FIXTURE", "AMBIGUOUS_POLICY"]},
+            "question_refs": ["Q-017", "Q-024"], "requirement_refs": ["REQ-001"],
+            "related_test_cases": ["TC-004", "TC-009"], "request_contract": CONTRACT,
+        }, metadata)
+        block = description[description.index(FTD_METADATA_VERSION):]
+        self.assertNotIn("<web>", block)  # values are escaped, never raw markup
+        self.assertEqual(1, block.count("</pre>"))
+        # The human section keeps list structure instead of a Python repr.
+        self.assertIn(html.escape('varies: ["id", "channel"]'), description)
+
+    def test_the_block_survives_the_markup_a_rich_text_field_may_add(self) -> None:
+        description = work_item_fields(map_test_case(review_case(request_contract=CONTRACT)), "k")["System.Description"]
+        reformatted = description.replace("&quot;", '"').replace(FTD_METADATA_VERSION + " ", FTD_METADATA_VERSION + "<br>")
+        self.assertEqual(read_ftd_metadata(description), read_ftd_metadata(reformatted))
+
+    def test_absent_values_stay_null_and_the_block_is_deterministic(self) -> None:
+        metadata = read_ftd_metadata(work_item_fields(map_test_case(case()), "canonical:TC-001")["System.Description"])
+        self.assertEqual({"suitability": None, "readiness": None, "readiness_blockers": [], "layer": None,
+                          "tool_hint": None}, metadata["automation"])
+        self.assertEqual(([], [], None), (metadata["question_refs"], metadata["related_test_cases"],
+                                          metadata["request_contract"]))
+        reordered = dict(reversed(list(review_case(request_contract=CONTRACT).items())))
+        self.assertEqual(work_item_fields(map_test_case(review_case(request_contract=CONTRACT)), "k"),
+                         work_item_fields(map_test_case(reordered), "k"))
+
+    def test_a_description_without_the_block_reads_as_none(self) -> None:
+        self.assertIsNone(read_ftd_metadata("<h3>Preconditions</h3><ul><li>x</li></ul>"))
+        self.assertIsNone(read_ftd_metadata(""))
 
 
 if __name__ == "__main__":
