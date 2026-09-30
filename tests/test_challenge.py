@@ -466,6 +466,63 @@ class ExecutionTagsAndReadinessTests(unittest.TestCase):
         self.assertEqual("READY", cases[0]["status"])
 
 
+class ChaosOracleContractTests(unittest.TestCase):
+    """A step that supports a PASS/FAIL verdict needs an observable oracle; when the evidence has
+    none, the case says so and is never runnable — the oracle is never invented."""
+
+    STEPS = [{"action": "Do the grounded action.", "expected_result": "It is observed."},
+             {"action": "Open the record history after the grounded action."}]
+
+    def submit(self, **over):
+        run = PackRun("saas-accounts")
+        self.addCleanup(run.close)
+        run.finalize()
+        ch.start_challenge(run.run_dir, "run", seeds=[])
+        source = next(iter(run.pack["sources"]))
+        case = _case(preconditions=["A record exists."], evidence_refs=[{"source": source, "reference": "n/a"}],
+                     **{"steps": self.STEPS, **over})
+        ch.submit_challenge(run.run_dir, "run", {"cases": [case], "seed_dispositions": []})
+        result = ch.finalize_challenge(run.run_dir, "run")
+        return run, ch.read_json(Path(result["challenge_dir"]) / "challenge-cases.json")["cases"][0]
+
+    def test_a_grounded_expected_result_on_every_step_is_valid_and_ready(self) -> None:
+        _, case = self.submit(steps=[self.STEPS[0], {**self.STEPS[1], "expected_result": "The history lists the grounded action."}])
+        self.assertEqual("READY", case["status"])
+
+    def test_a_runnable_step_without_an_expected_result_is_rejected(self) -> None:
+        with self.assertRaises(StageError) as caught:
+            self.submit()
+        self.assertIn("step 2 requires an observable expected_result", str(caught.exception))
+        self.assertNotIn("step 1 requires", str(caught.exception))
+
+    def test_a_declared_missing_oracle_is_valid_but_needs_review_and_nothing_is_invented(self) -> None:
+        import azure_export as az
+        from integrations.azure_devops import read_ftd_metadata, work_item_fields
+        run, case = self.submit(unknowns=[{"kind": "MISSING_ORACLE", "question": "Q-001",
+                                           "detail": "The sources do not say what the history shows."}])
+        self.assertEqual("NEEDS_REVIEW", case["status"])
+        self.assertIsNone(case["steps"][1]["expected_result"])
+        preview = az.preview_export(az.build_export_package(run.run_dir), project="P", plan="L", suite="S")
+        item = next(i for i in preview["create"] if i["local_id"] == "chaos:run:CH-001")
+        self.assertIsNone(item["payload"]["steps"][1]["expected_result"])
+        fields = work_item_fields(item["payload"], item["local_id"])
+        self.assertIn("FTD_STATUS:NEEDS_REVIEW", fields["System.Tags"].split("; "))
+        metadata = read_ftd_metadata(fields["System.Description"])
+        self.assertEqual((["MISSING_ORACLE"], ["Q-001"]), (metadata["automation"]["readiness_blockers"],
+                                                           metadata["question_refs"]))
+
+    def test_an_exploratory_case_may_leave_the_oracle_open(self) -> None:
+        _, case = self.submit(execution_tags=["EXPLORATORY"])
+        self.assertEqual("EXPLORATORY", case["status"])
+        self.assertIsNone(case["steps"][1]["expected_result"])
+
+    def test_finalize_never_classifies_a_step_without_an_oracle_as_ready(self) -> None:
+        # e.g. a payload submitted before this rule existed and finalized afterwards
+        case = {"execution_tags": ["MANUAL"], "unknowns": [], "canonical_gap_candidate": None,
+                "steps": [{"step": 1, "action": "Do it.", "expected_result": None}]}
+        self.assertEqual({"status": "NEEDS_REVIEW"}, ch.classify_challenge_case(case))
+
+
 class ManualPlanAndCanonicalGapTests(unittest.TestCase):
     def test_non_automatable_cases_are_preserved_in_the_plan_not_deleted(self) -> None:
         run = PackRun("saas-accounts")

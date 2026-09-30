@@ -227,7 +227,10 @@ def start_challenge(
             "mistakes, physical/digital mismatches, interruption and recovery, concurrency, long-running "
             "operation, manual-after-automatic sequences, and anything else this project's own evidence "
             "supports. A CH case is not a canonical Test Case: it may be exploratory, physical, manual, or "
-            "blocked, and it must say so honestly rather than invent a screen, device or oracle. To ground "
+            "blocked, and it must say so honestly rather than invent a screen, device or oracle. Every step "
+            "of a non-EXPLORATORY case needs an observable expected_result the evidence supports; when the "
+            "evidence does not define it, declare the MISSING_ORACLE unknown (with its Question when one "
+            "exists) instead of writing one. To ground "
             "a step in real evidence beyond the excerpts above, request a bounded lookup first: "
             "`python scripts/challenge.py lookup --run <run> --challenge-id "
             f"{challenge_id} --source <selected path> --query \"...\"` (or --lines A-B), then cite it in "
@@ -442,6 +445,16 @@ def validate_challenge_payload(payload: dict[str, Any], context: dict[str, Any])
                     "MISSING_EXECUTION_SURFACE / UNKNOWN_SETUP_PATH"
                 )
             normalized_steps = _validate_steps(steps, label, locale, errors)
+            # A CH that claims an objective verdict needs an oracle on every step, as canonical
+            # procedures do. Without one the case says so (MISSING_ORACLE -> NEEDS_REVIEW) or is
+            # EXPLORATORY; the oracle is never invented to pass validation.
+            if "EXPLORATORY" not in tags and not any(u["kind"] == "MISSING_ORACLE" for u in unknowns):
+                for step in normalized_steps:
+                    if not step["expected_result"]:
+                        errors.append(
+                            f"{label} step {step['step']} requires an observable expected_result; state the one the "
+                            "evidence supports, or declare the MISSING_ORACLE unknown or the EXPLORATORY tag — "
+                            "never invent an oracle")
             # The same execution rules as canonical procedures: no invented technique for a
             # controlled condition, no invented threshold, every fixture described.
             supported = {int(n) for ref in evidence_refs for n in ref.get("supports", []) or [] if str(n).isdigit()}
@@ -627,6 +640,8 @@ def classify_challenge_case(case: dict[str, Any]) -> dict[str, str]:
         return {"status": "BLOCKED_EXTERNAL_DEPENDENCY"}
     if any(u["kind"] in MATERIAL_UNKNOWNS for u in unknowns):
         return {"status": "NEEDS_REVIEW"}
+    if any(not step.get("expected_result") for step in case["steps"]):
+        return {"status": "NEEDS_REVIEW"}  # a step without an oracle cannot support a PASS/FAIL verdict
     if not case["steps"] and case["canonical_gap_candidate"]:
         return {"status": "PROPOSED"}
     return {"status": "READY"}
