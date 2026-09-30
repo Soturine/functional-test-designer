@@ -20,6 +20,18 @@ def _hash(payload: dict[str, Any]) -> str:
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
+# Bumped when the Work Item representation changes in a way the fields alone would not show.
+AZURE_WORK_ITEM_CONTRACT_VERSION = 2
+
+
+def publication_hash(payload: dict[str, Any], export_key: str) -> str:
+    """The synchronization hash of what Azure actually receives — the emitted Work Item fields —
+    not of the internal payload, so any change in the published representation reads as UPDATE
+    and an unchanged one stays UNCHANGED."""
+    return _hash({"contract_version": AZURE_WORK_ITEM_CONTRACT_VERSION,
+                  "fields": work_item_fields(payload, export_key)})
+
+
 def map_test_case(case: dict[str, Any]) -> dict[str, Any]:
     """Map portable Test Plan concepts plus the execution context an executor needs to run
     the case without the canonical suite at hand: its fixture definitions (test_data), its
@@ -160,7 +172,7 @@ def build_preview(
     entries = mapping.get("test_cases", {})
     for case in cases:
         payload = map_test_case(case)
-        content_hash = _hash(payload)
+        content_hash = publication_hash(payload, case["id"])
         if case["status"] == "BLOCKED" or (case["status"] == "NEEDS_REVIEW" and not include_needs_review):
             result["skipped"].append({"local_id": case["id"], "status": case["status"]})
             continue
@@ -433,7 +445,7 @@ def build_publication_plan(
     for case in cases:
         key = case["export_key"]
         payload = map_test_case({**case, "id": key, "tags": case.get("execution_tags", [])})
-        content_hash = _hash(payload)
+        content_hash = publication_hash(payload, key)
         entry = {"export_key": key, "content_hash": content_hash, "payload": payload}
         prior = entries.get(key)
         if case["status"] == "BLOCKED" or (case["status"] == "NEEDS_REVIEW" and not include_needs_review):

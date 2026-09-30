@@ -3,15 +3,17 @@ from __future__ import annotations
 import html
 import sys
 import unittest
+import unittest.mock
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from integrations.azure_devops import (  # noqa: E402
-    FTD_METADATA_VERSION, apply_preview, build_preview, map_test_case, persist_integration_state,
-    read_ftd_metadata, work_item_fields,
+    FTD_METADATA_VERSION, _hash, apply_preview, build_preview, map_test_case, persist_integration_state,
+    publication_hash, read_ftd_metadata, work_item_fields,
 )
+from integrations import azure_devops  # noqa: E402
 
 
 def case(case_id: str = "TC-001", status: str = "READY") -> dict:
@@ -163,6 +165,34 @@ class StructuredMetadataTests(unittest.TestCase):
     def test_a_description_without_the_block_reads_as_none(self) -> None:
         self.assertIsNone(read_ftd_metadata("<h3>Preconditions</h3><ul><li>x</li></ul>"))
         self.assertIsNone(read_ftd_metadata(""))
+
+
+class PublicationHashTests(unittest.TestCase):
+    """Synchronization follows the Work Item representation Azure actually receives."""
+
+    def test_the_hash_changes_whenever_the_emitted_fields_change_even_if_the_payload_does_not(self) -> None:
+        payload = map_test_case(review_case())
+        original = azure_devops.work_item_fields
+
+        def with_one_more_field(p, key):
+            return {**original(p, key), "System.History": "x"}
+        with unittest.mock.patch.object(azure_devops, "work_item_fields", with_one_more_field):
+            changed = publication_hash(payload, "canonical:TC-001")
+        self.assertNotEqual(publication_hash(payload, "canonical:TC-001"), changed)
+        self.assertEqual(publication_hash(payload, "canonical:TC-001"), publication_hash(payload, "canonical:TC-001"))
+
+    def test_a_mapping_synchronized_with_the_previous_representation_updates_once_then_is_unchanged(self) -> None:
+        payload = map_test_case(review_case())
+        previous = _hash({k: v for k, v in payload.items() if k != "question_refs"})  # the prior payload hash scheme
+        stale = {"test_cases": {"TC-001": {"external_id": "100", "content_hash": previous, "last_synchronized_version": "7"}}}
+        first = build_preview([review_case()], stale, project="P", plan="Plan", suite="Suite", include_needs_review=True)
+        self.assertEqual((["TC-001"], []), ([u["local_id"] for u in first["update"]], first["unchanged"]))
+        synced = {"test_cases": {"TC-001": {**stale["test_cases"]["TC-001"], "content_hash": first["update"][0]["content_hash"]}}}
+        second = build_preview([review_case()], synced, project="P", plan="Plan", suite="Suite", include_needs_review=True)
+        self.assertEqual(([], [{"local_id": "TC-001", "external_id": "100"}]), (second["update"], second["unchanged"]))
+        changed_remotely = build_preview([review_case()], stale, project="P", plan="Plan", suite="Suite",
+                                         include_needs_review=True, external_versions={"100": "8"})
+        self.assertEqual(([], "100"), (changed_remotely["update"], changed_remotely["conflicts"][0]["external_id"]))
 
 
 if __name__ == "__main__":

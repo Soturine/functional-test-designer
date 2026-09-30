@@ -200,6 +200,31 @@ class ApplyTests(PublisherTestCase):
                                            summary["create_suites"], summary["add_suite_placements"]))
         self.assertEqual(before, len(self.azure.writes()))
 
+    def test_cases_synchronized_with_the_previous_representation_update_once_then_stay_unchanged(self) -> None:
+        self.prepare()
+        pub.apply(self.plan_path(), self.azure, approved=True)
+        state_path = self.run.run_dir / "integration-state" / "azure-devops.json"
+        state = json.loads(state_path.read_text(encoding="utf-8"))
+        plan = json.loads(self.plan_path().read_text(encoding="utf-8"))
+        for op in plan["operations"]["test_cases"]:  # as the previous release recorded them: a payload hash
+            legacy = {k: v for k, v in op["payload"].items() if k != "question_refs"}
+            state["test_cases"][op["export_key"]]["content_hash"] = ado._hash(legacy)
+        state_path.write_text(json.dumps(state), encoding="utf-8")
+        summary = self.prepare()["summary"]
+        self.assertEqual((0, 12, 0, 0), (summary["create_test_cases"], summary["update_test_cases"],
+                                         summary["unchanged"], summary["conflicts"]))
+        self.assertEqual("APPLIED", pub.apply(self.plan_path(), self.azure, approved=True)["status"])
+        fields = next(iter(self.azure.items.values()))["fields"]
+        self.assertIsNotNone(ado.read_ftd_metadata(fields["System.Description"]))
+        writes = len(self.azure.writes())
+        summary = self.prepare()["summary"]
+        self.assertEqual((0, 0, 12, 0), (summary["create_test_cases"], summary["update_test_cases"],
+                                         summary["unchanged"], summary["conflicts"]))
+        self.assertEqual(writes, len(self.azure.writes()))
+        next(iter(self.azure.items.values()))["rev"] += 1  # edited in Azure: still a conflict, never an overwrite
+        self.assertEqual(1, self.prepare()["summary"]["conflicts"])
+        self.assertEqual(0, self.prepare()["summary"]["delete_operations"])
+
     def test_a_plan_cannot_run_against_another_project_or_plan(self) -> None:
         self.prepare()
         plan = json.loads(self.plan_path().read_text(encoding="utf-8"))
