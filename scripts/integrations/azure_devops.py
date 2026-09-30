@@ -44,6 +44,7 @@ def map_test_case(case: dict[str, Any]) -> dict[str, Any]:
         },
         "status": case["status"],
         "source_kind": case.get("source_kind", "CANONICAL"),
+        "question_refs": list(case.get("question_refs") or []),
         "automation": {
             "suitability": case.get("automation_suitability"),
             "readiness": case.get("automation_readiness"),
@@ -309,9 +310,40 @@ def resolve_target(remote: Any, target: dict[str, Any]) -> dict[str, Any]:
             "root_suite": {"id": root["id"], "name": root["name"]} if root else None}
 
 
+# Portable, filterable status tags: `FTD_STATUS:NEEDS_REVIEW`. Only values the case has are tagged.
+STATUS_TAGS = (("FTD_STATUS", ("status",)), ("FTD_READINESS", ("automation", "readiness")),
+               ("FTD_SUITABILITY", ("automation", "suitability")), ("FTD_LAYER", ("automation", "layer")),
+               ("FTD_TOOL", ("automation", "tool_hint")))
+
+
+def execution_status_lines(payload: dict[str, Any]) -> list[str]:
+    """The FTD execution classification a reader of the Azure Test Case needs to see why it is (not)
+    runnable. Questions stay detailed in the FTD report; only their ids travel here."""
+    automation = payload.get("automation") or {}
+    rows = (("Status", payload.get("status")), ("Source", payload.get("source_kind")),
+            ("Automation suitability", automation.get("suitability")),
+            ("Automation readiness", automation.get("readiness")), ("Automation layer", automation.get("layer")),
+            ("Tool hint", automation.get("tool_hint")),
+            ("Blockers", ", ".join(automation.get("readiness_blockers") or [])),
+            ("Questions", ", ".join(payload.get("question_refs") or [])))
+    return [f"{label}: {value}" for label, value in rows if value]
+
+
+def status_tags(payload: dict[str, Any]) -> list[str]:
+    tags = []
+    for prefix, path in STATUS_TAGS:
+        value: Any = payload
+        for part in path:
+            value = (value or {}).get(part)
+        if value:
+            tags.append(f"{prefix}:{value}")
+    return tags
+
+
 def work_item_fields(payload: dict[str, Any], export_key: str) -> dict[str, Any]:
     """Azure Test Case fields from a mapped payload. Identity is the local mapping, never the
-    title; the export key is added as a non-secret provenance tag."""
+    title; the export key is added as a non-secret provenance tag. No custom Azure field and no
+    System.State mapping: the FTD status travels in the description and as FTD_* tags."""
     import html as _html
 
     def section(title: str, items: list[str]) -> str:
@@ -321,6 +353,7 @@ def work_item_fields(payload: dict[str, Any], export_key: str) -> dict[str, Any]
     execution = payload.get("execution", {})
     contract = execution.get("request_contract") or {}
     description = "".join([
+        section("FTD execution status", execution_status_lines(payload)),
         section("Preconditions", payload.get("preconditions", [])), section("Test data", data),
         section("Postconditions", payload.get("postconditions", [])), section("Cleanup", payload.get("cleanup", [])),
         section("State contract", [execution.get("state_contract")] if execution.get("state_contract") else []),
@@ -334,7 +367,7 @@ def work_item_fields(payload: dict[str, Any], export_key: str) -> dict[str, Any]
         f'</parameterizedString><parameterizedString isformatted="true">{_html.escape(s.get("expected_result") or "")}'
         f"</parameterizedString><description/></step>"
         for n, s in enumerate(payload.get("steps", []), 2))
-    tags = [MANAGED_TAG, f"ftd-key:{export_key}", *payload.get("tags", [])]
+    tags = [MANAGED_TAG, f"ftd-key:{export_key}", *status_tags(payload), *payload.get("tags", [])]
     return {"System.Title": payload["title"],
             "Microsoft.VSTS.Common.Priority": PRIORITY_NUMBER.get(str(payload.get("priority")), 3),
             "Microsoft.VSTS.TCM.Steps": f'<steps id="0" last="{len(payload.get("steps", [])) + 1}">{steps}</steps>',

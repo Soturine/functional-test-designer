@@ -284,6 +284,22 @@ class MappedPayloadContextTests(unittest.TestCase):
         self.assertEqual(["Isolated staging tenant"], payload["execution"]["environment_requirements"])
         self.assertEqual("REQUIRES_FIXTURE_RESET", payload["execution"]["state_contract"])
 
+    def test_question_refs_reach_the_payload_for_canonical_and_chaos_cases(self) -> None:
+        run = PackRun("saas-accounts")
+        self.addCleanup(run.close)
+        run.finalize()
+        canonical = ch.pipeline.read_canonical(run.run_dir / "canonical-suite.json")
+        _finalized_challenge(run, "field-pass", related_questions=["Q-001"],
+                             unknowns=[{"kind": "AMBIGUOUS_POLICY", "detail": "Seat policy is open.", "question": "Q-002"}])
+        package = az.build_export_package(run.run_dir)
+        payloads = {i["local_id"]: i["payload"] for i in az.preview_export(package, project="P", plan="L", suite="S")["create"]}
+        for case in canonical["cases"]:
+            self.assertEqual(case["question_refs"], payloads[az.canonical_export_key(case["id"])]["question_refs"])
+        self.assertTrue(any(case["question_refs"] for case in canonical["cases"]))
+        chaos = payloads["chaos:field-pass:CH-001"]
+        self.assertEqual(["Q-001", "Q-002"], chaos["question_refs"])
+        self.assertEqual(("NEEDS_REVIEW", ["AMBIGUOUS_POLICY"]), (chaos["status"], chaos["automation"]["readiness_blockers"]))
+
 
 class PreviewAndPublishTests(unittest.TestCase):
     def test_preview_is_local_and_read_only(self) -> None:

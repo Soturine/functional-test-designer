@@ -73,7 +73,8 @@ def _export_canonical_case(case: dict[str, Any]) -> dict[str, Any]:
         "steps": [{"action": s["action"], "expected_result": s.get("expected_result")} for s in case.get("steps", [])],
         "postconditions": case.get("postconditions", []), "cleanup": cleanup, "state_contract": state_contract(cleanup),
         "requirement_refs": case.get("source_identifiers", []),
-        "related_test_cases": [], "execution_tags": list(case.get("tags", [])),
+        "related_test_cases": [], "question_refs": list(case.get("question_refs", [])),
+        "execution_tags": list(case.get("tags", [])),
         "automation_suitability": case.get("automation_suitability"),
         "automation_readiness": case.get("automation_readiness"),
         "readiness_blockers": list(case.get("readiness_blockers", [])),
@@ -81,6 +82,12 @@ def _export_canonical_case(case: dict[str, Any]) -> dict[str, Any]:
         "execution_variants": case.get("execution_variants", []), "request_contract": case.get("request_contract"),
         "environment_requirements": [], "required_resources": [], "chaos_run_id": None,
     }
+
+
+def chaos_question_refs(case: dict[str, Any]) -> list[str]:
+    """The Questions a CH case points at: its related_questions, then those its unknowns link."""
+    refs = [*case.get("related_questions", []), *(u.get("question") for u in case.get("unknowns", []))]
+    return list(dict.fromkeys(ref for ref in refs if ref))
 
 
 def _export_chaos_case(chaos_run_id: str, case: dict[str, Any]) -> dict[str, Any]:
@@ -93,7 +100,8 @@ def _export_chaos_case(chaos_run_id: str, case: dict[str, Any]) -> dict[str, Any
         "postconditions": case.get("postconditions", []), "cleanup": case.get("cleanup", []),
         "state_contract": case.get("state_contract") or state_contract(case.get("cleanup", [])),
         "requirement_refs": case.get("related_source_identifiers", []),
-        "related_test_cases": case.get("related_test_cases", []), "execution_tags": case.get("execution_tags", []),
+        "related_test_cases": case.get("related_test_cases", []), "question_refs": chaos_question_refs(case),
+        "execution_tags": case.get("execution_tags", []),
         "automation_suitability": case.get("automation_suitability"),
         "automation_readiness": None,
         "readiness_blockers": sorted({u["kind"] for u in case.get("unknowns", []) if u.get("kind")}),
@@ -243,7 +251,7 @@ def preview_export(
     """Local and read-only: no remote call happens here. All Azure-specific mapping,
     diffing and Suite placement is delegated to integrations/azure_devops.py."""
     carried = ("title", "priority", "status", "preconditions", "test_data", "steps", "postconditions", "cleanup",
-               "state_contract", "requirement_refs", "related_test_cases", "source_kind", "automation_suitability",
+               "state_contract", "requirement_refs", "related_test_cases", "question_refs", "source_kind", "automation_suitability",
                "automation_readiness", "readiness_blockers", "automation_layer", "automation_tool_hint",
                "required_resources", "environment_requirements", "chaos_run_id", "execution_variants",
                "request_contract")
