@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.4.2 - 2026-10-01
+
+Azure manual-import and Test Plans usability hardening. No pipeline stage, gate, Design, Expansion, Procedures or canonical Test Case change.
+
+- Added a local manual Azure DevOps import to `/ftd-azure` (`--manual-import`): Azure Test Case import CSV files, never a connection. `--fresh-target` writes blank-ID create files, one per primary Suite, each Test Case exactly once; `--existing-azure-export <csv|xlsx>` matches existing Test Cases by `ftd-key:` tag or `FTD_METADATA_V1`, never by title, and writes an update file with their Azure IDs. Duplicate keys are CONFLICT, unmatched cases are never created silently (`--allow-create` opts in). A plan and summary list CREATE / UPDATE / UNCHANGED / CONFLICT / UNMATCHED.
+- Azure titles now show the FTD id and the review state: `TC-042 — …`, `[REVIEW] …`, `[BLOCKED] …`, `[EXPLORATORY] CH-003 — …`. The canonical title is unchanged and `ftd-key` remains the identity; the status section labels "Readiness blockers".
+- Azure Suites follow a predictable order: requirements, then use cases, in natural identifier order (`REQ-2` before `REQ-10`), then transversal rules and execution views. `suite-order.md` gives the display and reverse creation order, and `secondary-suite-placements.csv` lists further Suites for the same Test Case instead of cloning it.
+- The documentation contract tests now cover the English README and its Portuguese translation.
+
 ## 2.4.1 - 2026-09-30
 
 Corrective Azure DevOps → downstream executor contract release. No pipeline stage, gate, Design or Expansion semantics change.

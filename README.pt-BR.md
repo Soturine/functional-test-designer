@@ -15,7 +15,7 @@ Agent Skill que projeta **Test Cases funcionais rastreáveis e executáveis** a 
 
 O modelo faz o raciocínio de QA; o runtime protege escopo, rastreabilidade, validação e publicação. Nada é inventado: o que as fontes não dizem vira Question ou pendência.
 
-> Versão publicada: 2.4.1.
+> Versão publicada: 2.4.2.
 
 ## Início rápido
 
@@ -111,6 +111,26 @@ Revise a prévia (organização, projeto, Test Plan, quantidades de CREATE/UPDAT
 - `--apply` confere de novo o destino e as versões remotas e só escreve depois que você digita `PUBLISH <projeto> / <plano>` (ou passa `--approved` em modo não interativo).
 - Cada Test Case publicado leva os metadados de execução da FTD para executores posteriores: status, readiness, suitability, camada/ferramenta de automação, bloqueios e ids das Questions — numa seção legível da descrição, em tags `FTD_STATUS:`/`FTD_READINESS:`/`FTD_SUITABILITY:`/`FTD_LAYER:`/`FTD_TOOL:` e num bloco JSON versionado `FTD_METADATA_V1` (com `request_contract` e casos relacionados preservados estruturalmente). As Questions continuam detalhadas só no relatório HTML; assim o Azure pode servir de fonte operacional de execução sem o corpus original.
 - O destino nunca é adivinhado, nada é apagado, Test Cases que a FTD não gerencia não são sobrescritos e credenciais nunca são salvas. Detalhes: [`entrypoints/azure-publish.md`](entrypoints/azure-publish.md).
+
+### Importação manual no Azure DevOps
+
+Prefere importar à mão no Azure Test Plans (Import test cases from CSV/XLSX)? O `/ftd-azure` também gera os arquivos de importação localmente — e continua sem se conectar ao Azure:
+
+```text
+/ftd-azure --manual-import --fresh-target --area-path "<projeto>\<area>"
+/ftd-azure --manual-import --existing-azure-export ./azure-atual.csv --area-path "<projeto>\<area>"
+```
+
+**ID em branco = Test Case novo. ID existente = atualização desse Test Case.** Os arquivos são separados por intenção, para que uma atualização nunca crie duplicatas por engano.
+
+- **Destino novo** (`--fresh-target`, só para um destino novo e vazio): CSVs com ID em branco em `output/azure/manual-import/manual-import-create/`, um por Suite principal. Cada Test Case é criado uma única vez.
+- **Destino existente:** no Azure Test Plans, inclua **Tags** (e Description) em Column options, exporte os Test Cases atuais para CSV/XLSX e entregue esse arquivo com `--existing-azure-export`. A FTD casa cada caso pela tag `ftd-key:` (ou pelo bloco `FTD_METADATA_V1`), nunca pelo título, e gera `manual-import-update.csv` com os IDs existentes. Caso com mais de um par é CONFLICT; caso sem par estável é UNMATCHED e **não** vira linha com ID em branco, a menos que você passe `--allow-create`.
+- `manual-import-plan.json` e `manual-import-summary.md` mostram CREATE / UPDATE / UNCHANGED / CONFLICT / UNMATCHED antes de qualquer importação. `--assigned-to` é opcional (nunca inventado); `--state` usa `Design` por padrão.
+- **Revisão visível:** os títulos ficam `TC-014 — …`, `[REVIEW] TC-014 — …`, `[BLOCKED] …` ou `[EXPLORATORY] CH-003 — …`; o título canônico não muda. Ao abrir o caso aparece o status de execução da FTD (status, bloqueios, ids das Questions), e tags como `FTD_STATUS:NEEDS_REVIEW` permitem filtrar.
+- **Ordem das Suites:** `suite-order.md` lista as Suites na ordem de exibição — requisitos em ordem natural (`REQ-2` antes de `REQ-10`), depois casos de uso, regras transversais e visões de execução — e a ordem inversa de criação para Test Plans que inserem Suites novas no topo. Os nomes das Suites ficam limpos.
+- **Sem clones:** um caso que pertence a várias Suites é importado uma vez, na Suite principal; `secondary-suite-placements.csv` lista as outras Suites onde adicionar o mesmo Test Case com **Add existing test cases**.
+
+O `/ftd-azure-publish` não muda; a importação manual é um fluxo adicional e seguro.
 
 ## Como funciona
 

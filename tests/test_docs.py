@@ -65,6 +65,19 @@ class AzureSafetyAgreementTests(unittest.TestCase):
                 self.assertIn("/ftd-azure-publish", text)
                 self.assertRegex(text, r"PUBLISH <proje[ct]+o?> / <pla[no]+>")
 
+    def test_the_manual_import_is_documented_as_local_and_duplicate_safe(self) -> None:
+        for name, (heading, warning) in {
+                "README.md": ("### Manual Azure DevOps import",
+                              "**Blank ID = new Test Case. Existing ID = update of that Test Case.**"),
+                "README.pt-BR.md": ("### Importação manual no Azure DevOps",
+                                    "**ID em branco = Test Case novo. ID existente = atualização desse Test Case.**")}.items():
+            text = read(name)
+            with self.subTest(document=name):
+                for phrase in (heading, warning, "--manual-import --fresh-target", "--existing-azure-export",
+                               "--allow-create", "suite-order.md", "secondary-suite-placements.csv", "[REVIEW]"):
+                    self.assertIn(phrase, text)
+        self.assertIn("never by title", read("entrypoints/azure.md"))
+
     def test_examples_contain_no_real_targets_or_credentials(self) -> None:
         for name in (*self.DOCS, "docs/instructions.md"):
             text = read(name)

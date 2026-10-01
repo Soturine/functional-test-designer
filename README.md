@@ -15,7 +15,7 @@ Agent Skill that designs **traceable, executable functional Test Cases** using o
 
 The model performs the QA reasoning; the runtime protects scope, traceability, validation, and publication. Nothing is silently invented: when the selected sources do not define something safely, the FTD records a Question or an explicit pending item instead.
 
-> Published version: 2.4.1.
+> Published version: 2.4.2.
 
 ## Quick start
 
@@ -111,6 +111,26 @@ Review the preview first: organization, project, Test Plan, CREATE/UPDATE/CONFLI
 - `--apply` rechecks the target and remote revisions, then writes only after you type `PUBLISH <project> / <plan>` (or pass `--approved` in non-interactive mode).
 - Every published Test Case carries FTD execution metadata for downstream executors: status, readiness, suitability, automation layer/tool hint, blockers, and Question ids — through a human-readable Description section, `FTD_STATUS:`/`FTD_READINESS:`/`FTD_SUITABILITY:`/`FTD_LAYER:`/`FTD_TOOL:` tags, and a versioned `FTD_METADATA_V1` JSON block. Structured `request_contract` data and related Test Cases are preserved. Full Question details remain in the HTML report, allowing Azure to act as the operational execution source without the original source corpus.
 - The destination is never guessed, nothing is deleted, Test Cases not managed by FTD are not overwritten, and credentials are never stored. Details: [`entrypoints/azure-publish.md`](entrypoints/azure-publish.md).
+
+### Manual Azure DevOps import
+
+Prefer importing by hand in Azure Test Plans (Import test cases from CSV/XLSX)? `/ftd-azure` can also write the import files locally — it still never connects to Azure:
+
+~~~text
+/ftd-azure --manual-import --fresh-target --area-path "<project>\<area>"
+/ftd-azure --manual-import --existing-azure-export ./azure-current.csv --area-path "<project>\<area>"
+~~~
+
+**Blank ID = new Test Case. Existing ID = update of that Test Case.** The files are split by intent so an update can never create duplicates by accident.
+
+- **Fresh target** (`--fresh-target`, only for a new, empty destination): CSV files with blank IDs under `output/azure/manual-import/manual-import-create/`, one per primary Suite. Each Test Case is created exactly once.
+- **Existing target:** in Azure Test Plans, add **Tags** (and Description) through Column options, export the current Test Cases to CSV/XLSX and give that file back with `--existing-azure-export`. FTD matches each case by its `ftd-key:` tag (or the `FTD_METADATA_V1` block), never by title, and writes `manual-import-update.csv` with the existing IDs. A case with several matches is a CONFLICT; a case with no stable match is UNMATCHED and is **not** turned into a blank-ID row unless you pass `--allow-create`.
+- `manual-import-plan.json` and `manual-import-summary.md` list CREATE / UPDATE / UNCHANGED / CONFLICT / UNMATCHED before you import anything. `--assigned-to` is optional (never invented); `--state` defaults to `Design`.
+- **Review is visible:** titles read `TC-014 — …`, `[REVIEW] TC-014 — …`, `[BLOCKED] …` or `[EXPLORATORY] CH-003 — …`; the canonical title itself never changes. Opening a case shows the FTD execution status (status, readiness blockers, Question ids), and tags such as `FTD_STATUS:NEEDS_REVIEW` keep it filterable.
+- **Suite order:** `suite-order.md` lists the Suites in display order — requirements in natural order (`REQ-2` before `REQ-10`), then use cases, transversal rules and execution views — and the reverse creation order for Test Plans that insert new Suites on top. Suite names stay clean.
+- **No clones:** a case that belongs to several Suites is imported once, in its primary Suite; `secondary-suite-placements.csv` lists the other Suites to add the same Test Case to with **Add existing test cases**.
+
+`/ftd-azure-publish` is unchanged; manual import is an additional, safe workflow.
 
 ## How it works
 
