@@ -87,7 +87,7 @@ class ExecutionMetadataTests(unittest.TestCase):
         fields = work_item_fields(map_test_case(review_case()), "canonical:TC-001")
         description, tags = fields["System.Description"], fields["System.Tags"].split("; ")
         for line in ("Status: NEEDS_REVIEW", "Automation suitability: HIGH", "Automation readiness: NEEDS_FIXTURE",
-                     "Automation layer: UI", "Tool hint: PLAYWRIGHT", "Blockers: MISSING_FIXTURE",
+                     "Automation layer: UI", "Tool hint: PLAYWRIGHT", "Readiness blockers: MISSING_FIXTURE",
                      "Questions: Q-017, Q-024", "Source: CANONICAL"):
             self.assertIn(f"<li>{line}</li>", description)
         self.assertTrue(description.startswith("<h3>FTD execution status</h3>"))
@@ -123,6 +123,39 @@ CONTRACT = {
     "body": "{\"seat\": \"A1\"} </pre> ação", "fixture_pool": None,
     "varies": ["id", "channel"], "measurements": ["latency per request", "rejections, by code"],
 }
+
+
+class DisplayTitleTests(unittest.TestCase):
+    """Azure shows the FTD id and a review/blocked/exploratory marker; the canonical title never changes."""
+
+    def test_the_azure_title_carries_the_ftd_id_and_a_status_marker(self) -> None:
+        expected = {
+            ("canonical:TC-042", "READY"): "TC-042 — Confirm reservation",
+            ("canonical:TC-043", "NEEDS_REVIEW"): "[REVIEW] TC-043 — Confirm reservation",
+            ("canonical:TC-044", "BLOCKED_EXTERNAL_DEPENDENCY"): "[BLOCKED] TC-044 — Confirm reservation",
+            ("canonical:TC-045", "BLOCKED_TEST_DATA"): "[BLOCKED] TC-045 — Confirm reservation",
+            ("chaos:field:CH-003", "EXPLORATORY"): "[EXPLORATORY] CH-003 — Confirm reservation",
+        }
+        for (key, status), title in expected.items():
+            with self.subTest(status=status):
+                payload = map_test_case(case(key, status))
+                fields = work_item_fields(payload, key)
+                self.assertEqual(title, fields["System.Title"])
+                self.assertEqual("Confirm reservation", payload["title"])
+                self.assertIn(f"ftd-key:{key}", fields["System.Tags"].split("; "))
+                self.assertIn(f"FTD_STATUS:{status}", fields["System.Tags"].split("; "))
+
+    def test_a_status_without_a_named_marker_never_reads_as_ready(self) -> None:
+        self.assertEqual("[PROPOSED] CH-001 — Confirm reservation",
+                         work_item_fields(map_test_case(case("chaos:x:CH-001", "PROPOSED")), "k")["System.Title"])
+
+    def test_a_review_case_explains_itself_when_opened(self) -> None:
+        fields = work_item_fields(map_test_case(review_case(readiness_blockers=["AMBIGUOUS_POLICY"])), "canonical:TC-001")
+        self.assertTrue(fields["System.Title"].startswith("[REVIEW] TC-001 — "))
+        for line in ("Status: NEEDS_REVIEW", "Readiness blockers: AMBIGUOUS_POLICY", "Questions: Q-017, Q-024"):
+            self.assertIn(f"<li>{line}</li>", fields["System.Description"])
+        self.assertEqual("NEEDS_REVIEW", read_ftd_metadata(fields["System.Description"])["status"])
+        self.assertNotIn("System.State", fields)
 
 
 class StructuredMetadataTests(unittest.TestCase):

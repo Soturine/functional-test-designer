@@ -300,6 +300,25 @@ class MappedPayloadContextTests(unittest.TestCase):
         self.assertEqual(["Q-001", "Q-002"], chaos["question_refs"])
         self.assertEqual(("NEEDS_REVIEW", ["AMBIGUOUS_POLICY"]), (chaos["status"], chaos["automation"]["readiness_blockers"]))
 
+    def test_the_display_title_decorates_only_the_azure_projection(self) -> None:
+        from integrations.azure_devops import work_item_fields
+        run = PackRun("saas-accounts")
+        self.addCleanup(run.close)
+        run.finalize()
+        before = (run.run_dir / "canonical-suite.json").read_bytes()
+        canonical = ch.pipeline.read_canonical(run.run_dir / "canonical-suite.json")
+        package = az.build_export_package(run.run_dir, chaos_ids=[])
+        preview = az.preview_export(package, project="P", plan="L", suite="S")
+        titles = {i["local_id"]: work_item_fields(i["payload"], i["local_id"])["System.Title"] for i in preview["create"]}
+        prefix = {"READY": "", "EXPLORATORY": "[EXPLORATORY] ", "NEEDS_REVIEW": "[REVIEW] "}
+        for case in canonical["cases"]:
+            exported = next(c for c in package["test_cases"] if c["local_id"] == case["id"])
+            self.assertEqual(case["title"], exported["title"])
+            self.assertEqual(f"{prefix[case['status']]}{case['id']} — {case['title']}",
+                             titles[az.canonical_export_key(case["id"])])
+        self.assertEqual(before, (run.run_dir / "canonical-suite.json").read_bytes())
+        self.assertEqual(len(canonical["cases"]), len(titles))
+
 
 class PreviewAndPublishTests(unittest.TestCase):
     def test_preview_is_local_and_read_only(self) -> None:

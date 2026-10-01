@@ -250,7 +250,7 @@ def preview_export(
 ) -> dict[str, Any]:
     """Local and read-only: no remote call happens here. All Azure-specific mapping,
     diffing and Suite placement is delegated to integrations/azure_devops.py."""
-    carried = ("title", "priority", "status", "preconditions", "test_data", "steps", "postconditions", "cleanup",
+    carried = ("local_id", "title", "priority", "status", "preconditions", "test_data", "steps", "postconditions", "cleanup",
                "state_contract", "requirement_refs", "related_test_cases", "question_refs", "source_kind", "automation_suitability",
                "automation_readiness", "readiness_blockers", "automation_layer", "automation_tool_hint",
                "required_resources", "environment_requirements", "chaos_run_id", "execution_variants",

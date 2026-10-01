@@ -39,6 +39,7 @@ def map_test_case(case: dict[str, Any]) -> dict[str, Any]:
     reset (state_contract). The canonical suite remains authoritative."""
     return {
         "local_id": case["id"],
+        "ftd_id": case.get("local_id") or str(case["id"]).rsplit(":", 1)[-1],
         "title": case["title"],
         "priority": case["priority"],
         "preconditions": list(case.get("preconditions") or []),
@@ -337,9 +338,30 @@ def execution_status_lines(payload: dict[str, Any]) -> list[str]:
             ("Automation suitability", automation.get("suitability")),
             ("Automation readiness", automation.get("readiness")), ("Automation layer", automation.get("layer")),
             ("Tool hint", automation.get("tool_hint")),
-            ("Blockers", ", ".join(automation.get("readiness_blockers") or [])),
+            ("Readiness blockers", ", ".join(automation.get("readiness_blockers") or [])),
             ("Questions", ", ".join(payload.get("question_refs") or [])))
     return [f"{label}: {value}" for label, value in rows if value]
+
+
+# Status decoration of the Azure display title. READY has none; any other status stays visible,
+# so a case that is not runnable never reads as READY in a Test Plan.
+TITLE_PREFIXES = {"NEEDS_REVIEW": "[REVIEW]", "EXPLORATORY": "[EXPLORATORY]"}
+AZURE_TITLE_LIMIT = 255
+
+
+def azure_title(payload: dict[str, Any]) -> str:
+    """`[REVIEW] TC-043 — <canonical title>`: a display title for Azure only. The canonical title is
+    never changed and the title is never identity (`ftd-key:` is)."""
+    status = str(payload.get("status") or "")
+    if status in ("", "READY"):
+        prefix = ""
+    elif status.startswith("BLOCKED"):
+        prefix = "[BLOCKED]"
+    else:
+        prefix = TITLE_PREFIXES.get(status, f"[{status}]")
+    ftd_id = payload.get("ftd_id")
+    title = " ".join(part for part in (prefix, f"{ftd_id} —" if ftd_id else "", payload["title"]) if part)
+    return title if len(title) <= AZURE_TITLE_LIMIT else title[:AZURE_TITLE_LIMIT - 1] + "…"
 
 
 def status_tags(payload: dict[str, Any]) -> list[str]:
@@ -418,7 +440,7 @@ def work_item_fields(payload: dict[str, Any], export_key: str) -> dict[str, Any]
         f"</parameterizedString><description/></step>"
         for n, s in enumerate(payload.get("steps", []), 2))
     tags = [MANAGED_TAG, f"ftd-key:{export_key}", *status_tags(payload), *payload.get("tags", [])]
-    return {"System.Title": payload["title"],
+    return {"System.Title": azure_title(payload),
             "Microsoft.VSTS.Common.Priority": PRIORITY_NUMBER.get(str(payload.get("priority")), 3),
             "Microsoft.VSTS.TCM.Steps": f'<steps id="0" last="{len(payload.get("steps", [])) + 1}">{steps}</steps>',
             "System.Description": description, "System.Tags": "; ".join(dict.fromkeys(tags))}
@@ -465,9 +487,10 @@ def build_publication_plan(
                 operations.append({**entry, "action": "UNCHANGED", "work_item_id": work_item_id})
             else:
                 operations.append({**entry, "action": "UPDATE", "work_item_id": work_item_id, "expected_rev": int(current["rev"])})
-        elif payload["title"] in unmanaged_titles:
+        elif {payload["title"], azure_title(payload)} & set(unmanaged_titles):
+            candidates = unmanaged_titles.get(azure_title(payload), []) + unmanaged_titles.get(payload["title"], [])
             operations.append({**entry, "action": "CONFLICT", "reason": "POSSIBLE_UNMANAGED_MATCH",
-                               "candidates": unmanaged_titles[payload["title"]]})
+                               "candidates": sorted(set(candidates))})
         else:
             operations.append({**entry, "action": "CREATE"})
     parent_id = resolved["root_suite"]["id"] if resolved["root_suite"] else resolved["plan"]["root_suite_id"]

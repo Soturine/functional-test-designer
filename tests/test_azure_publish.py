@@ -279,6 +279,17 @@ class ApplyTests(PublisherTestCase):
         self.assertEqual("CONFLICTS", pub.apply(self.plan_path(), self.azure, approved=True)["status"])
         self.assertEqual({"id": 42, "rev": 3, "title": title}, self.azure.items[42])
 
+    def test_a_look_alike_with_the_azure_display_title_is_never_overwritten_either(self) -> None:
+        package = json.loads((self.run.artifacts / "output" / "azure" / "azure-export-package.json").read_text(encoding="utf-8"))
+        first = package["test_cases"][0]
+        title = ado.azure_title(ado.map_test_case({**first, "id": first["export_key"]}))
+        self.assertIn(first["local_id"], title)
+        self.azure.items[42] = {"id": 42, "rev": 3, "title": title}
+        self.azure.members[100] = [42]
+        self.assertEqual(1, self.prepare()["summary"]["conflicts"])
+        self.assertEqual("CONFLICTS", pub.apply(self.plan_path(), self.azure, approved=True)["status"])
+        self.assertEqual({"id": 42, "rev": 3, "title": title}, self.azure.items[42])
+
     def test_a_changed_package_invalidates_the_plan(self) -> None:
         self.prepare()
         package = self.run.artifacts / "output" / "azure" / "azure-export-package.json"
