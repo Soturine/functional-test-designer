@@ -29,6 +29,7 @@ if str(SCRIPT_DIR) not in sys.path:
 
 from common import normalize_identifier, read_json, write_json
 import pipeline
+from integrations import azure_manual_import as manual
 from integrations.azure_devops import (
     build_group_suite_mapping, build_preview, load_integration_state, persist_integration_state,
     write_fallback_export,
@@ -289,17 +290,24 @@ def preview_export(
 def convert_run(
     run_dir: Path, *, chaos_ids: list[str] | None = None, output: Any = "json",
     requirement_mapping: dict[str, Any] | None = None, target: dict[str, str | None] | None = None,
+    manual_import: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """/ftd-azure: validated FTD state -> local Azure DevOps input JSON. Writes
     `<artifact_root>/output/azure/azure-export-package.json` (requirement-grouped input) and
     `azure-preview.json` (create/update/unchanged/skipped/conflicts plus Suite placements,
-    diffed against local integration state). Never authenticates, never calls Azure."""
+    diffed against local integration state). With `manual_import`, also writes the CSV files for
+    a manual Azure Test Case import under `output/azure/manual-import/`. Never authenticates,
+    never calls Azure."""
     formats = {str(token).strip().casefold() for token in (output.split(",") if isinstance(output, str) else output)}
     if formats != {"json"}:
         raise ValueError("/ftd-azure produces local JSON only; use --output json")
     run_dir = Path(run_dir).resolve()
     run = read_json(run_dir / "run.json")
     package = build_export_package(run_dir, chaos_ids=chaos_ids, requirement_mapping=requirement_mapping)
+    import_plan = None
+    if manual_import is not None:  # decided before anything is written
+        options = manual.import_options(**{k: manual_import.get(k) for k in ("area_path", "assigned_to", "state")})
+        import_plan = manual.build_plan(package, options, fresh_target=bool(manual_import.get("fresh_target")))
     target = target or {}
     state = migrate_integration_state(load_integration_state(run_dir))
     preview = preview_export(
@@ -310,7 +318,9 @@ def convert_run(
     destination = Path(run["artifact_root"]) / "output" / "azure"
     write_json(destination / "azure-export-package.json", package)
     write_json(destination / "azure-preview.json", preview)
+    imported = manual.write_manual_import(package, destination / "manual-import", import_plan) if import_plan else None
     return {
+        **({"manual_import": imported} if imported else {}),
         "package": str(destination / "azure-export-package.json"),
         "preview": str(destination / "azure-preview.json"),
         "chaos_runs": [c["chaos_run_id"] for c in package["chaos_runs"]],
@@ -319,6 +329,24 @@ def convert_run(
         "unchanged": len(preview["unchanged"]), "skipped": len(preview["skipped"]),
         "conflicts": len(preview["conflicts"]), "live_azure_calls": 0,
     }
+
+
+def add_manual_import_arguments(parser: Any) -> None:
+    group = parser.add_argument_group("manual Azure import (local CSV files; never connects)")
+    group.add_argument("--manual-import", action="store_true", help="also write CSV files for a manual Azure import")
+    group.add_argument("--fresh-target", action="store_true", help="the Azure target is new and empty: create every case")
+    group.add_argument("--area-path", help="Azure Area Path of the Test Cases (required with --manual-import)")
+    group.add_argument("--assigned-to", help="optional Azure user; left blank when omitted")
+    group.add_argument("--state", help=f"Azure state for the rows (default {manual.DEFAULT_STATE})")
+
+
+def manual_import_request(args: Any) -> dict[str, Any] | None:
+    if not args.manual_import:
+        if args.fresh_target or args.area_path or args.assigned_to or args.state:
+            raise ValueError("--fresh-target, --area-path, --assigned-to and --state apply only with --manual-import")
+        return None
+    return {"fresh_target": args.fresh_target, "area_path": args.area_path, "assigned_to": args.assigned_to,
+            "state": args.state}
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -334,12 +362,14 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--project")
     parser.add_argument("--plan")
     parser.add_argument("--suite")
+    add_manual_import_arguments(parser)
     args = parser.parse_args(argv)
     try:
         result = convert_run(
             args.run, chaos_ids=[] if args.canonical_only else args.chaos_id, output=args.output,
             requirement_mapping=read_json(args.requirement_mapping) if args.requirement_mapping else None,
             target={"project": args.project, "plan": args.plan, "suite": args.suite},
+            manual_import=manual_import_request(args),
         )
     except (ValueError, OSError) as exc:
         print(json.dumps({"errors": [str(exc)]}, indent=2, ensure_ascii=False))

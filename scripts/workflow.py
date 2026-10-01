@@ -314,6 +314,7 @@ def dispatch(intent: str, **request: Any) -> Any:
         _run_dir(request), chaos_ids=request.get("chaos_ids"), output=request.get("output", "json"),
         requirement_mapping=request.get("requirement_mapping"),
         target={key: request.get(key) for key in ("project", "plan", "suite")},
+        manual_import=request.get("manual_import"),
     )
 
 
@@ -449,6 +450,7 @@ def main(argv: list[str] | None = None) -> int:
     azure.add_argument("--output", default="json")
     azure.add_argument("--chaos-id", action="append", default=None)
     azure.add_argument("--canonical-only", action="store_true")
+    azure_export.add_manual_import_arguments(azure)
     args = parser.parse_args(argv)
     try:
         if args.command == "gen":
@@ -475,7 +477,7 @@ def main(argv: list[str] | None = None) -> int:
         else:
             result = azure_export.convert_run(
                 pipeline.resolve_run(args.run, args.output_dir), chaos_ids=[] if args.canonical_only else args.chaos_id,
-                output=args.output,
+                output=args.output, manual_import=azure_export.manual_import_request(args),
             )
     except (ValueError, OSError) as exc:
         errors = getattr(exc, "errors", None) or [str(exc)]
