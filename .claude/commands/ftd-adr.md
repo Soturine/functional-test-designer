@@ -1,0 +1,1 @@
+Follow `entrypoints/adr.md` and delegate to the functional-test-designer shared core. `/ftd --adr <file|folder>` is the same command. Natural-language requests remain supported; the host resolves the intent.

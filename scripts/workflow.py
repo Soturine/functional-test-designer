@@ -50,7 +50,8 @@ from common import normalize_post_generation, read_json  # noqa: E402
 from procedures import audit_case  # noqa: E402
 
 
-INTENTS = ("ftd-gen", "ftd-chaos", "ftd-azure", "ftd-azure-publish", "ftd-clarify", "ftd-check", "ftd-render")
+INTENTS = ("ftd-gen", "ftd-chaos", "ftd-azure", "ftd-azure-publish", "ftd-clarify", "ftd-check", "ftd-render",
+           "ftd-adr")
 # Retired public names: they only explain where the behavior moved.
 RETIRED = {
     "ftd-challenge": "ftd-challenge was renamed: use /ftd-chaos --run <run> [--input-file instructions.md]",
@@ -89,10 +90,12 @@ class IntentUnresolved(ValueError):
 
 def exact_alias(request_text: str) -> str | None:
     """`/ftd-gen ...`, `$ftd-gen ...` or `ftd-gen ...` — only the leading token, exactly."""
-    token = request_text.strip().split(maxsplit=1)[0] if request_text.strip() else ""
-    alias = token.lstrip("/$").casefold()
+    tokens = request_text.strip().split()
+    alias = tokens[0].lstrip("/$").casefold() if tokens else ""
     if alias in RETIRED:
         raise ValueError(RETIRED[alias])
+    if alias == "ftd" and "--adr" in tokens[1:]:
+        return "ftd-adr"  # the public form `/ftd --adr <file|folder>`: an exact command, not a phrase
     return alias if alias in INTENTS else None
 
 
@@ -297,12 +300,18 @@ def dispatch(intent: str, **request: Any) -> Any:
             output=request.get("output"), chaos_id=request.get("chaos_id"), focus=request.get("focus", ""),
             seeds=[Path(p) for p in request.get("seeds", []) or []], workspace=request.get("workspace"),
         )
+    if intent == "ftd-adr":
+        import adr
+        return adr.dispatch(request)
     if intent == "ftd-azure-publish":
         # Never reached implicitly: the host dispatches it only on an explicit publication request.
         phase = request.get("phase")
         if phase == "prepare":
             target = {key: request.get(key) for key in ("organization", "project", "plan", "root_suite")}
             remote = request.get("remote") or azure_publish.remote_for(str(target["organization"] or ""), request.get("auth", ""))
+            if request.get("adr"):
+                return azure_publish.prepare(_run_dir(request), target, remote, adr=request["adr"],
+                                             review=request.get("review"))
             return azure_publish.prepare(_run_dir(request), target, remote)
         if phase == "apply":
             plan = read_json(Path(request["plan_file"]))
@@ -411,6 +420,9 @@ def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     if argv[:1] == ["azure-publish"]:
         return azure_publish.main(argv[1:])
+    if argv[:1] == ["adr"]:
+        import adr
+        return adr.main(argv[1:])
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     commands = parser.add_subparsers(dest="command", required=True)
     gen = commands.add_parser("gen", help="/ftd-gen: canonical suite from instructions.md/.txt")

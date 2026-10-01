@@ -45,9 +45,14 @@ def _canonical_digest(run_dir: Path) -> str | None:
     return pipeline.read_canonical(run_dir / "canonical-suite.json").get("semantic_fingerprint")
 
 
-def prepare(run_dir: Path, target: dict[str, Any], remote: Any, *, include_needs_review: bool = True) -> dict[str, Any]:
-    """Read-only: resolve the explicit target and write the local publication plan."""
+def prepare(run_dir: Path, target: dict[str, Any], remote: Any, *, include_needs_review: bool = True,
+            adr: str | None = None, review: dict[str, str] | None = None) -> dict[str, Any]:
+    """Read-only: resolve the explicit target and write the local publication plan. With `adr`,
+    the plan covers only that finalized ADR round's delta (FTD ADR protections included)."""
     run_dir = Path(run_dir).resolve()
+    if adr:
+        import adr_azure
+        return adr_azure.prepare_adr(run_dir, adr, target, remote, review_decisions=review)
     package_path = _package_path(run_dir)
     if not package_path.is_file():
         raise PublicationError("PACKAGE_MISSING", "run /ftd-azure first: the publisher consumes its local package")
@@ -68,6 +73,9 @@ def prepare(run_dir: Path, target: dict[str, Any], remote: Any, *, include_needs
 def apply(plan_path: Path, remote: Any, *, confirmation: str | None = None, approved: bool = False) -> dict[str, Any]:
     """Write the prepared plan after digest, target and version checks and explicit approval."""
     plan = read_json(Path(plan_path))
+    if plan.get("operation") == "ADR_PUBLICATION_PLAN":
+        import adr_azure
+        return adr_azure.apply_adr(Path(plan_path), remote, confirmation=confirmation, approved=approved)
     source = plan["source"]
     run_dir = Path(source["run_dir"])
     package_path = Path(source["package_path"])
@@ -113,6 +121,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--root-suite", help="optional destination suite id or exact name")
     parser.add_argument("--auth", default="", help="azure-cli | interactive | env:<VARIABLE>")
     parser.add_argument("--approved", action="store_true", help="explicit non-interactive approval (with --apply)")
+    parser.add_argument("--adr", metavar="ADR_ID", help="with --prepare: publish only this finalized ADR round's delta")
+    parser.add_argument("--review", action="append", default=[], metavar="TC=UPDATE_SAME_TEST_CASE",
+                        help="with --adr: the human decision for an executed Test Case (repeatable)")
     args = parser.parse_args(argv)
     try:
         if args.prepare:
@@ -127,8 +138,10 @@ def main(argv: list[str] | None = None) -> int:
                                                           "never guessed")
             # Which suite would be published is shown before any credential or remote call.
             print(f"Run: {run_dir.name}\nCanonical digest: {_canonical_digest(run_dir)}")
+            review = dict(item.split("=", 1) for item in args.review if "=" in item)
             result = prepare(run_dir, {"organization": args.organization, "project": args.project, "plan": args.plan,
-                                       "root_suite": args.root_suite}, remote_for(args.organization, args.auth))
+                                       "root_suite": args.root_suite}, remote_for(args.organization, args.auth),
+                             adr=args.adr, review=review)
             print(result["preview"])
         else:
             plan = read_json(args.apply)

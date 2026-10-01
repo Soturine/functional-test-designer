@@ -78,6 +78,7 @@ Full commented template: [`docs/instructions.md`](docs/instructions.md).
 | `/ftd-azure` | Generates the **local** Azure DevOps package (JSON) | **No — it never connects** |
 | `/ftd-azure-publish --prepare` | Reads the Azure DevOps target and creates a local publication plan | No remote writes (read-only remote access) |
 | `/ftd-azure-publish --apply` | Publishes the reviewed plan | **Yes — only after explicit approval** |
+| `/ftd --adr <folder>` (`/ftd-adr`) | Maintains the validated suite from new ADRs and decisions | No |
 
 Natural-language requests also work (“run chaos”, “generate the Azure package”). “Generate/convert/prepare Azure” always means the local package; publication requires an explicit request.
 
@@ -131,6 +132,26 @@ Prefer importing by hand in Azure Test Plans (Import test cases from CSV/XLSX)? 
 - **No clones:** a case that belongs to several Suites is imported once, in its primary Suite; `secondary-suite-placements.csv` lists the other Suites to add the same Test Case to with **Add existing test cases**.
 
 `/ftd-azure-publish` is unchanged; manual import is an additional, safe workflow.
+
+## Maintaining the suite with ADRs
+
+Generate the suite once; when ADRs, approved decisions, meeting notes or other change material arrive later, point the FTD at them:
+
+~~~text
+/ftd-gen --input-file ./docs/instructions.md --output json,md,html     # once, at the start
+/ftd --adr ./docs/adr/                                                 # whenever new decisions arrive
+~~~
+
+FTD uses the project's current validated run (and its latest finalized ADR round) unless you pass `--run`. It:
+
+- reads only new or changed ADR files and reuses everything already analyzed — the suite is not regenerated and the original sources are not reread;
+- treats the folder as a change corpus: formal ADRs, notes, drafts and observations are understood by meaning, statement by statement, with their own authority — only an approved decision changes expected behavior, while drafts and notes become Questions, Findings or review items;
+- shows which Test Cases are affected (directly or indirectly), proposes updates to existing Test Cases (same id) and new Test Cases where behavior is not covered yet, each with a complete executable procedure;
+- records new Questions and Findings and marks old Questions an ADR answers, without erasing history;
+- writes an offline report (`output/adr/<adr-id>/adr-report.html`) with decisions, before/after and procedure changes, and a local Azure delta with only the changed Test Cases;
+- never publishes by itself: `/ftd-azure-publish --prepare --adr <adr-id>` and an approved `--apply` update the same Azure Test Cases, and an executed Test Case whose behavior changed needs your explicit decision first.
+
+Details: [`entrypoints/adr.md`](entrypoints/adr.md).
 
 ## How it works
 

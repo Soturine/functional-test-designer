@@ -37,9 +37,10 @@ class ReadmeTests(unittest.TestCase):
                 self.assertIn(advanced, readme)
                 before_advanced = readme.split(advanced, 1)[0]
                 self.assertNotIn("python scripts/", before_advanced)
-                commands = re.findall(r"^(/[a-z-]+)", before_advanced, re.MULTILINE)
-                self.assertTrue(commands)
-                self.assertEqual(set(), {c.lstrip("/") for c in commands} - set(workflow.INTENTS))
+                lines = re.findall(r"^/[a-z-]+.*$", before_advanced, re.MULTILINE)
+                self.assertTrue(lines)
+                # `/ftd --adr <folder>` is the public form of ftd-adr; any other line must start with an intent.
+                self.assertEqual(set(), {workflow.exact_alias(line) or line for line in lines} - set(workflow.INTENTS))
 
     def test_output_dir_and_run_id_are_explained(self) -> None:
         for name in READMES:

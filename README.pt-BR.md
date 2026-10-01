@@ -78,6 +78,7 @@ Modelo completo e comentado: [`docs/instructions.md`](docs/instructions.md).
 | `/ftd-azure` | Gera o pacote **local** (JSON) para Azure DevOps | **Não — nunca se conecta** |
 | `/ftd-azure-publish --prepare` | Lê o destino no Azure DevOps e gera um plano local | Não (só leitura remota) |
 | `/ftd-azure-publish --apply` | Publica o plano revisado | **Sim — só após aprovação explícita** |
+| `/ftd --adr <pasta>` (`/ftd-adr`) | Mantém a suíte validada a partir de novos ADRs e decisões | Não |
 
 Pedidos em linguagem natural também funcionam ("rode o chaos", "gere o pacote do Azure"). "Gerar/converter/preparar Azure" significa sempre o pacote local; publicar exige pedido explícito.
 
@@ -131,6 +132,26 @@ Prefere importar à mão no Azure Test Plans (Import test cases from CSV/XLSX)? 
 - **Sem clones:** um caso que pertence a várias Suites é importado uma vez, na Suite principal; `secondary-suite-placements.csv` lista as outras Suites onde adicionar o mesmo Test Case com **Add existing test cases**.
 
 O `/ftd-azure-publish` não muda; a importação manual é um fluxo adicional e seguro.
+
+## Manutenção da suíte com ADRs
+
+Gere a suíte uma vez; quando chegarem ADRs, decisões aprovadas, atas ou outros materiais de mudança, aponte a FTD para eles:
+
+```text
+/ftd-gen --input-file ./docs/instructions.md --output json,md,html     # uma vez, no início
+/ftd --adr ./docs/adr/                                                 # sempre que chegarem novas decisões
+```
+
+A FTD usa a execução validada atual do projeto (e a última rodada de ADR finalizada), a menos que você passe `--run`. Ela:
+
+- lê só os arquivos de ADR novos ou alterados e reaproveita o que já foi analisado — a suíte não é regenerada e as fontes originais não são relidas;
+- trata a pasta como um corpus de mudanças: ADRs formais, atas, rascunhos e observações são entendidos pelo sentido, afirmação por afirmação, cada uma com a sua autoridade — só uma decisão aprovada muda o comportamento esperado; rascunhos e anotações viram Questions, Findings ou itens de revisão;
+- mostra quais Test Cases são afetados (direta ou indiretamente), propõe atualizações dos existentes (mesmo id) e novos Test Cases onde o comportamento ainda não tem cobertura, sempre com procedimento executável completo;
+- registra novas Questions e Findings e marca as Questions antigas que um ADR responde, sem apagar o histórico;
+- gera um relatório offline (`output/adr/<adr-id>/adr-report.html`) com decisões, antes/depois e mudanças de procedimento, e um delta local do Azure só com os Test Cases alterados;
+- nunca publica sozinha: `/ftd-azure-publish --prepare --adr <adr-id>` e um `--apply` aprovado atualizam os mesmos Test Cases no Azure, e um Test Case já executado cujo comportamento mudou exige a sua decisão explícita antes.
+
+Detalhes: [`entrypoints/adr.md`](entrypoints/adr.md).
 
 ## Como funciona
 
