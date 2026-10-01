@@ -2,6 +2,11 @@
 
 # Functional Test Designer
 
+<p align="center">
+  <img src="docs/hiw.png" alt="Functional Test Designer — conceptual workflow" width="100%">
+</p>
+
+
 Agent Skill that designs **traceable, executable functional Test Cases** using only the sources you select — requirements, documentation, source code, and existing tests — across any domain.
 
 - **Input:** an `instructions.md` file describing what to read and what deserves extra attention.

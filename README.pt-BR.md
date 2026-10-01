@@ -2,6 +2,11 @@
 
 # Functional Test Designer
 
+<p align="center">
+  <img src="docs/hiw.png" alt="Functional Test Designer — fluxo conceitual" width="100%">
+</p>
+
+
 Agent Skill que projeta **Test Cases funcionais rastreáveis e executáveis** a partir somente das fontes que você seleciona — requisitos, documentação, código e testes existentes —, em qualquer domínio.
 
 - **Entra:** um arquivo `instructions.md` dizendo o que ler e onde focar.
