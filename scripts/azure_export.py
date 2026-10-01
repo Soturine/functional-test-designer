@@ -18,6 +18,7 @@ written by earlier versions as `challenge:<id>:CH-017` are migrated deterministi
 
 from __future__ import annotations
 
+import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -198,6 +199,27 @@ def suite_name(identifier: str | None, title: str | None) -> str:
 
 
 SUITE_TYPES = {"FUNCTIONAL": "REQUIREMENT_BASED", "USE_CASE": "STATIC", "TRANSVERSAL": "STATIC", "EXECUTION_VIEW": "STATIC"}
+# Azure display order: requirement groups, then use-case groups, then transversal rules, then
+# execution views (kept in the organization's own order), then anything unassigned.
+SUITE_KIND_RANK = {"FUNCTIONAL": 0, "USE_CASE": 1, "TRANSVERSAL": 2, "EXECUTION_VIEW": 3}
+
+
+def natural_key(text: str | None) -> tuple:
+    """`REQ-2` before `REQ-10`, `RF1` before `RF10` before `UC003`: digit runs compare as numbers,
+    for any identifier scheme."""
+    return tuple((0, int(part), "") if part.isdigit() else (1, 0, part.casefold())
+                 for part in re.split(r"(\d+)", text or "") if part)
+
+
+def _display_ordered(suites: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Requirement and use-case suites in natural identifier order; the others keep the
+    organization's order. Members inside a suite are never reordered."""
+    def key(item: tuple[int, dict[str, Any]]) -> tuple:
+        position, suite = item
+        rank = SUITE_KIND_RANK.get(suite["kind"], len(SUITE_KIND_RANK)) if suite.get("group") else len(SUITE_KIND_RANK)
+        named = rank < SUITE_KIND_RANK["TRANSVERSAL"]
+        return rank, natural_key(suite.get("identifier") or suite.get("group")) if named else (), position
+    return [suite for _, suite in sorted(enumerate(suites), key=key)]
 
 
 def _placements(suites: list[dict[str, Any]]) -> dict[str, int]:
@@ -214,9 +236,9 @@ def _organization_suites(run_dir: Path, canonical: dict[str, Any], chaos_runs: l
     transversal rules, execution views). Requirement identifiers stay trace metadata on each
     case. Without a persisted organization input, one suite per requirement is kept."""
     if not ((run_dir / "sources.json").is_file() and (run_dir / "run.json").is_file()):
-        return [{"suite_name": r["suite_name"], "group": r["identifier"], "kind": "FUNCTIONAL",
-                 "suite_type": "REQUIREMENT_BASED", "order_source": "CANONICAL_ORDER",
-                 "test_case_refs": r["test_case_refs"]} for r in requirements]
+        return _display_ordered([{"suite_name": r["suite_name"], "group": r["identifier"], "kind": "FUNCTIONAL",
+                                  "suite_type": "REQUIREMENT_BASED", "order_source": "CANONICAL_ORDER",
+                                  "test_case_refs": r["test_case_refs"]} for r in requirements])
     organization = pipeline.organization_for_run(run_dir, canonical, chaos_runs=chaos_runs)
     suites = []
     for group in organization["groups"]:
@@ -233,7 +255,7 @@ def _organization_suites(run_dir: Path, canonical: dict[str, Any], chaos_runs: l
     if orphans:  # e.g. a chaos case related to nothing and tagged for no execution view
         suites.append({"suite_name": UNASSIGNED, "group": None, "kind": "UNASSIGNED", "suite_type": "STATIC",
                        "order_source": "CANONICAL_ORDER", "test_case_refs": list(dict.fromkeys(orphans))})
-    return suites
+    return _display_ordered(suites)
 
 
 def _suite_groups(package: dict[str, Any]) -> list[dict[str, Any]]:
