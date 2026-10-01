@@ -18,37 +18,48 @@ def read(name: str) -> str:
     return (ROOT / name).read_text(encoding="utf-8")
 
 
+# The English README and its Portuguese translation, with the heading that ends each quick start.
+READMES = {"README.md": "## Advanced", "README.pt-BR.md": "## Avançado"}
+
+
 class ReadmeTests(unittest.TestCase):
     def test_every_public_command_is_explained(self) -> None:
-        readme = read("README.md")
-        for intent in workflow.INTENTS:
-            self.assertIn(f"/{intent}", readme)
+        for name in READMES:
+            readme = read(name)
+            for intent in workflow.INTENTS:
+                with self.subTest(document=name, intent=intent):
+                    self.assertIn(f"/{intent}", readme)
 
     def test_the_quick_start_uses_only_public_commands(self) -> None:
-        readme = read("README.md")
-        before_advanced = readme.split("## Avançado", 1)[0]
-        self.assertNotIn("python scripts/", before_advanced)
-        commands = re.findall(r"^(/[a-z-]+)", before_advanced, re.MULTILINE)
-        self.assertTrue(commands)
-        self.assertEqual(set(), {c.lstrip("/") for c in commands} - set(workflow.INTENTS))
+        for name, advanced in READMES.items():
+            with self.subTest(document=name):
+                readme = read(name)
+                self.assertIn(advanced, readme)
+                before_advanced = readme.split(advanced, 1)[0]
+                self.assertNotIn("python scripts/", before_advanced)
+                commands = re.findall(r"^(/[a-z-]+)", before_advanced, re.MULTILINE)
+                self.assertTrue(commands)
+                self.assertEqual(set(), {c.lstrip("/") for c in commands} - set(workflow.INTENTS))
 
     def test_output_dir_and_run_id_are_explained(self) -> None:
-        readme = read("README.md")
-        self.assertIn("--output-dir ./ftd-output", readme)
-        self.assertIn(".ftd/runs/<run-id>/", readme)
+        for name in READMES:
+            with self.subTest(document=name):
+                self.assertIn("--output-dir ./ftd-output", read(name))
+                self.assertIn(".ftd/runs/<run-id>/", read(name))
 
 
 class AzureSafetyAgreementTests(unittest.TestCase):
-    DOCS = ("README.md", "SKILL.md", "entrypoints/azure.md", "entrypoints/azure-publish.md", "references/workflow.md")
+    DOCS = ("README.md", "README.pt-BR.md", "SKILL.md", "entrypoints/azure.md", "entrypoints/azure-publish.md", "references/workflow.md")
 
     def test_every_document_keeps_ftd_azure_local(self) -> None:
-        self.assertIn("Não — nunca se conecta", read("README.md"))
+        self.assertIn("No — it never connects", read("README.md"))
+        self.assertIn("Não — nunca se conecta", read("README.pt-BR.md"))
         self.assertIn("never contacts Azure DevOps", read("SKILL.md"))
         self.assertIn("never calls Azure", read("entrypoints/azure.md"))
         self.assertIn("`/ftd-azure` never connects", read("references/workflow.md"))
 
     def test_publication_is_explicit_and_approval_gated_everywhere(self) -> None:
-        for name in ("README.md", "SKILL.md", "entrypoints/azure-publish.md", "references/workflow.md"):
+        for name in (*READMES, "SKILL.md", "entrypoints/azure-publish.md", "references/workflow.md"):
             text = read(name)
             with self.subTest(document=name):
                 self.assertIn("/ftd-azure-publish", text)
@@ -75,15 +86,18 @@ class InstructionsTemplateTests(unittest.TestCase):
 class PostGenerationDocsTests(unittest.TestCase):
     def test_follow_up_actions_are_documented_as_free_form_and_local(self) -> None:
         readme, skill, template = read("README.md"), read("SKILL.md"), read("docs/instructions.md")
-        self.assertIn("## Depois da run\n- fazer chaos\n- converter azure", readme.replace("\r\n", "\n"))
-        self.assertIn("`/ftd-azure-publish` nunca roda sozinho", readme)
+        self.assertIn("## After the run\n- run chaos\n- convert to Azure", readme.replace("\r\n", "\n"))
+        self.assertIn("`/ftd-azure-publish` never runs automatically", readme)
+        translation = read("README.pt-BR.md")
+        self.assertIn("## Depois da run\n- fazer chaos\n- converter azure", translation.replace("\r\n", "\n"))
+        self.assertIn("`/ftd-azure-publish` nunca roda sozinho", translation)
         self.assertIn("Any Azure wording means the local export", skill)
         self.assertIn("publishing to Azure DevOps is never automatic", template)
 
 
 
 class RepositoryLayoutTests(unittest.TestCase):
-    ROOT_FILES = {"README.md", "SKILL.md", "CHANGELOG.md", "LICENSE", "ATTRIBUTION.md", "VERSION", "requirements.txt",
+    ROOT_FILES = {"README.md", "README.pt-BR.md", "SKILL.md", "CHANGELOG.md", "LICENSE", "ATTRIBUTION.md", "VERSION", "requirements.txt",
                   ".gitignore"}
 
     def test_the_root_holds_only_current_entry_point_files(self) -> None:
@@ -120,10 +134,12 @@ class RepositoryLayoutTests(unittest.TestCase):
 
 class CurrentRunDocsTests(unittest.TestCase):
     def test_docs_explain_the_current_run_and_keep_both_examples(self) -> None:
-        readme = read("README.md")
-        self.assertIn(".ftd/current-run.json", readme)
-        self.assertIn("/ftd-azure\n```", readme.replace("\r\n", "\n"))
-        self.assertIn("/ftd-azure --run <run-id>", readme)
+        for name in READMES:
+            readme = read(name)
+            with self.subTest(document=name):
+                self.assertIn(".ftd/current-run.json", readme)
+                self.assertRegex(readme.replace("\r\n", "\n"), r"/ftd-azure\n(```|~~~)")
+                self.assertIn("/ftd-azure --run <run-id>", readme)
         for name in ("SKILL.md", "references/workflow.md", "entrypoints/chaos.md", "entrypoints/azure.md",
                      "entrypoints/azure-publish.md", "entrypoints/check.md", "entrypoints/render.md"):
             with self.subTest(document=name):
