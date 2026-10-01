@@ -245,7 +245,7 @@ def load_integration_state(run_dir: Path) -> dict[str, Any]:
 PRIORITY_NUMBER = {"CRITICAL": 1, "HIGH": 2, "MEDIUM": 3, "LOW": 4}
 MANAGED_TAG = "ftd-managed"
 READ_METHODS = ("organization", "list_projects", "list_test_plans", "list_suites", "list_suite_test_cases",
-                "get_work_items", "list_plan_test_cases")
+                "get_work_items", "list_plan_test_cases", "test_case_history")
 WRITE_METHODS = ("create_test_case", "update_test_case", "create_suite", "add_test_cases_to_suite")
 
 
@@ -258,6 +258,8 @@ class AzureRemote(Protocol):
     def list_suite_test_cases(self, project_id: str, plan_id: int, suite_id: int) -> list[int]: ...
     def get_work_items(self, project_id: str, ids: list[int]) -> dict[int, dict[str, Any]]: ...  # {id: {"id", "rev", "title", "tags"}}
     def list_plan_test_cases(self, project_id: str, plan_id: int) -> list[dict[str, Any]]: ...  # [{"id", "title"}]
+    # Execution history of one Test Case in the plan, read-only (FTD ADR): {"executed", "results", "evidence"}
+    def test_case_history(self, project_id: str, plan_id: int, work_item_id: int) -> dict[str, Any]: ...
 
 
 class AzureRemoteWriter(AzureRemote, Protocol):
@@ -448,9 +450,14 @@ def work_item_fields(payload: dict[str, Any], export_key: str) -> dict[str, Any]
 
 def build_publication_plan(
     package: dict[str, Any], mapping: dict[str, Any], remote: Any, target: dict[str, Any], source: dict[str, Any],
-    *, include_needs_review: bool = True,
+    *, include_needs_review: bool = True, emit: Any = None,
 ) -> dict[str, Any]:
-    """PREPARE: read the explicit target and decide every operation. Performs only reads."""
+    """PREPARE: read the explicit target and decide every operation. Performs only reads.
+
+    `emit` (FTD ADR only) produces the Work Item fields of a payload instead of `work_item_fields`;
+    the synchronization hash then covers exactly those fields and each operation carries them for
+    apply. Without it, a mapping entry an ADR round published is a CONFLICT for the canonical
+    package — the canonical definition never silently reverts an ADR update."""
     remote = ReadOnlyRemote(remote)
     resolved = resolve_target(remote, target)
     project_id, plan_id = resolved["project"]["id"], resolved["plan"]["id"]
@@ -467,11 +474,19 @@ def build_publication_plan(
     for case in cases:
         key = case["export_key"]
         payload = map_test_case({**case, "id": key, "tags": case.get("execution_tags", [])})
-        content_hash = publication_hash(payload, key)
-        entry = {"export_key": key, "content_hash": content_hash, "payload": payload}
+        if emit is None:
+            content_hash = publication_hash(payload, key)
+            entry = {"export_key": key, "content_hash": content_hash, "payload": payload}
+        else:
+            fields = emit(case, payload)
+            content_hash = _hash({"contract_version": AZURE_WORK_ITEM_CONTRACT_VERSION, "fields": fields})
+            entry = {"export_key": key, "content_hash": content_hash, "payload": payload, "fields": fields}
         prior = entries.get(key)
         if case["status"] == "BLOCKED" or (case["status"] == "NEEDS_REVIEW" and not include_needs_review):
             operations.append({**entry, "action": "SKIPPED", "reason": case["status"]})
+        elif prior and prior.get("adr_run_id") and emit is None:
+            operations.append({**entry, "action": "CONFLICT", "reason": "MANAGED_BY_ADR_LINEAGE",
+                               "work_item_id": prior.get("external_id"), "adr_run_id": prior["adr_run_id"]})
         elif prior and prior.get("project_id") not in (None, project_id):
             operations.append({**entry, "action": "CONFLICT", "reason": "MAPPED_TO_ANOTHER_PROJECT",
                                "work_item_id": prior.get("external_id")})
@@ -587,14 +602,14 @@ def apply_publication_plan(
     for op in plan["operations"]["test_cases"]:
         key = op["export_key"]
         if op["action"] == "CREATE":
-            created = remote.create_test_case(project_id, work_item_fields(op["payload"], key))
+            created = remote.create_test_case(project_id, op.get("fields") or work_item_fields(op["payload"], key))
             writes += 1
             work_item_of[key] = int(created["id"])
             entries[key] = {"external_id": str(created["id"]), "project_id": project_id,
                             "last_synchronized_version": created["rev"], "content_hash": op["content_hash"]}
         elif op["action"] == "UPDATE":
-            updated = remote.update_test_case(project_id, int(op["work_item_id"]), work_item_fields(op["payload"], key),
-                                              int(op["expected_rev"]))
+            updated = remote.update_test_case(project_id, int(op["work_item_id"]),
+                                              op.get("fields") or work_item_fields(op["payload"], key), int(op["expected_rev"]))
             writes += 1
             work_item_of[key] = int(op["work_item_id"])
             entries[key] = {"external_id": str(op["work_item_id"]), "project_id": project_id,
@@ -806,6 +821,20 @@ class RestAzureRemote:
             items = self._call("GET", f"{project_id}/_apis/testplan/Plans/{plan_id}/Suites/{suite['id']}/TestCase")["value"]
             found += [{"id": int(i["workItem"]["id"]), "title": i["workItem"].get("name", "")} for i in items]
         return found
+
+    def test_case_history(self, project_id: str, plan_id: int, work_item_id: int) -> dict[str, Any]:
+        """Read-only: the test points of this Test Case in the plan and whether any was ever run.
+        Execution results and their evidence are only read, never written."""
+        results = 0
+        for suite in self.list_suites(project_id, plan_id):
+            points = self._call("GET", f"{project_id}/_apis/testplan/Plans/{plan_id}/Suites/{suite['id']}"
+                                       f"/TestPoint?testCaseId={int(work_item_id)}")["value"]
+            for point in points:
+                last = point.get("results") or {}
+                outcome = str(last.get("outcome") or "").casefold()
+                if last.get("lastTestRunId") or outcome not in {"", "unspecified", "none", "notapplicable"}:
+                    results += 1
+        return {"executed": results > 0, "results": results, "evidence": "NOT_QUERIED"}
 
     def get_work_items(self, project_id: str, ids: list[int]) -> dict[int, dict[str, Any]]:
         if not ids:
