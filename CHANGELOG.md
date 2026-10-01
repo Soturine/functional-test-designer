@@ -1,5 +1,19 @@
 # Changelog
 
+## 2.5.0 - 2026-10-01
+
+FTD ADR: incremental maintenance of a validated suite as ADRs and other project decisions arrive. The canonical pipeline, its eight gates and every existing command keep their v2.4.2 behavior, which a frozen regression baseline over the synthetic domain packs now enforces.
+
+- **FTD ADR** (`/ftd --adr <file|folder>`, alias `/ftd-adr`): reuses the persisted state of the current validated run and of its latest finalized ADR round; never regenerates the suite and never rereads the original sources.
+- **Incremental processing:** every file of the selection gets a disposition; only new or changed files are read, unchanged ones reuse their analysis, and a removed file never revokes a decision.
+- **ADR decision ledger:** the selection is analyzed as a change corpus — a statement-level evidence catalog with per-statement authority, decisions built across files with derived approval, explicit relationships to the existing authority (confirms, changes, supersedes, conflicts…), with official ids preserved and local ids never presented as official.
+- **Targeted Test Case maintenance:** direct and indirect impact, updates that keep the Test Case id and Azure identity, new Test Cases for uncovered behavior with project-wide ids, explicit successors instead of deletions, and a targeted expansion review of the affected slice only.
+- **Complete procedures** for every ADR update or new case, validated by the canonical procedure gate, with no invented execution details; missing ones keep the case as NEEDS_REVIEW with a blocker.
+- **ADR Questions and Findings**, and dispositions of existing ones (resolved by ADR, still applies…) without deleting history.
+- **Offline ADR HTML report** with lineage, decisions, before/after and procedure changes, plus JSON and Markdown outputs and an ADR manifest.
+- **Azure ADR delta:** a local package with only the changed definitions and stable identities; `/ftd-azure-publish --prepare --adr` adds ftd-key ownership checks and **execution-history safety** — a semantic change to an executed Test Case needs an explicit human decision, supersession is only proposed, and execution results and evidence are never written.
+- **Future FTE compatibility:** published Test Cases keep the complete procedure and `FTD_METADATA_V1`; ADR lineage is an additive `FTD_ADR_METADATA_V1` block.
+
 ## 2.4.2 - 2026-10-01
 
 Azure manual-import and Test Plans usability hardening. No pipeline stage, gate, Design, Expansion, Procedures or canonical Test Case change.

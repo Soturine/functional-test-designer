@@ -15,7 +15,7 @@ Agent Skill that designs **traceable, executable functional Test Cases** using o
 
 The model performs the QA reasoning; the runtime protects scope, traceability, validation, and publication. Nothing is silently invented: when the selected sources do not define something safely, the FTD records a Question or an explicit pending item instead.
 
-> Published version: 2.4.2.
+> Published version: 2.5.0.
 
 ## Quick start
 

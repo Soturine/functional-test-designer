@@ -1,6 +1,6 @@
 ---
 name: functional-test-designer
-description: Designs traceable, executable functional Test Cases from only user-selected sources for any domain. Use for atomic normative coverage, a mandatory second QA pass (negative, operator error, concurrency, recovery, security, E2E), existing-test challenge, executable procedures, readiness and automation classification, offline HTML/Markdown/JSON, an optional post-suite /ftd-chaos pass over a finalized run, local Azure DevOps Test Plans input JSON (/ftd-azure, never remote) and an explicit, approval-gated publication (/ftd-azure-publish).
+description: Designs traceable, executable functional Test Cases from only user-selected sources for any domain. Use for atomic normative coverage, a mandatory second QA pass (negative, operator error, concurrency, recovery, security, E2E), existing-test challenge, executable procedures, readiness and automation classification, offline HTML/Markdown/JSON, an optional post-suite /ftd-chaos pass over a finalized run, local Azure DevOps Test Plans input JSON (/ftd-azure, never remote), an explicit, approval-gated publication (/ftd-azure-publish), and incremental suite maintenance from new ADRs and decisions (/ftd --adr, never a full regeneration).
 ---
 
 # Functional Test Designer
@@ -26,6 +26,7 @@ This works for any project: logistics, ERP, SaaS, APIs, IoT, industrial, aerospa
 /ftd-azure [--run <run-id>] --output json [--chaos-id <id> ...]          # local JSON only, never remote
 /ftd-azure-publish [--run <run-id>] --prepare --organization <url> --project <id|name> --plan <id|name> --auth <...>
 /ftd-azure-publish --apply "<output>/azure/publication-plan.json" --auth <...>   # writes only after approval
+/ftd --adr <file|folder> [--run <run-id>]                               # incremental ADR maintenance (alias /ftd-adr)
 /ftd-clarify · /ftd-check · /ftd-render
 ```
 
@@ -38,7 +39,7 @@ This works for any project: logistics, ERP, SaaS, APIs, IoT, industrial, aerospa
   - If a source's authority role is materially ambiguous, ask one concise question instead of promoting evidence.
   - **Follow-up actions.** Wording such as "depois da run: fazer chaos, converter azure" or "no final quero chaos + Azure local", under any heading, goes into `post_generation` (`CHAOS`, `AZURE_LOCAL_EXPORT`). It is workflow guidance, not authority and not a coverage ceiling. Any Azure wording means the local export; never map it to `/ftd-azure-publish`, which runs only on an explicit request to publish. `--after chaos,azure|none` (or what the user says now) overrides the file.
   - After `finalize`, follow `post_generation.next_actions`: run `/ftd-chaos` when asked (its finalize refreshes the publication and then writes the local Azure package if requested), otherwise the local export has already run. Then stop.
-- **Current run.** `--run` is optional: without it the command uses the current validated run of the artifact root (`--output-dir`, default `./ftd-output`), recorded in `.ftd/current-run.json` when a canonical run is VALIDATED and verified again on use. An explicit `--run <run-id>` (or run directory) always wins. Applies to `/ftd-chaos`, `/ftd-azure`, `/ftd-check`, `/ftd-render` and `/ftd-azure-publish --prepare`; never pick a run by folder time or name. Post-generation actions started by `/ftd-gen` already carry their run.
+- **Current run.** `--run` is optional: without it the command uses the current validated run of the artifact root (`--output-dir`, default `./ftd-output`), recorded in `.ftd/current-run.json` when a canonical run is VALIDATED and verified again on use. An explicit `--run <run-id>` (or run directory) always wins. Applies to `/ftd-chaos`, `/ftd-azure`, `/ftd-check`, `/ftd-render`, `/ftd --adr` and `/ftd-azure-publish --prepare`; never pick a run by folder time or name. Post-generation actions started by `/ftd-gen` already carry their run.
 - **Orchestration.** `/ftd-gen` then drives the pipeline below end to end. Do not ask the user to run stages by hand. Details: [workflow.md](references/workflow.md).
 
 ## The pipeline
@@ -149,6 +150,21 @@ The only command that can write to Azure DevOps. Run it only when the user expli
 - Show the user the preview (destination, CREATE/UPDATE/UNCHANGED/CONFLICT counts, suites, placements, `DELETE operations 0`).
 - `--apply` revalidates digests, target ids and remote versions and writes only after the user types `PUBLISH <project> / <plan>` (or passes `--approved` non-interactively).
 - Non-destructive: no deletes, no membership removal, no plan creation, no overwrite of unmanaged or remotely changed Test Cases. Credentials are runtime-only and never persisted.
+
+## /ftd --adr — incremental suite maintenance from ADRs (`ftd-adr`)
+
+Generate the suite once with `/ftd-gen`; when ADRs, approved decisions or other change material arrive, run `/ftd --adr <file|folder>` (alias `/ftd-adr`). It updates the suite through an ADR overlay **without regenerating it and without rereading the original sources**. Details and the exact payload fields: [entrypoints/adr.md](entrypoints/adr.md).
+
+- **Routing.** `/ftd --adr` and `/ftd-adr` are exact command forms; for natural language ("analyze the new ADRs", "update the tests from this ADR folder") you resolve the meaning and pass `resolved_intent="ftd-adr"`.
+- **Baseline.** `--run` wins; otherwise the current validated canonical run, plus the latest finalized ADR round of that run (`.ftd/current-adr.json`, per canonical run) or `--base-adr`. Broken ADR state fails closed. Never pick a run or round by folder name or time.
+- **Drive it end to end** with `scripts/workflow.py adr`: `start --scope <file|folder>` → read `<run>/adr/<adr-id>/work-order.json` → `submit-analysis --adr-id <id> --file …` → `submit-procedures --adr-id <id> --file …` → `finalize --adr-id <id>`. A rejected submission lists every problem and records nothing; a finalized round is immutable.
+- **Incremental reading.** Only NEW_READ / CHANGED_READ files carry text in the work order; UNCHANGED_REUSED files reuse their earlier statements and decisions; UNSUPPORTED / FAILED files are reported; a file removed from the selection is not a revoked decision. For an original project source use the bounded `lookup` (persisted evidence only).
+- **The selection is a change corpus**, not a set of formal ADRs. Review every read file; catalog each material statement verbatim with its own kind and authority (`APPROVED` only when the file itself shows the approval — a file's status is not each statement's); build decisions from statements across files; never vote between disagreeing statements. Map decisions to the project model **by meaning** — files rarely name a requirement, rule or Test Case — and look for hidden consequences (authorization, negative paths, transitions, audit, idempotency, concurrency, recovery, integrations, devices, E2E, existing data). Every statement and decision gets a disposition; NO_TEST_IMPACT is a valid, explained result.
+- **Authority.** Only an APPROVED decision may update, create or supersede a Test Case; drafts, proposals, notes and supporting standards become Questions, Findings or REVIEW_ONLY. Do not ask whether a clearly approved decision is authoritative; do ask about its secondary uncertainties (migration, existing data, cutoff, rollout, actors, integrations).
+- **Test Case maintenance.** ADR action (AFFECTED_NO_CHANGE, UPDATE, CREATE, SUPERSEDE, REVIEW_ONLY, CONFLICT) is separate from the execution status. An updated case keeps its id and export key; a genuinely new, independently diagnosable behavior gets the next `TC-NNN`; a fundamentally different behavior is a successor that supersedes the old case, never a deletion. Each approved behavior change lists its testable claims and how each is covered, which is how uncovered behavior becomes a new case. Review every expansion dimension for the affected slice only; never manufacture cases.
+- **Procedures.** Every UPDATE / CREATE needs a complete procedure, validated by the same gate as canonical procedures. When the ADR says what changed but not how to execute it, keep the case, declare `MISSING_EXECUTION_SURFACE` / `UNKNOWN_SETUP_PATH` with its Question, and let it be NEEDS_REVIEW; never invent a route, selector, URL, message or credential.
+- **Outputs.** `output/adr/<adr-id>/`: offline `adr-report.html`, `adr-summary.md`, JSON (analysis, decisions, affected and proposed cases, procedure changes, Questions, Findings, manifest) and the local Azure delta. Unaffected Test Cases are never rewritten (`unaffected_cases_changed = 0`), and the parent canonical run is never modified.
+- **Azure.** `/ftd --adr` never contacts Azure. Publishing the delta is explicit: `/ftd-azure-publish --prepare --adr <adr-id> …` then an approved `--apply`. An executed Test Case with a semantic change is REVIEW_REQUIRED until the user chooses to update it (`--review TC-NNN=UPDATE_SAME_TEST_CASE`) or to create a successor in a new round. Execution results and evidence are never written. `FTD_METADATA_V1` is unchanged; ADR lineage is the additive `FTD_ADR_METADATA_V1` block, so an executor can run the published case without reading the ADR.
 
 ## Completion
 

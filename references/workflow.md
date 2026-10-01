@@ -179,6 +179,12 @@ python scripts/challenge.py verify --run <run> --challenge-id <id>
 - **Operations:** CREATE Test Case, UPDATE an FTD-managed one (local mapping export key → project id → work item id → last revision and content hash), CREATE child static suites under the destination, ADD placements in order. No DELETE of any kind, no membership removal, no Test Plan creation, no move between projects, no overwrite of an unmapped look-alike or a remotely changed item.
 - **Ownership:** `integrations/azure_devops.py` owns target resolution, diffing, placements and the REST transport (GET/POST/PATCH only); `scripts/azure_publish.py` binds them to a finalized run. Tests use a fake transport only.
 
+## /ftd --adr (incremental ADR maintenance)
+
+- `/ftd --adr <file|folder>` (alias `/ftd-adr`, intent `ftd-adr`) runs `scripts/workflow.py adr start --scope <path>` over the current validated run (`--run` wins) and the latest finalized ADR round of that run (`.ftd/current-adr.json`); then `submit-analysis`, `submit-procedures` and `finalize` with the returned `--adr-id`.
+- It never regenerates the suite, never rereads the original sources (bounded `lookup` only), never modifies the parent run, and never contacts Azure. Contract: [entrypoints/adr.md](../entrypoints/adr.md).
+- Publishing the delta is a separate, explicit `/ftd-azure-publish --prepare --adr <adr-id>` and an approved `--apply`.
+
 ## Output selection
 
 - **Formats:** `HTML`, `JSON`, `MARKDOWN`, `DIAGNOSTICS` and `OPERATIONAL`. The default is `HTML,JSON,MARKDOWN`, and the command-line tokens `json,md,html` map to the first three.
