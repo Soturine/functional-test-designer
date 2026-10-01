@@ -40,7 +40,9 @@ VOLATILE_KEYS = {"generated_at", "created_at", "started_at", "submitted_at", "fi
                  "stage_started_at", "rendered_at", "published_at", "timestamp", "elapsed_seconds", "stage_seconds",
                  "seconds", "duration_seconds",
                  # digests over a document that embeds its own generation timestamp
-                 "semantic_fingerprint", "canonical_digest", "package_digest", "parent_canonical_digest"}
+                 "semantic_fingerprint", "canonical_digest", "package_digest", "parent_canonical_digest",
+                 # a digest of the pack's source bytes, which the platform's line endings change
+                 "content_digest"}
 TIMESTAMP = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})?")
 CHAOS_TEXT = {"en": ("Two operators act on the same record at once",
                      "Concurrent operators could leave the record in an inconsistent state.")}
@@ -63,7 +65,8 @@ class Normalizer:
         if isinstance(item, list):
             return [self.value(v) for v in item]
         if isinstance(item, str):
-            return self.text(item).replace("<ROOT>\\", "<ROOT>/")
+            text = self.text(item)
+            return text.replace("\\", "/") if "<ROOT>" in text else text
         return item
 
 
