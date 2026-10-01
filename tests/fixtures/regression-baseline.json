@@ -1,0 +1,3508 @@
+{
+ "metadata_samples": [
+  {
+   "description": "<h3>FTD execution status</h3><ul><li>Status: READY</li><li>Source: CANONICAL</li></ul><h3>State contract</h3><ul><li>REQUIRES_FIXTURE_RESET</li></ul><h3>FTD metadata</h3><pre>FTD_METADATA_V1 {&quot;automation&quot;:{&quot;layer&quot;:null,&quot;readiness&quot;:null,&quot;readiness_blockers&quot;:[],&quot;suitability&quot;:null,&quot;tool_hint&quot;:null},&quot;export_key&quot;:&quot;canonical:TC-001&quot;,&quot;question_refs&quot;:[],&quot;related_test_cases&quot;:[],&quot;request_contract&quot;:null,&quot;requirement_refs&quot;:[],&quot;schema&quot;:&quot;FTD_METADATA_V1&quot;,&quot;source_kind&quot;:&quot;CANONICAL&quot;,&quot;status&quot;:&quot;READY&quot;}</pre>",
+   "parsed": {
+    "automation": {
+     "layer": null,
+     "readiness": null,
+     "readiness_blockers": [],
+     "suitability": null,
+     "tool_hint": null
+    },
+    "export_key": "canonical:TC-001",
+    "question_refs": [],
+    "related_test_cases": [],
+    "request_contract": null,
+    "requirement_refs": [],
+    "schema": "FTD_METADATA_V1",
+    "source_kind": "CANONICAL",
+    "status": "READY"
+   }
+  },
+  {
+   "description": "<h3>FTD execution status</h3><ul><li>Status: NEEDS_REVIEW</li><li>Source: CHAOS</li><li>Automation suitability: HIGH</li><li>Automation readiness: NEEDS_FIXTURE</li><li>Automation layer: API</li><li>Tool hint: API_TEST</li><li>Readiness blockers: MISSING_FIXTURE</li><li>Questions: Q-003</li></ul><h3>State contract</h3><ul><li>REQUIRES_FIXTURE_RESET</li></ul><h3>Request contract</h3><ul><li>method: POST</li><li>endpoint: /items/{id}/confirm</li><li>parameters: [&quot;id: an eligible item&quot;]</li><li>body: {&quot;note&quot;: &quot;&lt;a&gt; &amp; \\&quot;b\\&quot;&quot;}</li><li>varies: [&quot;id&quot;]</li><li>measurements: [&quot;latency per request&quot;]</li></ul><h3>FTD metadata</h3><pre>FTD_METADATA_V1 {&quot;automation&quot;:{&quot;layer&quot;:&quot;API&quot;,&quot;readiness&quot;:&quot;NEEDS_FIXTURE&quot;,&quot;readiness_blockers&quot;:[&quot;MISSING_FIXTURE&quot;],&quot;suitability&quot;:&quot;HIGH&quot;,&quot;tool_hint&quot;:&quot;API_TEST&quot;},&quot;export_key&quot;:&quot;chaos:run:CH-002&quot;,&quot;question_refs&quot;:[&quot;Q-003&quot;],&quot;related_test_cases&quot;:[&quot;TC-001&quot;],&quot;request_contract&quot;:{&quot;body&quot;:&quot;{\\&quot;note\\&quot;: \\&quot;&lt;a&gt; &amp; \\\\\\&quot;b\\\\\\&quot;\\&quot;}&quot;,&quot;endpoint&quot;:&quot;/items/{id}/confirm&quot;,&quot;fixture_pool&quot;:null,&quot;measurements&quot;:[&quot;latency per request&quot;],&quot;method&quot;:&quot;POST&quot;,&quot;parameters&quot;:[&quot;id: an eligible item&quot;],&quot;varies&quot;:[&quot;id&quot;]},&quot;requirement_refs&quot;:[&quot;REQ-1&quot;],&quot;schema&quot;:&quot;FTD_METADATA_V1&quot;,&quot;source_kind&quot;:&quot;CHAOS&quot;,&quot;status&quot;:&quot;NEEDS_REVIEW&quot;}</pre>",
+   "parsed": {
+    "automation": {
+     "layer": "API",
+     "readiness": "NEEDS_FIXTURE",
+     "readiness_blockers": [
+      "MISSING_FIXTURE"
+     ],
+     "suitability": "HIGH",
+     "tool_hint": "API_TEST"
+    },
+    "export_key": "chaos:run:CH-002",
+    "question_refs": [
+     "Q-003"
+    ],
+    "related_test_cases": [
+     "TC-001"
+    ],
+    "request_contract": {
+     "body": "{\"note\": \"<a> & \\\"b\\\"\"}",
+     "endpoint": "/items/{id}/confirm",
+     "fixture_pool": null,
+     "measurements": [
+      "latency per request"
+     ],
+     "method": "POST",
+     "parameters": [
+      "id: an eligible item"
+     ],
+     "varies": [
+      "id"
+     ]
+    },
+    "requirement_refs": [
+     "REQ-1"
+    ],
+    "schema": "FTD_METADATA_V1",
+    "source_kind": "CHAOS",
+    "status": "NEEDS_REVIEW"
+   }
+  }
+ ],
+ "packs": {
+  "aerospace-inspection": {
+   "azure": {
+    "content_hashes": "90eacbfce9fe2284",
+    "export_keys": [
+     "canonical:TC-001",
+     "canonical:TC-002",
+     "canonical:TC-003",
+     "canonical:TC-004",
+     "canonical:TC-005",
+     "canonical:TC-006",
+     "canonical:TC-007",
+     "canonical:TC-008",
+     "canonical:TC-009",
+     "canonical:TC-010"
+    ],
+    "fields": {
+     "canonical:TC-001": "1f3a02e04a8ea335",
+     "canonical:TC-002": "e946b6483406dec9",
+     "canonical:TC-003": "4b6a7f2745570da4",
+     "canonical:TC-004": "4c732113185c6833",
+     "canonical:TC-005": "c36edbb4a9930ac9",
+     "canonical:TC-006": "f3e148e204903bf3",
+     "canonical:TC-007": "5c2db8947aa839e8",
+     "canonical:TC-008": "f58937dd955af4cf",
+     "canonical:TC-009": "107c532eb022393e",
+     "canonical:TC-010": "05bbcbcad1bbef90"
+    },
+    "metadata": "ff0f010855517462",
+    "package": "67c5331695c400af",
+    "preview": {
+     "conflicts": 0,
+     "create": 10,
+     "skipped": 0,
+     "unchanged": 0,
+     "update": 0
+    },
+    "result": {
+     "canonical_test_cases": 10,
+     "chaos_runs": [],
+     "chaos_test_cases": 0,
+     "cloned_test_cases": 0,
+     "conflicts": 0,
+     "create": 10,
+     "live_azure_calls": 0,
+     "multi_suite_cases": 0,
+     "requirement_groups": 5,
+     "skipped": 0,
+     "suite_placements": 10,
+     "suites": 4,
+     "unassigned_cases": 0,
+     "unchanged": 0,
+     "update": 0
+    },
+    "suites": [
+     [
+      "RF-01 — Registrar Inspeção",
+      "FUNCTIONAL",
+      [
+       "canonical:TC-001"
+      ]
+     ],
+     [
+      "RF-02 — Liberar Componente para Instalação",
+      "FUNCTIONAL",
+      [
+       "canonical:TC-002",
+       "canonical:TC-003"
+      ]
+     ],
+     [
+      "Regras de negócio transversais",
+      "TRANSVERSAL",
+      [
+       "canonical:TC-004",
+       "canonical:TC-005",
+       "canonical:TC-006",
+       "canonical:TC-007",
+       "canonical:TC-008",
+       "canonical:TC-009"
+      ]
+     ],
+     [
+      "Casos de uso ponta a ponta (E2E)",
+      "EXECUTION_VIEW",
+      [
+       "canonical:TC-010"
+      ]
+     ]
+    ]
+   },
+   "canonical": {
+    "cases": {
+     "TC-001": "e802629c6bb82ef6",
+     "TC-002": "f41bb2e5f7452444",
+     "TC-003": "8759a0b7d7ef3e45",
+     "TC-004": "407613e1d9f172ba",
+     "TC-005": "5b3cf527ee4d4f23",
+     "TC-006": "9b3d94e0b39c4bfd",
+     "TC-007": "901644e654dadcd2",
+     "TC-008": "f3dbba8c91a9e6f1",
+     "TC-009": "b105cba69c4c154f",
+     "TC-010": "d838b3f833167674"
+    },
+    "claims": "32f9af946b8feaaa",
+    "count": 10,
+    "coverage_points": "ee781dd358b2f437",
+    "findings": "4f53cda18c2baa0c",
+    "ids": [
+     "TC-001",
+     "TC-002",
+     "TC-003",
+     "TC-004",
+     "TC-005",
+     "TC-006",
+     "TC-007",
+     "TC-008",
+     "TC-009",
+     "TC-010"
+    ],
+    "index": "1bfbfc15fc110133",
+    "procedures": {
+     "TC-001": "de2640b6e244a0f9",
+     "TC-002": "819cab19bac90d15",
+     "TC-003": "09ba83e85b9dd66c",
+     "TC-004": "785bd85112462398",
+     "TC-005": "dce8ccf80f90749b",
+     "TC-006": "4c1bf1ee60477d7a",
+     "TC-007": "cec127b5d54af6bf",
+     "TC-008": "13dd4d23e60a2e62",
+     "TC-009": "f79b069ecc733dbd",
+     "TC-010": "9877d6034ef4c2ef"
+    },
+    "questions": "949cea22e2059322",
+    "requirements": "27c189df3b23da81",
+    "semantic_fingerprint": "68cbb0b01d6e46d0",
+    "statuses": {
+     "TC-001": [
+      "READY",
+      "HIGH",
+      "READY",
+      [],
+      "UI",
+      "NONE"
+     ],
+     "TC-002": [
+      "READY",
+      "HIGH",
+      "READY",
+      [],
+      "UI",
+      "NONE"
+     ],
+     "TC-003": [
+      "READY",
+      "HIGH",
+      "READY",
+      [],
+      "UI",
+      "NONE"
+     ],
+     "TC-004": [
+      "READY",
+      "HIGH",
+      "READY",
+      [],
+      "UI",
+      "NONE"
+     ],
+     "TC-005": [
+      "READY",
+      "HIGH",
+      "READY",
+      [],
+      "UI",
+      "NONE"
+     ],
+     "TC-006": [
+      "READY",
+      "HIGH",
+      "READY",
+      [],
+      "UI",
+      "NONE"
+     ],
+     "TC-007": [
+      "READY",
+      "HIGH",
+      "READY",
+      [],
+      "UI",
+      "NONE"
+     ],
+     "TC-008": [
+      "READY",
+      "MEDIUM",
+      "NEEDS_FIXTURE",
+      [
+       "MISSING_FIXTURE"
+      ],
+      "UI",
+      "NONE"
+     ],
+     "TC-009": [
+      "READY",
+      "HIGH",
+      "READY",
+      [],
+      "UI",
+      "NONE"
+     ],
+     "TC-010": [
+      "READY",
+      "HIGH",
+      "READY",
+      [],
+      "UI",
+      "NONE"
+     ]
+    }
+   },
+   "check": "026f88fbb628e06e",
+   "clarify": "56a3ecb0bd6f4e38",
+   "current_run": {
+    "automatic": true,
+    "explicit": true,
+    "stale_pointer": "REFUSED"
+   },
+   "manual_import": {
+    "existing": {
+     "conflict": 0,
+     "create": 0,
+     "files": [
+      "suite-order.md",
+      "manual-import-summary.md"
+     ],
+     "mode": "UPDATE",
+     "total_test_cases": 10,
+     "unchanged": 10,
+     "unmatched": 0,
+     "update": 0
+    },
+    "existing_actions": {
+     "canonical:TC-001": [
+      "UNCHANGED",
+      "1000"
+     ],
+     "canonical:TC-002": [
+      "UNCHANGED",
+      "1001"
+     ],
+     "canonical:TC-003": [
+      "UNCHANGED",
+      "1002"
+     ],
+     "canonical:TC-004": [
+      "UNCHANGED",
+      "1003"
+     ],
+     "canonical:TC-005": [
+      "UNCHANGED",
+      "1004"
+     ],
+     "canonical:TC-006": [
+      "UNCHANGED",
+      "1005"
+     ],
+     "canonical:TC-007": [
+      "UNCHANGED",
+      "1006"
+     ],
+     "canonical:TC-008": [
+      "UNCHANGED",
+      "1007"
+     ],
+     "canonical:TC-009": [
+      "UNCHANGED",
+      "1008"
+     ],
+     "canonical:TC-010": [
+      "UNCHANGED",
+      "1009"
+     ]
+    },
+    "fresh": {
+     "files": {
+      "manual-import-create/01-RF-01.csv": "70941ea861659544",
+      "manual-import-create/02-RF-02.csv": "6feff58060f0bd3f",
+      "manual-import-create/03-Regras-de-neg-cio-transversais.csv": "49f310290e16be17",
+      "manual-import-create/04-Casos-de-uso-ponta-a-ponta-E2E.csv": "5ea08008cf80ca11",
+      "manual-import-plan.json": "292cc1cd557327e2",
+      "manual-import-summary.md": "a6d6aa08fdea7154",
+      "suite-order.md": "39b0d96549d0bb71"
+     },
+     "summary": {
+      "conflict": 0,
+      "create": 10,
+      "files": [
+       "manual-import-create/01-RF-01.csv",
+       "manual-import-create/02-RF-02.csv",
+       "manual-import-create/03-Regras-de-neg-cio-transversais.csv",
+       "manual-import-create/04-Casos-de-uso-ponta-a-ponta-E2E.csv",
+       "suite-order.md",
+       "manual-import-summary.md"
+      ],
+      "mode": "CREATE",
+      "total_test_cases": 10,
+      "unchanged": 0,
+      "unmatched": 0,
+      "update": 0
+     }
+    }
+   },
+   "organization": [
+    [
+     "RF01",
+     "FUNCTIONAL",
+     "RF-01 — Registrar Inspeção",
+     [
+      [
+       "CANONICAL",
+       null,
+       "TC-001"
+      ]
+     ]
+    ],
+    [
+     "RF02",
+     "FUNCTIONAL",
+     "RF-02 — Liberar Componente para Instalação",
+     [
+      [
+       "CANONICAL",
+       null,
+       "TC-002"
+      ],
+      [
+       "CANONICAL",
+       null,
+       "TC-003"
+      ]
+     ]
+    ],
+    [
+     "TRANSVERSAL",
+     "TRANSVERSAL",
+     "Regras de negócio transversais",
+     [
+      [
+       "CANONICAL",
+       null,
+       "TC-004"
+      ],
+      [
+       "CANONICAL",
+       null,
+       "TC-005"
+      ],
+      [
+       "CANONICAL",
+       null,
+       "TC-006"
+      ],
+      [
+       "CANONICAL",
+       null,
+       "TC-007"
+      ],
+      [
+       "CANONICAL",
+       null,
+       "TC-008"
+      ],
+      [
+       "CANONICAL",
+       null,
+       "TC-009"
+      ]
+     ]
+    ],
+    [
+     "E2E",
+     "EXECUTION_VIEW",
+     "Casos de uso ponta a ponta (E2E)",
+     [
+      [
+       "CANONICAL",
+       null,
+       "TC-010"
+      ]
+     ]
+    ]
+   ],
+   "outputs": {
+    "execution-plan.md": "2502668eae6a12d5",
+    "organization.json": "e8b86efd0a3878a4",
+    "questions.json": "949cea22e2059322",
+    "report.html": "74de4520e5fd7ed1",
+    "test-cases-md/TC-001.md": "7daa44a5a95fc7e6",
+    "test-cases-md/TC-002.md": "14df60d296dfa684",
+    "test-cases-md/TC-003.md": "d2bd2dd70c4b11de",
+    "test-cases-md/TC-004.md": "1ac644f65d764480",
+    "test-cases-md/TC-005.md": "7021cbf2d7dd72b0",
+    "test-cases-md/TC-006.md": "3bdcebeced692f25",
+    "test-cases-md/TC-007.md": "7c9957f59c18ea8a",
+    "test-cases-md/TC-008.md": "2b68c608333c16ed",
+    "test-cases-md/TC-009.md": "b6e4845a78b6fee1",
+    "test-cases-md/TC-010.md": "1b1b682db92ecdc9",
+    "test-cases.json": "1bfbfc15fc110133",
+    "test-cases/TC-001.json": "e802629c6bb82ef6",
+    "test-cases/TC-002.json": "f41bb2e5f7452444",
+    "test-cases/TC-003.json": "8759a0b7d7ef3e45",
+    "test-cases/TC-004.json": "407613e1d9f172ba",
+    "test-cases/TC-005.json": "5b3cf527ee4d4f23",
+    "test-cases/TC-006.json": "9b3d94e0b39c4bfd",
+    "test-cases/TC-007.json": "901644e654dadcd2",
+    "test-cases/TC-008.json": "f3dbba8c91a9e6f1",
+    "test-cases/TC-009.json": "b105cba69c4c154f",
+    "test-cases/TC-010.json": "d838b3f833167674"
+   },
+   "publication": {
+    "applied": [
+     "APPLIED",
+     18
+    ],
+    "approval_required": "APPROVAL_REQUIRED",
+    "conflict": {
+     "add_suite_placements": 0,
+     "conflicts": 1,
+     "create_suites": 0,
+     "create_test_cases": 0,
+     "delete_operations": 0,
+     "reuse_suites": 4,
+     "skipped": 0,
+     "unchanged": 0,
+     "update_test_cases": 9
+    },
+    "first": {
+     "add_suite_placements": 10,
+     "conflicts": 0,
+     "create_suites": 4,
+     "create_test_cases": 10,
+     "delete_operations": 0,
+     "reuse_suites": 0,
+     "skipped": 0,
+     "unchanged": 0,
+     "update_test_cases": 0
+    },
+    "second": {
+     "add_suite_placements": 0,
+     "conflicts": 0,
+     "create_suites": 0,
+     "create_test_cases": 0,
+     "delete_operations": 0,
+     "reuse_suites": 4,
+     "skipped": 0,
+     "unchanged": 10,
+     "update_test_cases": 0
+    },
+    "titles": "84e9942cc01a159e",
+    "writes": 10
+   },
+   "render": {
+    "files": [
+     "<ROOT>/artifacts\\output\\execution-plan.md",
+     "<ROOT>/artifacts\\output\\organization.json",
+     "<ROOT>/artifacts\\output\\questions.json",
+     "<ROOT>/artifacts\\output\\report.html",
+     "<ROOT>/artifacts\\output\\test-cases-md\\TC-001.md",
+     "<ROOT>/artifacts\\output\\test-cases-md\\TC-002.md",
+     "<ROOT>/artifacts\\output\\test-cases-md\\TC-003.md",
+     "<ROOT>/artifacts\\output\\test-cases-md\\TC-004.md",
+     "<ROOT>/artifacts\\output\\test-cases-md\\TC-005.md",
+     "<ROOT>/artifacts\\output\\test-cases-md\\TC-006.md",
+     "<ROOT>/artifacts\\output\\test-cases-md\\TC-007.md",
+     "<ROOT>/artifacts\\output\\test-cases-md\\TC-008.md",
+     "<ROOT>/artifacts\\output\\test-cases-md\\TC-009.md",
+     "<ROOT>/artifacts\\output\\test-cases-md\\TC-010.md",
+     "<ROOT>/artifacts\\output\\test-cases.json",
+     "<ROOT>/artifacts\\output\\test-cases\\TC-001.json",
+     "<ROOT>/artifacts\\output\\test-cases\\TC-002.json",
+     "<ROOT>/artifacts\\output\\test-cases\\TC-003.json",
+     "<ROOT>/artifacts\\output\\test-cases\\TC-004.json",
+     "<ROOT>/artifacts\\output\\test-cases\\TC-005.json",
+     "<ROOT>/artifacts\\output\\test-cases\\TC-006.json",
+     "<ROOT>/artifacts\\output\\test-cases\\TC-007.json",
+     "<ROOT>/artifacts\\output\\test-cases\\TC-008.json",
+     "<ROOT>/artifacts\\output\\test-cases\\TC-009.json",
+     "<ROOT>/artifacts\\output\\test-cases\\TC-010.json"
+    ],
+    "outputs_unchanged": true
+   }
+  },
+  "api-refunds": {
+   "azure": {
+    "content_hashes": "e4e98372d6d25082",
+    "export_keys": [
+     "canonical:TC-001",
+     "canonical:TC-002",
+     "canonical:TC-003",
+     "canonical:TC-004",
+     "canonical:TC-005",
+     "canonical:TC-006",
+     "canonical:TC-007",
+     "canonical:TC-008",
+     "canonical:TC-009",
+     "chaos:regression:CH-001"
+    ],
+    "fields": {
+     "canonical:TC-001": "03accdcded28f3a2",
+     "canonical:TC-002": "378517c0026ae406",
+     "canonical:TC-003": "a8620e3ea60e6ede",
+     "canonical:TC-004": "dbbcc6bc15ba81e2",
+     "canonical:TC-005": "79526dcc154976df",
+     "canonical:TC-006": "b83043f7c76989df",
+     "canonical:TC-007": "9844acfe67acd921",
+     "canonical:TC-008": "59d72d0006cc0c3e",
+     "canonical:TC-009": "1e8943de76afbb07",
+     "chaos:regression:CH-001": "e4ea31e9545a691e"
+    },
+    "metadata": "f7779b8c1fae188f",
+    "package": "99bc38fd1f2f5a94",
+    "preview": {
+     "conflicts": 0,
+     "create": 10,
+     "skipped": 0,
+     "unchanged": 0,
+     "update": 0
+    },
+    "result": {
+     "canonical_test_cases": 9,
+     "chaos_runs": [
+      "regression"
+     ],
+     "chaos_test_cases": 1,
+     "cloned_test_cases": 0,
+     "conflicts": 0,
+     "create": 10,
+     "live_azure_calls": 0,
+     "multi_suite_cases": 1,
+     "requirement_groups": 4,
+     "skipped": 0,
+     "suite_placements": 11,
+     "suites": 6,
+     "unassigned_cases": 0,
+     "unchanged": 0,
+     "update": 0
+    },
+    "suites": [
+     [
+      "REQ-1 — Create Refund",
+      "FUNCTIONAL",
+      [
+       "canonical:TC-001",
+       "chaos:regression:CH-001",
+       "canonical:TC-002",
+       "canonical:TC-006",
+       "canonical:TC-007",
+       "canonical:TC-009"
+      ]
+     ],
+     [
+      "REQ-2 — Idempotent Requests",
+      "FUNCTIONAL",
+      [
+       "canonical:TC-003"
+      ]
+     ],
+     [
+      "REQ-3 — Refund Settlement",
+      "FUNCTIONAL",
+      [
+       "canonical:TC-004"
+      ]
+     ],
+     [
+      "REQ-4 — Client Isolation",
+      "FUNCTIONAL",
+      [
+       "canonical:TC-005"
+      ]
+     ],
+     [
+      "End-to-end use cases (E2E)",
+      "EXECUTION_VIEW",
+      [
+       "canonical:TC-008"
+      ]
+     ],
+     [
+      "Load and concurrency",
+      "EXECUTION_VIEW",
+      [
+       "canonical:TC-007"
+      ]
+     ]
+    ]
+   },
+   "canonical": {
+    "cases": {
+     "TC-001": "3e490ae39a0ddaba",
+     "TC-002": "71ab05321460f4cd",
+     "TC-003": "df4a20c102690d6f",
+     "TC-004": "7111f78b8d7373d7",
+     "TC-005": "d4c8b9ad167e927e",
+     "TC-006": "8d9f6a85f8c41ce4",
+     "TC-007": "a783ca8bcf5cb64e",
+     "TC-008": "63e198885df4a662",
+     "TC-009": "11cc4c1c536ae81f"
+    },
+    "claims": "b969028e62ef4622",
+    "count": 9,
+    "coverage_points": "6f811695e9a66062",
+    "findings": "c1056b766b235ff4",
+    "ids": [
+     "TC-001",
+     "TC-002",
+     "TC-003",
+     "TC-004",
+     "TC-005",
+     "TC-006",
+     "TC-007",
+     "TC-008",
+     "TC-009"
+    ],
+    "index": "a5fcb345b338d46a",
+    "procedures": {
+     "TC-001": "c130a3f81a5a909f",
+     "TC-002": "5459359896dfcc0f",
+     "TC-003": "052640542f7de6a9",
+     "TC-004": "11ce49feed88468a",
+     "TC-005": "7afb56975da3b645",
+     "TC-006": "cc617d941a9de39b",
+     "TC-007": "e0af45f8ec8eb297",
+     "TC-008": "4bdfd01a1ef2a028",
+     "TC-009": "6606c79a5748cb10"
+    },
+    "questions": "5b60fb605a712245",
+    "requirements": "a6d4aa26a48a41ef",
+    "semantic_fingerprint": "6ee5c0cafe538cdd",
+    "statuses": {
+     "TC-001": [
+      "READY",
+      "HIGH",
+      "READY",
+      [],
+      "API",
+      "NONE"
+     ],
+     "TC-002": [
+      "READY",
+      "HIGH",
+      "READY",
+      [],
+      "API",
+      "NONE"
+     ],
+     "TC-003": [
+      "READY",
+      "HIGH",
+      "READY",
+      [],
+      "API",
+      "NONE"
+     ],
+     "TC-004": [
+      "BLOCKED_EXTERNAL_DEPENDENCY",
+      "MEDIUM",
+      "BLOCKED_EXTERNAL_DEPENDENCY",
+      [
+       "EXTERNAL_DEPENDENCY_UNAVAILABLE"
+      ],
+      "INTEGRATION",
+      "NONE"
+     ],
+     "TC-005": [
+      "READY",
+      "HIGH",
+      "READY",
+      [],
+      "API",
+      "NONE"
+     ],
+     "TC-006": [
+      "READY",
+      "HIGH",
+      "READY",
+      [],
+      "API",
+      "NONE"
+     ],
+     "TC-007": [
+      "READY",
+      "MEDIUM",
+      "READY",
+      [],
+      "API",
+      "NONE"
+     ],
+     "TC-008": [
+      "BLOCKED_EXTERNAL_DEPENDENCY",
+      "MEDIUM",
+      "BLOCKED_EXTERNAL_DEPENDENCY",
+      [
+       "EXTERNAL_DEPENDENCY_UNAVAILABLE"
+      ],
+      "INTEGRATION",
+      "NONE"
+     ],
+     "TC-009": [
+      "READY",
+      "HIGH",
+      "READY",
+      [],
+      "API",
+      "NONE"
+     ]
+    }
+   },
+   "chaos": {
+    "canonical_unchanged": true,
+    "cases": "f2f2e758b5746669",
+    "organization": [
+     [
+      "REQ1",
+      "FUNCTIONAL",
+      "REQ-1 — Create Refund",
+      [
+       [
+        "CANONICAL",
+        null,
+        "TC-001"
+       ],
+       [
+        "POST_SUITE",
+        "regression",
+        "CH-001"
+       ],
+       [
+        "CANONICAL",
+        null,
+        "TC-002"
+       ],
+       [
+        "CANONICAL",
+        null,
+        "TC-006"
+       ],
+       [
+        "CANONICAL",
+        null,
+        "TC-007"
+       ],
+       [
+        "CANONICAL",
+        null,
+        "TC-009"
+       ]
+      ]
+     ],
+     [
+      "REQ2",
+      "FUNCTIONAL",
+      "REQ-2 — Idempotent Requests",
+      [
+       [
+        "CANONICAL",
+        null,
+        "TC-003"
+       ]
+      ]
+     ],
+     [
+      "REQ3",
+      "FUNCTIONAL",
+      "REQ-3 — Refund Settlement",
+      [
+       [
+        "CANONICAL",
+        null,
+        "TC-004"
+       ]
+      ]
+     ],
+     [
+      "REQ4",
+      "FUNCTIONAL",
+      "REQ-4 — Client Isolation",
+      [
+       [
+        "CANONICAL",
+        null,
+        "TC-005"
+       ]
+      ]
+     ],
+     [
+      "E2E",
+      "EXECUTION_VIEW",
+      "End-to-end use cases (E2E)",
+      [
+       [
+        "CANONICAL",
+        null,
+        "TC-008"
+       ]
+      ]
+     ],
+     [
+      "LOAD_CONCURRENCY",
+      "EXECUTION_VIEW",
+      "Load and concurrency",
+      [
+       [
+        "CANONICAL",
+        null,
+        "TC-007"
+       ]
+      ]
+     ]
+    ]
+   },
+   "check": "a51315a3a897d29c",
+   "clarify": "f736a2a7fdb9c7d9",
+   "current_run": {
+    "automatic": true,
+    "explicit": true,
+    "stale_pointer": "REFUSED"
+   },
+   "manual_import": {
+    "existing": {
+     "conflict": 0,
+     "create": 0,
+     "files": [
+      "secondary-suite-placements.csv",
+      "suite-order.md",
+      "manual-import-summary.md"
+     ],
+     "mode": "UPDATE",
+     "total_test_cases": 10,
+     "unchanged": 10,
+     "unmatched": 0,
+     "update": 0
+    },
+    "existing_actions": {
+     "canonical:TC-001": [
+      "UNCHANGED",
+      "1000"
+     ],
+     "canonical:TC-002": [
+      "UNCHANGED",
+      "1002"
+     ],
+     "canonical:TC-003": [
+      "UNCHANGED",
+      "1006"
+     ],
+     "canonical:TC-004": [
+      "UNCHANGED",
+      "1007"
+     ],
+     "canonical:TC-005": [
+      "UNCHANGED",
+      "1008"
+     ],
+     "canonical:TC-006": [
+      "UNCHANGED",
+      "1003"
+     ],
+     "canonical:TC-007": [
+      "UNCHANGED",
+      "1004"
+     ],
+     "canonical:TC-008": [
+      "UNCHANGED",
+      "1009"
+     ],
+     "canonical:TC-009": [
+      "UNCHANGED",
+      "1005"
+     ],
+     "chaos:regression:CH-001": [
+      "UNCHANGED",
+      "1001"
+     ]
+    },
+    "fresh": {
+     "files": {
+      "manual-import-create/01-REQ-1.csv": "9b6100ff4dfe27b4",
+      "manual-import-create/02-REQ-2.csv": "135140ae07962b45",
+      "manual-import-create/03-REQ-3.csv": "dfcb8b25a7fb1a2c",
+      "manual-import-create/04-REQ-4.csv": "340cce6a649951ae",
+      "manual-import-create/05-End-to-end-use-cases-E2E.csv": "a60735e1bc407038",
+      "manual-import-plan.json": "5e1d17b694273c47",
+      "manual-import-summary.md": "0d09388f6de94956",
+      "secondary-suite-placements.csv": "a3a5a661431ed3e7",
+      "suite-order.md": "704ab490fbf759ba"
+     },
+     "summary": {
+      "conflict": 0,
+      "create": 10,
+      "files": [
+       "manual-import-create/01-REQ-1.csv",
+       "manual-import-create/02-REQ-2.csv",
+       "manual-import-create/03-REQ-3.csv",
+       "manual-import-create/04-REQ-4.csv",
+       "manual-import-create/05-End-to-end-use-cases-E2E.csv",
+       "secondary-suite-placements.csv",
+       "suite-order.md",
+       "manual-import-summary.md"
+      ],
+      "mode": "CREATE",
+      "total_test_cases": 10,
+      "unchanged": 0,
+      "unmatched": 0,
+      "update": 0
+     }
+    }
+   },
+   "organization": [
+    [
+     "REQ1",
+     "FUNCTIONAL",
+     "REQ-1 — Create Refund",
+     [
+      [
+       "CANONICAL",
+       null,
+       "TC-001"
+      ],
+      [
+       "CANONICAL",
+       null,
+       "TC-002"
+      ],
+      [
+       "CANONICAL",
+       null,
+       "TC-006"
+      ],
+      [
+       "CANONICAL",
+       null,
+       "TC-007"
+      ],
+      [
+       "CANONICAL",
+       null,
+       "TC-009"
+      ]
+     ]
+    ],
+    [
+     "REQ2",
+     "FUNCTIONAL",
+     "REQ-2 — Idempotent Requests",
+     [
+      [
+       "CANONICAL",
+       null,
+       "TC-003"
+      ]
+     ]
+    ],
+    [
+     "REQ3",
+     "FUNCTIONAL",
+     "REQ-3 — Refund Settlement",
+     [
+      [
+       "CANONICAL",
+       null,
+       "TC-004"
+      ]
+     ]
+    ],
+    [
+     "REQ4",
+     "FUNCTIONAL",
+     "REQ-4 — Client Isolation",
+     [
+      [
+       "CANONICAL",
+       null,
+       "TC-005"
+      ]
+     ]
+    ],
+    [
+     "E2E",
+     "EXECUTION_VIEW",
+     "End-to-end use cases (E2E)",
+     [
+      [
+       "CANONICAL",
+       null,
+       "TC-008"
+      ]
+     ]
+    ],
+    [
+     "LOAD_CONCURRENCY",
+     "EXECUTION_VIEW",
+     "Load and concurrency",
+     [
+      [
+       "CANONICAL",
+       null,
+       "TC-007"
+      ]
+     ]
+    ]
+   ],
+   "outputs": {
+    "execution-plan.md": "5b92a419edd748c4",
+    "organization.json": "54ae1d4c22a3835b",
+    "questions.json": "5b60fb605a712245",
+    "report.html": "78a5453e9ce45bde",
+    "test-cases-md/TC-001.md": "918df2df0b79c0b2",
+    "test-cases-md/TC-002.md": "1a4319dee307e202",
+    "test-cases-md/TC-003.md": "81f95b53d54ee4f3",
+    "test-cases-md/TC-004.md": "da12062981c13891",
+    "test-cases-md/TC-005.md": "d0ee028291a2d4b5",
+    "test-cases-md/TC-006.md": "dd3ee71a0d68765b",
+    "test-cases-md/TC-007.md": "358e93fffdfd2fc7",
+    "test-cases-md/TC-008.md": "e256be5cfa781f0a",
+    "test-cases-md/TC-009.md": "3648852d9c64e141",
+    "test-cases.json": "a5fcb345b338d46a",
+    "test-cases/TC-001.json": "3e490ae39a0ddaba",
+    "test-cases/TC-002.json": "71ab05321460f4cd",
+    "test-cases/TC-003.json": "df4a20c102690d6f",
+    "test-cases/TC-004.json": "7111f78b8d7373d7",
+    "test-cases/TC-005.json": "d4c8b9ad167e927e",
+    "test-cases/TC-006.json": "8d9f6a85f8c41ce4",
+    "test-cases/TC-007.json": "a783ca8bcf5cb64e",
+    "test-cases/TC-008.json": "63e198885df4a662",
+    "test-cases/TC-009.json": "11cc4c1c536ae81f"
+   },
+   "publication": {
+    "applied": [
+     "APPLIED",
+     22
+    ],
+    "approval_required": "APPROVAL_REQUIRED",
+    "conflict": {
+     "add_suite_placements": 0,
+     "conflicts": 1,
+     "create_suites": 0,
+     "create_test_cases": 0,
+     "delete_operations": 0,
+     "reuse_suites": 6,
+     "skipped": 0,
+     "unchanged": 0,
+     "update_test_cases": 9
+    },
+    "first": {
+     "add_suite_placements": 11,
+     "conflicts": 0,
+     "create_suites": 6,
+     "create_test_cases": 10,
+     "delete_operations": 0,
+     "reuse_suites": 0,
+     "skipped": 0,
+     "unchanged": 0,
+     "update_test_cases": 0
+    },
+    "second": {
+     "add_suite_placements": 0,
+     "conflicts": 0,
+     "create_suites": 0,
+     "create_test_cases": 0,
+     "delete_operations": 0,
+     "reuse_suites": 6,
+     "skipped": 0,
+     "unchanged": 10,
+     "update_test_cases": 0
+    },
+    "titles": "6b8bbd323f2530f5",
+    "writes": 10
+   },
+   "render": {
+    "files": [
+     "<ROOT>/artifacts\\output\\execution-plan.md",
+     "<ROOT>/artifacts\\output\\organization.json",
+     "<ROOT>/artifacts\\output\\questions.json",
+     "<ROOT>/artifacts\\output\\report.html",
+     "<ROOT>/artifacts\\output\\test-cases-md\\TC-001.md",
+     "<ROOT>/artifacts\\output\\test-cases-md\\TC-002.md",
+     "<ROOT>/artifacts\\output\\test-cases-md\\TC-003.md",
+     "<ROOT>/artifacts\\output\\test-cases-md\\TC-004.md",
+     "<ROOT>/artifacts\\output\\test-cases-md\\TC-005.md",
+     "<ROOT>/artifacts\\output\\test-cases-md\\TC-006.md",
+     "<ROOT>/artifacts\\output\\test-cases-md\\TC-007.md",
+     "<ROOT>/artifacts\\output\\test-cases-md\\TC-008.md",
+     "<ROOT>/artifacts\\output\\test-cases-md\\TC-009.md",
+     "<ROOT>/artifacts\\output\\test-cases.json",
+     "<ROOT>/artifacts\\output\\test-cases\\TC-001.json",
+     "<ROOT>/artifacts\\output\\test-cases\\TC-002.json",
+     "<ROOT>/artifacts\\output\\test-cases\\TC-003.json",
+     "<ROOT>/artifacts\\output\\test-cases\\TC-004.json",
+     "<ROOT>/artifacts\\output\\test-cases\\TC-005.json",
+     "<ROOT>/artifacts\\output\\test-cases\\TC-006.json",
+     "<ROOT>/artifacts\\output\\test-cases\\TC-007.json",
+     "<ROOT>/artifacts\\output\\test-cases\\TC-008.json",
+     "<ROOT>/artifacts\\output\\test-cases\\TC-009.json"
+    ],
+    "outputs_unchanged": true
+   }
+  },
+  "erp-sales-orders": {
+   "azure": {
+    "content_hashes": "99af52faa1b5932c",
+    "export_keys": [
+     "canonical:TC-001",
+     "canonical:TC-002",
+     "canonical:TC-003",
+     "canonical:TC-004",
+     "canonical:TC-005",
+     "canonical:TC-006",
+     "canonical:TC-007",
+     "canonical:TC-008",
+     "canonical:TC-009"
+    ],
+    "fields": {
+     "canonical:TC-001": "af55304da1f877c9",
+     "canonical:TC-002": "a7352792ceb76e9b",
+     "canonical:TC-003": "f864da2a70584e8b",
+     "canonical:TC-004": "94318fa9489336c2",
+     "canonical:TC-005": "7f7ca22c1bda7fd7",
+     "canonical:TC-006": "ddb5e3d95f6aee24",
+     "canonical:TC-007": "afaa159f589090a5",
+     "canonical:TC-008": "112c8d8ea1a1d294",
+     "canonical:TC-009": "f4e1cb03d1906333"
+    },
+    "metadata": "e6f7e8b0c01a8ccd",
+    "package": "9f6905b54ac000bb",
+    "preview": {
+     "conflicts": 0,
+     "create": 9,
+     "skipped": 0,
+     "unchanged": 0,
+     "update": 0
+    },
+    "result": {
+     "canonical_test_cases": 9,
+     "chaos_runs": [],
+     "chaos_test_cases": 0,
+     "cloned_test_cases": 0,
+     "conflicts": 0,
+     "create": 9,
+     "live_azure_calls": 0,
+     "multi_suite_cases": 0,
+     "requirement_groups": 4,
+     "skipped": 0,
+     "suite_placements": 9,
+     "suites": 4,
+     "unassigned_cases": 0,
+     "unchanged": 0,
+     "update": 0
+    },
+    "suites": [
+     [
+      "RF-01 — Confirmar Pedido",
+      "FUNCTIONAL",
+      [
+       "canonical:TC-001",
+       "canonical:TC-002"
+      ]
+     ],
+     [
+      "CU-01 — Procesar Pedido de Venta",
+      "USE_CASE",
+      [
+       "canonical:TC-005"
+      ]
+     ],
+     [
+      "Reglas de negocio transversales",
+      "TRANSVERSAL",
+      [
+       "canonical:TC-003",
+       "canonical:TC-004",
+       "canonical:TC-006",
+       "canonical:TC-007",
+       "canonical:TC-008"
+      ]
+     ],
+     [
+      "Casos de uso de extremo a extremo (E2E)",
+      "EXECUTION_VIEW",
+      [
+       "canonical:TC-009"
+      ]
+     ]
+    ]
+   },
+   "canonical": {
+    "cases": {
+     "TC-001": "4d6686d46bc25cd4",
+     "TC-002": "a0a99ab484b68e7e",
+     "TC-003": "a0b77ff44b770ccf",
+     "TC-004": "347d4d44d68ddc0e",
+     "TC-005": "a878e48be828dc3d",
+     "TC-006": "6ca81ca58b50f133",
+     "TC-007": "f22580bbcef28c80",
+     "TC-008": "0f5f803ed664c07a",
+     "TC-009": "58be142c43f0ef29"
+    },
+    "claims": "ce59a227e98ff207",
+    "count": 9,
+    "coverage_points": "16a83e84cf67d6a5",
+    "findings": "4f53cda18c2baa0c",
+    "ids": [
+     "TC-001",
+     "TC-002",
+     "TC-003",
+     "TC-004",
+     "TC-005",
+     "TC-006",
+     "TC-007",
+     "TC-008",
+     "TC-009"
+    ],
+    "index": "22d99c9cf69ff450",
+    "procedures": {
+     "TC-001": "4f36eff1d65780a7",
+     "TC-002": "b8b72243fb8e92fd",
+     "TC-003": "333dc14128115460",
+     "TC-004": "a2bae8db73ef2835",
+     "TC-005": "47a4abfad7e8d078",
+     "TC-006": "f0de34dc3c011c4d",
+     "TC-007": "0c9c9418f653197b",
+     "TC-008": "dd450dedb830aa84",
+     "TC-009": "8234c8af62dfa5cb"
+    },
+    "questions": "0b70ab1f2fad6dcb",
+    "requirements": "bc42da97eadd9630",
+    "semantic_fingerprint": "8f885894bbc6b523",
+    "statuses": {
+     "TC-001": [
+      "READY",
+      "HIGH",
+      "READY",
+      [],
+      "UI",
+      "NONE"
+     ],
+     "TC-002": [
+      "READY",
+      "HIGH",
+      "READY",
+      [],
+      "UI",
+      "NONE"
+     ],
+     "TC-003": [
+      "READY",
+      "HIGH",
+      "READY",
+      [],
+      "UI",
+      "NONE"
+     ],
+     "TC-004": [
+      "READY",
+      "HIGH",
+      "READY",
+      [],
+      "UI",
+      "NONE"
+     ],
+     "TC-005": [
+      "READY",
+      "HIGH",
+      "READY",
+      [],
+      "UI",
+      "NONE"
+     ],
+     "TC-006": [
+      "READY",
+      "HIGH",
+      "READY",
+      [],
+      "UI",
+      "NONE"
+     ],
+     "TC-007": [
+      "READY",
+      "HIGH",
+      "READY",
+      [],
+      "UI",
+      "NONE"
+     ],
+     "TC-008": [
+      "READY",
+      "HIGH",
+      "READY",
+      [],
+      "UI",
+      "NONE"
+     ],
+     "TC-009": [
+      "READY",
+      "HIGH",
+      "READY",
+      [],
+      "UI",
+      "NONE"
+     ]
+    }
+   },
+   "check": "026f88fbb628e06e",
+   "clarify": "b7192b78f6bae864",
+   "current_run": {
+    "automatic": true,
+    "explicit": true,
+    "stale_pointer": "REFUSED"
+   },
+   "manual_import": {
+    "existing": {
+     "conflict": 0,
+     "create": 0,
+     "files": [
+      "suite-order.md",
+      "manual-import-summary.md"
+     ],
+     "mode": "UPDATE",
+     "total_test_cases": 9,
+     "unchanged": 9,
+     "unmatched": 0,
+     "update": 0
+    },
+    "existing_actions": {
+     "canonical:TC-001": [
+      "UNCHANGED",
+      "1000"
+     ],
+     "canonical:TC-002": [
+      "UNCHANGED",
+      "1001"
+     ],
+     "canonical:TC-003": [
+      "UNCHANGED",
+      "1003"
+     ],
+     "canonical:TC-004": [
+      "UNCHANGED",
+      "1004"
+     ],
+     "canonical:TC-005": [
+      "UNCHANGED",
+      "1002"
+     ],
+     "canonical:TC-006": [
+      "UNCHANGED",
+      "1005"
+     ],
+     "canonical:TC-007": [
+      "UNCHANGED",
+      "1006"
+     ],
+     "canonical:TC-008": [
+      "UNCHANGED",
+      "1007"
+     ],
+     "canonical:TC-009": [
+      "UNCHANGED",
+      "1008"
+     ]
+    },
+    "fresh": {
+     "files": {
+      "manual-import-create/01-RF-01.csv": "301ebf26a33ee796",
+      "manual-import-create/02-CU-01.csv": "3b113ef76ba41038",
+      "manual-import-create/03-Reglas-de-negocio-transversales.csv": "05abad8b71f69c88",
+      "manual-import-create/04-Casos-de-uso-de-extremo-a-extremo-E2E.csv": "0dd92e4b419dd9ed",
+      "manual-import-plan.json": "fcfc4b190e359f95",
+      "manual-import-summary.md": "6f38f0b127b3b377",
+      "suite-order.md": "b68bb485ef76e0cc"
+     },
+     "summary": {
+      "conflict": 0,
+      "create": 9,
+      "files": [
+       "manual-import-create/01-RF-01.csv",
+       "manual-import-create/02-CU-01.csv",
+       "manual-import-create/03-Reglas-de-negocio-transversales.csv",
+       "manual-import-create/04-Casos-de-uso-de-extremo-a-extremo-E2E.csv",
+       "suite-order.md",
+       "manual-import-summary.md"
+      ],
+      "mode": "CREATE",
+      "total_test_cases": 9,
+      "unchanged": 0,
+      "unmatched": 0,
+      "update": 0
+     }
+    }
+   },
+   "organization": [
+    [
+     "RF01",
+     "FUNCTIONAL",
+     "RF-01 — Confirmar Pedido",
+     [
+      [
+       "CANONICAL",
+       null,
+       "TC-001"
+      ],
+      [
+       "CANONICAL",
+       null,
+       "TC-002"
+      ]
+     ]
+    ],
+    [
+     "CU01",
+     "USE_CASE",
+     "CU-01 — Procesar Pedido de Venta",
+     [
+      [
+       "CANONICAL",
+       null,
+       "TC-005"
+      ]
+     ]
+    ],
+    [
+     "TRANSVERSAL",
+     "TRANSVERSAL",
+     "Reglas de negocio transversales",
+     [
+      [
+       "CANONICAL",
+       null,
+       "TC-003"
+      ],
+      [
+       "CANONICAL",
+       null,
+       "TC-004"
+      ],
+      [
+       "CANONICAL",
+       null,
+       "TC-006"
+      ],
+      [
+       "CANONICAL",
+       null,
+       "TC-007"
+      ],
+      [
+       "CANONICAL",
+       null,
+       "TC-008"
+      ]
+     ]
+    ],
+    [
+     "E2E",
+     "EXECUTION_VIEW",
+     "Casos de uso de extremo a extremo (E2E)",
+     [
+      [
+       "CANONICAL",
+       null,
+       "TC-009"
+      ]
+     ]
+    ]
+   ],
+   "outputs": {
+    "execution-plan.md": "222659fe53b97685",
+    "organization.json": "805c3765d6938ee7",
+    "questions.json": "0b70ab1f2fad6dcb",
+    "report.html": "6fa5ef2dec68b2e7",
+    "test-cases-md/TC-001.md": "1024b3f2a283a3d7",
+    "test-cases-md/TC-002.md": "9ded8be7d7a3ae82",
+    "test-cases-md/TC-003.md": "2747415b74d28891",
+    "test-cases-md/TC-004.md": "c5c66c9b392d4b88",
+    "test-cases-md/TC-005.md": "7da0998169dd84ce",
+    "test-cases-md/TC-006.md": "1ff6df85874a5969",
+    "test-cases-md/TC-007.md": "f38619d77a3251a0",
+    "test-cases-md/TC-008.md": "a405afd171369a6c",
+    "test-cases-md/TC-009.md": "85bd4ee9ead81d71",
+    "test-cases.json": "22d99c9cf69ff450",
+    "test-cases/TC-001.json": "4d6686d46bc25cd4",
+    "test-cases/TC-002.json": "a0a99ab484b68e7e",
+    "test-cases/TC-003.json": "a0b77ff44b770ccf",
+    "test-cases/TC-004.json": "347d4d44d68ddc0e",
+    "test-cases/TC-005.json": "a878e48be828dc3d",
+    "test-cases/TC-006.json": "6ca81ca58b50f133",
+    "test-cases/TC-007.json": "f22580bbcef28c80",
+    "test-cases/TC-008.json": "0f5f803ed664c07a",
+    "test-cases/TC-009.json": "58be142c43f0ef29"
+   },
+   "publication": {
+    "applied": [
+     "APPLIED",
+     17
+    ],
+    "approval_required": "APPROVAL_REQUIRED",
+    "conflict": {
+     "add_suite_placements": 0,
+     "conflicts": 1,
+     "create_suites": 0,
+     "create_test_cases": 0,
+     "delete_operations": 0,
+     "reuse_suites": 4,
+     "skipped": 0,
+     "unchanged": 0,
+     "update_test_cases": 8
+    },
+    "first": {
+     "add_suite_placements": 9,
+     "conflicts": 0,
+     "create_suites": 4,
+     "create_test_cases": 9,
+     "delete_operations": 0,
+     "reuse_suites": 0,
+     "skipped": 0,
+     "unchanged": 0,
+     "update_test_cases": 0
+    },
+    "second": {
+     "add_suite_placements": 0,
+     "conflicts": 0,
+     "create_suites": 0,
+     "create_test_cases": 0,
+     "delete_operations": 0,
+     "reuse_suites": 4,
+     "skipped": 0,
+     "unchanged": 9,
+     "update_test_cases": 0
+    },
+    "titles": "813a9fa1a96ccc4b",
+    "writes": 9
+   },
+   "render": {
+    "files": [
+     "<ROOT>/artifacts\\output\\execution-plan.md",
+     "<ROOT>/artifacts\\output\\organization.json",
+     "<ROOT>/artifacts\\output\\questions.json",
+     "<ROOT>/artifacts\\output\\report.html",
+     "<ROOT>/artifacts\\output\\test-cases-md\\TC-001.md",
+     "<ROOT>/artifacts\\output\\test-cases-md\\TC-002.md",
+     "<ROOT>/artifacts\\output\\test-cases-md\\TC-003.md",
+     "<ROOT>/artifacts\\output\\test-cases-md\\TC-004.md",
+     "<ROOT>/artifacts\\output\\test-cases-md\\TC-005.md",
+     "<ROOT>/artifacts\\output\\test-cases-md\\TC-006.md",
+     "<ROOT>/artifacts\\output\\test-cases-md\\TC-007.md",
+     "<ROOT>/artifacts\\output\\test-cases-md\\TC-008.md",
+     "<ROOT>/artifacts\\output\\test-cases-md\\TC-009.md",
+     "<ROOT>/artifacts\\output\\test-cases.json",
+     "<ROOT>/artifacts\\output\\test-cases\\TC-001.json",
+     "<ROOT>/artifacts\\output\\test-cases\\TC-002.json",
+     "<ROOT>/artifacts\\output\\test-cases\\TC-003.json",
+     "<ROOT>/artifacts\\output\\test-cases\\TC-004.json",
+     "<ROOT>/artifacts\\output\\test-cases\\TC-005.json",
+     "<ROOT>/artifacts\\output\\test-cases\\TC-006.json",
+     "<ROOT>/artifacts\\output\\test-cases\\TC-007.json",
+     "<ROOT>/artifacts\\output\\test-cases\\TC-008.json",
+     "<ROOT>/artifacts\\output\\test-cases\\TC-009.json"
+    ],
+    "outputs_unchanged": true
+   }
+  },
+  "iot-line-monitoring": {
+   "azure": {
+    "content_hashes": "f1ab96fa7757c86f",
+    "export_keys": [
+     "canonical:TC-001",
+     "canonical:TC-002",
+     "canonical:TC-003",
+     "canonical:TC-004",
+     "canonical:TC-005",
+     "canonical:TC-006",
+     "canonical:TC-007",
+     "canonical:TC-008",
+     "canonical:TC-009",
+     "chaos:regression:CH-001"
+    ],
+    "fields": {
+     "canonical:TC-001": "85e9f16ec0976715",
+     "canonical:TC-002": "d7f0917805c776e1",
+     "canonical:TC-003": "ad3880cd4d227849",
+     "canonical:TC-004": "cf5fac3d6dc2f1e7",
+     "canonical:TC-005": "4cee538ec7c94615",
+     "canonical:TC-006": "21030f80ccee3024",
+     "canonical:TC-007": "f7a217e04250c09f",
+     "canonical:TC-008": "95b6112c8a5868c3",
+     "canonical:TC-009": "00b4b6ea5ec05a34",
+     "chaos:regression:CH-001": "e4ea31e9545a691e"
+    },
+    "metadata": "ced3a365fa0d1741",
+    "package": "3f30340c8337ed9a",
+    "preview": {
+     "conflicts": 0,
+     "create": 10,
+     "skipped": 0,
+     "unchanged": 0,
+     "update": 0
+    },
+    "result": {
+     "canonical_test_cases": 9,
+     "chaos_runs": [
+      "regression"
+     ],
+     "chaos_test_cases": 1,
+     "cloned_test_cases": 0,
+     "conflicts": 0,
+     "create": 10,
+     "live_azure_calls": 0,
+     "multi_suite_cases": 1,
+     "requirement_groups": 0,
+     "skipped": 0,
+     "suite_placements": 12,
+     "suites": 5,
+     "unassigned_cases": 10,
+     "unchanged": 0,
+     "update": 0
+    },
+    "suites": [
+     [
+      "SCN-001",
+      "FUNCTIONAL",
+      [
+       "canonical:TC-001",
+       "chaos:regression:CH-001",
+       "canonical:TC-002",
+       "canonical:TC-007"
+      ]
+     ],
+     [
+      "SCN-002",
+      "FUNCTIONAL",
+      [
+       "canonical:TC-003",
+       "canonical:TC-004",
+       "canonical:TC-005",
+       "canonical:TC-006",
+       "canonical:TC-008"
+      ]
+     ],
+     [
+      "End-to-end use cases (E2E)",
+      "EXECUTION_VIEW",
+      [
+       "canonical:TC-009"
+      ]
+     ],
+     [
+      "Physical / devices",
+      "EXECUTION_VIEW",
+      [
+       "canonical:TC-007"
+      ]
+     ],
+     [
+      "Chaos / resilience",
+      "EXECUTION_VIEW",
+      [
+       "canonical:TC-007"
+      ]
+     ]
+    ]
+   },
+   "canonical": {
+    "cases": {
+     "TC-001": "2936f6d6e02ad74f",
+     "TC-002": "08eebfd3006f59c8",
+     "TC-003": "a56341390a89a0be",
+     "TC-004": "656009cd6ce28eac",
+     "TC-005": "a5ba0888b4bd63b5",
+     "TC-006": "8fd310b0f600059a",
+     "TC-007": "83edd0469043a299",
+     "TC-008": "b9eb2c62a01a197e",
+     "TC-009": "4a93763aa25c1b1a"
+    },
+    "claims": "b7b3ab893cbfbf2f",
+    "count": 9,
+    "coverage_points": "7b23059031969466",
+    "findings": "4f53cda18c2baa0c",
+    "ids": [
+     "TC-001",
+     "TC-002",
+     "TC-003",
+     "TC-004",
+     "TC-005",
+     "TC-006",
+     "TC-007",
+     "TC-008",
+     "TC-009"
+    ],
+    "index": "9b4cede98c3197e4",
+    "procedures": {
+     "TC-001": "6b5fa00d875f46fe",
+     "TC-002": "adfacc195ba2cce3",
+     "TC-003": "3e96d14155d58204",
+     "TC-004": "f91a50e9b58e8727",
+     "TC-005": "b9abe1a27902144f",
+     "TC-006": "b99ca6c94a19318b",
+     "TC-007": "d492db254f2bec25",
+     "TC-008": "d9284b104237b4c4",
+     "TC-009": "65b3cd15a0a3dd37"
+    },
+    "questions": "213c94bca71ffc31",
+    "requirements": "2c7e01e65f735401",
+    "semantic_fingerprint": "e3cfad504e26fd89",
+    "statuses": {
+     "TC-001": [
+      "READY",
+      "HIGH",
+      "READY",
+      [],
+      "API",
+      "NONE"
+     ],
+     "TC-002": [
+      "READY",
+      "HIGH",
+      "READY",
+      [],
+      "API",
+      "NONE"
+     ],
+     "TC-003": [
+      "READY",
+      "HIGH",
+      "READY",
+      [],
+      "API",
+      "NONE"
+     ],
+     "TC-004": [
+      "READY",
+      "HIGH",
+      "READY",
+      [],
+      "API",
+      "NONE"
+     ],
+     "TC-005": [
+      "READY",
+      "HIGH",
+      "READY",
+      [],
+      "UI",
+      "NONE"
+     ],
+     "TC-006": [
+      "READY",
+      "HIGH",
+      "READY",
+      [],
+      "API",
+      "NONE"
+     ],
+     "TC-007": [
+      "EXPLORATORY",
+      "LOW",
+      "NEEDS_POLICY",
+      [
+       "AMBIGUOUS_POLICY",
+       "EXTERNAL_DEPENDENCY_UNAVAILABLE",
+       "UNKNOWN_SETUP_PATH"
+      ],
+      "HARDWARE",
+      "NONE"
+     ],
+     "TC-008": [
+      "READY",
+      "HIGH",
+      "READY",
+      [],
+      "API",
+      "NONE"
+     ],
+     "TC-009": [
+      "READY",
+      "HIGH",
+      "READY",
+      [],
+      "API",
+      "NONE"
+     ]
+    }
+   },
+   "chaos": {
+    "canonical_unchanged": true,
+    "cases": "f2f2e758b5746669",
+    "organization": [
+     [
+      "FAMILY:SCN-001",
+      "FUNCTIONAL",
+      "SCN-001",
+      [
+       [
+        "CANONICAL",
+        null,
+        "TC-001"
+       ],
+       [
+        "POST_SUITE",
+        "regression",
+        "CH-001"
+       ],
+       [
+        "CANONICAL",
+        null,
+        "TC-002"
+       ],
+       [
+        "CANONICAL",
+        null,
+        "TC-007"
+       ]
+      ]
+     ],
+     [
+      "FAMILY:SCN-002",
+      "FUNCTIONAL",
+      "SCN-002",
+      [
+       [
+        "CANONICAL",
+        null,
+        "TC-003"
+       ],
+       [
+        "CANONICAL",
+        null,
+        "TC-004"
+       ],
+       [
+        "CANONICAL",
+        null,
+        "TC-005"
+       ],
+       [
+        "CANONICAL",
+        null,
+        "TC-006"
+       ],
+       [
+        "CANONICAL",
+        null,
+        "TC-008"
+       ]
+      ]
+     ],
+     [
+      "E2E",
+      "EXECUTION_VIEW",
+      "End-to-end use cases (E2E)",
+      [
+       [
+        "CANONICAL",
+        null,
+        "TC-009"
+       ]
+      ]
+     ],
+     [
+      "PHYSICAL_DEVICE",
+      "EXECUTION_VIEW",
+      "Physical / devices",
+      [
+       [
+        "CANONICAL",
+        null,
+        "TC-007"
+       ]
+      ]
+     ],
+     [
+      "CHAOS_RESILIENCE",
+      "EXECUTION_VIEW",
+      "Chaos / resilience",
+      [
+       [
+        "CANONICAL",
+        null,
+        "TC-007"
+       ]
+      ]
+     ]
+    ]
+   },
+   "check": "2c8322f2dbee1d1c",
+   "clarify": "a97aa4624b1339fa",
+   "current_run": {
+    "automatic": true,
+    "explicit": true,
+    "stale_pointer": "REFUSED"
+   },
+   "manual_import": {
+    "existing": {
+     "conflict": 0,
+     "create": 0,
+     "files": [
+      "secondary-suite-placements.csv",
+      "suite-order.md",
+      "manual-import-summary.md"
+     ],
+     "mode": "UPDATE",
+     "total_test_cases": 10,
+     "unchanged": 10,
+     "unmatched": 0,
+     "update": 0
+    },
+    "existing_actions": {
+     "canonical:TC-001": [
+      "UNCHANGED",
+      "1000"
+     ],
+     "canonical:TC-002": [
+      "UNCHANGED",
+      "1002"
+     ],
+     "canonical:TC-003": [
+      "UNCHANGED",
+      "1004"
+     ],
+     "canonical:TC-004": [
+      "UNCHANGED",
+      "1005"
+     ],
+     "canonical:TC-005": [
+      "UNCHANGED",
+      "1006"
+     ],
+     "canonical:TC-006": [
+      "UNCHANGED",
+      "1007"
+     ],
+     "canonical:TC-007": [
+      "UNCHANGED",
+      "1003"
+     ],
+     "canonical:TC-008": [
+      "UNCHANGED",
+      "1008"
+     ],
+     "canonical:TC-009": [
+      "UNCHANGED",
+      "1009"
+     ],
+     "chaos:regression:CH-001": [
+      "UNCHANGED",
+      "1001"
+     ]
+    },
+    "fresh": {
+     "files": {
+      "manual-import-create/01-SCN-001.csv": "58979c6936df1d37",
+      "manual-import-create/02-SCN-002.csv": "72e8007ef851d0d4",
+      "manual-import-create/03-End-to-end-use-cases-E2E.csv": "34a761d52622d084",
+      "manual-import-plan.json": "9bfe5250ae72c82d",
+      "manual-import-summary.md": "a8b472495f5d3ab9",
+      "secondary-suite-placements.csv": "817494f2be9a8d2e",
+      "suite-order.md": "b7a67141e343d284"
+     },
+     "summary": {
+      "conflict": 0,
+      "create": 10,
+      "files": [
+       "manual-import-create/01-SCN-001.csv",
+       "manual-import-create/02-SCN-002.csv",
+       "manual-import-create/03-End-to-end-use-cases-E2E.csv",
+       "secondary-suite-placements.csv",
+       "suite-order.md",
+       "manual-import-summary.md"
+      ],
+      "mode": "CREATE",
+      "total_test_cases": 10,
+      "unchanged": 0,
+      "unmatched": 0,
+      "update": 0
+     }
+    }
+   },
+   "organization": [
+    [
+     "FAMILY:SCN-001",
+     "FUNCTIONAL",
+     "SCN-001",
+     [
+      [
+       "CANONICAL",
+       null,
+       "TC-001"
+      ],
+      [
+       "CANONICAL",
+       null,
+       "TC-002"
+      ],
+      [
+       "CANONICAL",
+       null,
+       "TC-007"
+      ]
+     ]
+    ],
+    [
+     "FAMILY:SCN-002",
+     "FUNCTIONAL",
+     "SCN-002",
+     [
+      [
+       "CANONICAL",
+       null,
+       "TC-003"
+      ],
+      [
+       "CANONICAL",
+       null,
+       "TC-004"
+      ],
+      [
+       "CANONICAL",
+       null,
+       "TC-005"
+      ],
+      [
+       "CANONICAL",
+       null,
+       "TC-006"
+      ],
+      [
+       "CANONICAL",
+       null,
+       "TC-008"
+      ]
+     ]
+    ],
+    [
+     "E2E",
+     "EXECUTION_VIEW",
+     "End-to-end use cases (E2E)",
+     [
+      [
+       "CANONICAL",
+       null,
+       "TC-009"
+      ]
+     ]
+    ],
+    [
+     "PHYSICAL_DEVICE",
+     "EXECUTION_VIEW",
+     "Physical / devices",
+     [
+      [
+       "CANONICAL",
+       null,
+       "TC-007"
+      ]
+     ]
+    ],
+    [
+     "CHAOS_RESILIENCE",
+     "EXECUTION_VIEW",
+     "Chaos / resilience",
+     [
+      [
+       "CANONICAL",
+       null,
+       "TC-007"
+      ]
+     ]
+    ]
+   ],
+   "outputs": {
+    "execution-plan.md": "15cce1ea0046eeea",
+    "organization.json": "8c74287844c8528b",
+    "questions.json": "213c94bca71ffc31",
+    "report.html": "11ee3c2cd3ada027",
+    "test-cases-md/TC-001.md": "c9ffb18ba38082a8",
+    "test-cases-md/TC-002.md": "4fc3407ab26fda25",
+    "test-cases-md/TC-003.md": "85bb6b13f980034a",
+    "test-cases-md/TC-004.md": "eccd3af4c6cfd83c",
+    "test-cases-md/TC-005.md": "5f5b17172e9fe612",
+    "test-cases-md/TC-006.md": "8ef996d0da09de06",
+    "test-cases-md/TC-007.md": "24d0d63f81f2e8f9",
+    "test-cases-md/TC-008.md": "fc1d38681973ebe5",
+    "test-cases-md/TC-009.md": "985685293c41324d",
+    "test-cases.json": "9b4cede98c3197e4",
+    "test-cases/TC-001.json": "2936f6d6e02ad74f",
+    "test-cases/TC-002.json": "08eebfd3006f59c8",
+    "test-cases/TC-003.json": "a56341390a89a0be",
+    "test-cases/TC-004.json": "656009cd6ce28eac",
+    "test-cases/TC-005.json": "a5ba0888b4bd63b5",
+    "test-cases/TC-006.json": "8fd310b0f600059a",
+    "test-cases/TC-007.json": "83edd0469043a299",
+    "test-cases/TC-008.json": "b9eb2c62a01a197e",
+    "test-cases/TC-009.json": "4a93763aa25c1b1a"
+   },
+   "publication": {
+    "applied": [
+     "APPLIED",
+     20
+    ],
+    "approval_required": "APPROVAL_REQUIRED",
+    "conflict": {
+     "add_suite_placements": 0,
+     "conflicts": 1,
+     "create_suites": 0,
+     "create_test_cases": 0,
+     "delete_operations": 0,
+     "reuse_suites": 5,
+     "skipped": 0,
+     "unchanged": 0,
+     "update_test_cases": 9
+    },
+    "first": {
+     "add_suite_placements": 12,
+     "conflicts": 0,
+     "create_suites": 5,
+     "create_test_cases": 10,
+     "delete_operations": 0,
+     "reuse_suites": 0,
+     "skipped": 0,
+     "unchanged": 0,
+     "update_test_cases": 0
+    },
+    "second": {
+     "add_suite_placements": 0,
+     "conflicts": 0,
+     "create_suites": 0,
+     "create_test_cases": 0,
+     "delete_operations": 0,
+     "reuse_suites": 5,
+     "skipped": 0,
+     "unchanged": 10,
+     "update_test_cases": 0
+    },
+    "titles": "0504f2f46bdfc1a2",
+    "writes": 10
+   },
+   "render": {
+    "files": [
+     "<ROOT>/artifacts\\output\\execution-plan.md",
+     "<ROOT>/artifacts\\output\\organization.json",
+     "<ROOT>/artifacts\\output\\questions.json",
+     "<ROOT>/artifacts\\output\\report.html",
+     "<ROOT>/artifacts\\output\\test-cases-md\\TC-001.md",
+     "<ROOT>/artifacts\\output\\test-cases-md\\TC-002.md",
+     "<ROOT>/artifacts\\output\\test-cases-md\\TC-003.md",
+     "<ROOT>/artifacts\\output\\test-cases-md\\TC-004.md",
+     "<ROOT>/artifacts\\output\\test-cases-md\\TC-005.md",
+     "<ROOT>/artifacts\\output\\test-cases-md\\TC-006.md",
+     "<ROOT>/artifacts\\output\\test-cases-md\\TC-007.md",
+     "<ROOT>/artifacts\\output\\test-cases-md\\TC-008.md",
+     "<ROOT>/artifacts\\output\\test-cases-md\\TC-009.md",
+     "<ROOT>/artifacts\\output\\test-cases.json",
+     "<ROOT>/artifacts\\output\\test-cases\\TC-001.json",
+     "<ROOT>/artifacts\\output\\test-cases\\TC-002.json",
+     "<ROOT>/artifacts\\output\\test-cases\\TC-003.json",
+     "<ROOT>/artifacts\\output\\test-cases\\TC-004.json",
+     "<ROOT>/artifacts\\output\\test-cases\\TC-005.json",
+     "<ROOT>/artifacts\\output\\test-cases\\TC-006.json",
+     "<ROOT>/artifacts\\output\\test-cases\\TC-007.json",
+     "<ROOT>/artifacts\\output\\test-cases\\TC-008.json",
+     "<ROOT>/artifacts\\output\\test-cases\\TC-009.json"
+    ],
+    "outputs_unchanged": true
+   }
+  },
+  "logistics-storage": {
+   "azure": {
+    "content_hashes": "fb5fb02258f8040d",
+    "export_keys": [
+     "canonical:TC-001",
+     "canonical:TC-002",
+     "canonical:TC-003",
+     "canonical:TC-004",
+     "canonical:TC-005",
+     "canonical:TC-006",
+     "canonical:TC-007",
+     "canonical:TC-008",
+     "canonical:TC-009",
+     "canonical:TC-010",
+     "canonical:TC-011"
+    ],
+    "fields": {
+     "canonical:TC-001": "da944e0132bc8ed9",
+     "canonical:TC-002": "23666119b2969861",
+     "canonical:TC-003": "22b31fa342d7d98a",
+     "canonical:TC-004": "18052dc369a4b036",
+     "canonical:TC-005": "f8d1399a05603343",
+     "canonical:TC-006": "26e36860bbed7412",
+     "canonical:TC-007": "13930b34973d0239",
+     "canonical:TC-008": "82730788e151609e",
+     "canonical:TC-009": "8d035b43594edb46",
+     "canonical:TC-010": "9e0fffb1a2f474a9",
+     "canonical:TC-011": "78e7be41db4a5bb3"
+    },
+    "metadata": "3ee91a90cf0e6d25",
+    "package": "81d22488831cf1d8",
+    "preview": {
+     "conflicts": 0,
+     "create": 11,
+     "skipped": 0,
+     "unchanged": 0,
+     "update": 0
+    },
+    "result": {
+     "canonical_test_cases": 11,
+     "chaos_runs": [],
+     "chaos_test_cases": 0,
+     "cloned_test_cases": 0,
+     "conflicts": 0,
+     "create": 11,
+     "live_azure_calls": 0,
+     "multi_suite_cases": 1,
+     "requirement_groups": 6,
+     "skipped": 0,
+     "suite_placements": 12,
+     "suites": 6,
+     "unassigned_cases": 0,
+     "unchanged": 0,
+     "update": 0
+    },
+    "suites": [
+     [
+      "RF-01 — Registrar Entrada de Palete",
+      "FUNCTIONAL",
+      [
+       "canonical:TC-001"
+      ]
+     ],
+     [
+      "RF-02 — Transferir Palete entre Posições",
+      "FUNCTIONAL",
+      [
+       "canonical:TC-002",
+       "canonical:TC-003"
+      ]
+     ],
+     [
+      "CU-01 — Armazenar Palete Recebido",
+      "USE_CASE",
+      [
+       "canonical:TC-004",
+       "canonical:TC-005",
+       "canonical:TC-008",
+       "canonical:TC-009",
+       "canonical:TC-010"
+      ]
+     ],
+     [
+      "Regras de negócio transversais",
+      "TRANSVERSAL",
+      [
+       "canonical:TC-006",
+       "canonical:TC-007"
+      ]
+     ],
+     [
+      "Casos de uso ponta a ponta (E2E)",
+      "EXECUTION_VIEW",
+      [
+       "canonical:TC-011"
+      ]
+     ],
+     [
+      "Carga e concorrência",
+      "EXECUTION_VIEW",
+      [
+       "canonical:TC-010"
+      ]
+     ]
+    ]
+   },
+   "canonical": {
+    "cases": {
+     "TC-001": "c01561e6c7001d7f",
+     "TC-002": "327bd627b75d8478",
+     "TC-003": "af4d45c7d16b305f",
+     "TC-004": "006988018219ccff",
+     "TC-005": "031c66540537cdd9",
+     "TC-006": "c91c407cab1d564d",
+     "TC-007": "73071105da875719",
+     "TC-008": "58d5c6e1cc859a67",
+     "TC-009": "2463259ea9bc6e9a",
+     "TC-010": "36b10158a93b3bc7",
+     "TC-011": "76bbe5d3a881b3af"
+    },
+    "claims": "a3391a29c5a5b23b",
+    "count": 11,
+    "coverage_points": "6c5c9447e39e6b5a",
+    "findings": "4f53cda18c2baa0c",
+    "ids": [
+     "TC-001",
+     "TC-002",
+     "TC-003",
+     "TC-004",
+     "TC-005",
+     "TC-006",
+     "TC-007",
+     "TC-008",
+     "TC-009",
+     "TC-010",
+     "TC-011"
+    ],
+    "index": "49006d162e0182f8",
+    "procedures": {
+     "TC-001": "e1b5fd43d6a60435",
+     "TC-002": "e08ba9439b5474d3",
+     "TC-003": "09a353df80d9a923",
+     "TC-004": "30265653ffa368e5",
+     "TC-005": "e818a09b6d5874bd",
+     "TC-006": "dc6156ef5680af4e",
+     "TC-007": "2c0001da1b8142bc",
+     "TC-008": "ddbd5bc5527b8984",
+     "TC-009": "5e306a1050cbdc8c",
+     "TC-010": "52df5dd1db5aafb8",
+     "TC-011": "16ba1c900bfde598"
+    },
+    "questions": "195abc32cfb1fe66",
+    "requirements": "19e2ed83e1d9c26a",
+    "semantic_fingerprint": "d724a576f26e836d",
+    "statuses": {
+     "TC-001": [
+      "READY",
+      "HIGH",
+      "READY",
+      [],
+      "UI",
+      "NONE"
+     ],
+     "TC-002": [
+      "READY",
+      "HIGH",
+      "READY",
+      [],
+      "UI",
+      "NONE"
+     ],
+     "TC-003": [
+      "READY",
+      "HIGH",
+      "READY",
+      [],
+      "UI",
+      "NONE"
+     ],
+     "TC-004": [
+      "READY",
+      "HIGH",
+      "READY",
+      [],
+      "UI",
+      "NONE"
+     ],
+     "TC-005": [
+      "READY",
+      "HIGH",
+      "READY",
+      [],
+      "UI",
+      "NONE"
+     ],
+     "TC-006": [
+      "READY",
+      "HIGH",
+      "READY",
+      [],
+      "UI",
+      "NONE"
+     ],
+     "TC-007": [
+      "READY",
+      "HIGH",
+      "READY",
+      [],
+      "UI",
+      "NONE"
+     ],
+     "TC-008": [
+      "READY",
+      "HIGH",
+      "READY",
+      [],
+      "UI",
+      "NONE"
+     ],
+     "TC-009": [
+      "READY",
+      "HIGH",
+      "READY",
+      [],
+      "UI",
+      "NONE"
+     ],
+     "TC-010": [
+      "READY",
+      "MEDIUM",
+      "READY",
+      [],
+      "API",
+      "NONE"
+     ],
+     "TC-011": [
+      "READY",
+      "HIGH",
+      "READY",
+      [],
+      "UI",
+      "NONE"
+     ]
+    }
+   },
+   "check": "026f88fbb628e06e",
+   "clarify": "04daf9b371f8f25f",
+   "current_run": {
+    "automatic": true,
+    "explicit": true,
+    "stale_pointer": "REFUSED"
+   },
+   "manual_import": {
+    "existing": {
+     "conflict": 0,
+     "create": 0,
+     "files": [
+      "secondary-suite-placements.csv",
+      "suite-order.md",
+      "manual-import-summary.md"
+     ],
+     "mode": "UPDATE",
+     "total_test_cases": 11,
+     "unchanged": 11,
+     "unmatched": 0,
+     "update": 0
+    },
+    "existing_actions": {
+     "canonical:TC-001": [
+      "UNCHANGED",
+      "1000"
+     ],
+     "canonical:TC-002": [
+      "UNCHANGED",
+      "1001"
+     ],
+     "canonical:TC-003": [
+      "UNCHANGED",
+      "1002"
+     ],
+     "canonical:TC-004": [
+      "UNCHANGED",
+      "1003"
+     ],
+     "canonical:TC-005": [
+      "UNCHANGED",
+      "1004"
+     ],
+     "canonical:TC-006": [
+      "UNCHANGED",
+      "1008"
+     ],
+     "canonical:TC-007": [
+      "UNCHANGED",
+      "1009"
+     ],
+     "canonical:TC-008": [
+      "UNCHANGED",
+      "1005"
+     ],
+     "canonical:TC-009": [
+      "UNCHANGED",
+      "1006"
+     ],
+     "canonical:TC-010": [
+      "UNCHANGED",
+      "1007"
+     ],
+     "canonical:TC-011": [
+      "UNCHANGED",
+      "1010"
+     ]
+    },
+    "fresh": {
+     "files": {
+      "manual-import-create/01-RF-01.csv": "19c824c480c364b7",
+      "manual-import-create/02-RF-02.csv": "51f57e25d9b6c163",
+      "manual-import-create/03-CU-01.csv": "fef0bfbaa4e05510",
+      "manual-import-create/04-Regras-de-neg-cio-transversais.csv": "2f75f6a01be2fcbc",
+      "manual-import-create/05-Casos-de-uso-ponta-a-ponta-E2E.csv": "0e7bb81d19334085",
+      "manual-import-plan.json": "9b7dde4966b61ce0",
+      "manual-import-summary.md": "9a063bb40e49c20b",
+      "secondary-suite-placements.csv": "44b889a9be4c0598",
+      "suite-order.md": "470a58538654eaf1"
+     },
+     "summary": {
+      "conflict": 0,
+      "create": 11,
+      "files": [
+       "manual-import-create/01-RF-01.csv",
+       "manual-import-create/02-RF-02.csv",
+       "manual-import-create/03-CU-01.csv",
+       "manual-import-create/04-Regras-de-neg-cio-transversais.csv",
+       "manual-import-create/05-Casos-de-uso-ponta-a-ponta-E2E.csv",
+       "secondary-suite-placements.csv",
+       "suite-order.md",
+       "manual-import-summary.md"
+      ],
+      "mode": "CREATE",
+      "total_test_cases": 11,
+      "unchanged": 0,
+      "unmatched": 0,
+      "update": 0
+     }
+    }
+   },
+   "organization": [
+    [
+     "RF01",
+     "FUNCTIONAL",
+     "RF-01 — Registrar Entrada de Palete",
+     [
+      [
+       "CANONICAL",
+       null,
+       "TC-001"
+      ]
+     ]
+    ],
+    [
+     "RF02",
+     "FUNCTIONAL",
+     "RF-02 — Transferir Palete entre Posições",
+     [
+      [
+       "CANONICAL",
+       null,
+       "TC-002"
+      ],
+      [
+       "CANONICAL",
+       null,
+       "TC-003"
+      ]
+     ]
+    ],
+    [
+     "CU01",
+     "USE_CASE",
+     "CU-01 — Armazenar Palete Recebido",
+     [
+      [
+       "CANONICAL",
+       null,
+       "TC-004"
+      ],
+      [
+       "CANONICAL",
+       null,
+       "TC-005"
+      ],
+      [
+       "CANONICAL",
+       null,
+       "TC-008"
+      ],
+      [
+       "CANONICAL",
+       null,
+       "TC-009"
+      ],
+      [
+       "CANONICAL",
+       null,
+       "TC-010"
+      ]
+     ]
+    ],
+    [
+     "TRANSVERSAL",
+     "TRANSVERSAL",
+     "Regras de negócio transversais",
+     [
+      [
+       "CANONICAL",
+       null,
+       "TC-006"
+      ],
+      [
+       "CANONICAL",
+       null,
+       "TC-007"
+      ]
+     ]
+    ],
+    [
+     "E2E",
+     "EXECUTION_VIEW",
+     "Casos de uso ponta a ponta (E2E)",
+     [
+      [
+       "CANONICAL",
+       null,
+       "TC-011"
+      ]
+     ]
+    ],
+    [
+     "LOAD_CONCURRENCY",
+     "EXECUTION_VIEW",
+     "Carga e concorrência",
+     [
+      [
+       "CANONICAL",
+       null,
+       "TC-010"
+      ]
+     ]
+    ]
+   ],
+   "outputs": {
+    "execution-plan.md": "911e8bc41ca25d04",
+    "organization.json": "a0a55170c596998e",
+    "questions.json": "195abc32cfb1fe66",
+    "report.html": "31532f33e729cb76",
+    "test-cases-md/TC-001.md": "70994ccccbbabe02",
+    "test-cases-md/TC-002.md": "2c00632094b4ec3d",
+    "test-cases-md/TC-003.md": "be6fd2019e05271d",
+    "test-cases-md/TC-004.md": "5663a554a50c9e64",
+    "test-cases-md/TC-005.md": "f09b2d9717b39e56",
+    "test-cases-md/TC-006.md": "e9ee9232b1d7cdf6",
+    "test-cases-md/TC-007.md": "a9c2387d8debc3b1",
+    "test-cases-md/TC-008.md": "d82960e8dbbb41c2",
+    "test-cases-md/TC-009.md": "3244b71a84f3e433",
+    "test-cases-md/TC-010.md": "99838228d9d7561b",
+    "test-cases-md/TC-011.md": "0b2d3efa10e5ead8",
+    "test-cases.json": "49006d162e0182f8",
+    "test-cases/TC-001.json": "c01561e6c7001d7f",
+    "test-cases/TC-002.json": "327bd627b75d8478",
+    "test-cases/TC-003.json": "af4d45c7d16b305f",
+    "test-cases/TC-004.json": "006988018219ccff",
+    "test-cases/TC-005.json": "031c66540537cdd9",
+    "test-cases/TC-006.json": "c91c407cab1d564d",
+    "test-cases/TC-007.json": "73071105da875719",
+    "test-cases/TC-008.json": "58d5c6e1cc859a67",
+    "test-cases/TC-009.json": "2463259ea9bc6e9a",
+    "test-cases/TC-010.json": "36b10158a93b3bc7",
+    "test-cases/TC-011.json": "76bbe5d3a881b3af"
+   },
+   "publication": {
+    "applied": [
+     "APPLIED",
+     23
+    ],
+    "approval_required": "APPROVAL_REQUIRED",
+    "conflict": {
+     "add_suite_placements": 0,
+     "conflicts": 1,
+     "create_suites": 0,
+     "create_test_cases": 0,
+     "delete_operations": 0,
+     "reuse_suites": 6,
+     "skipped": 0,
+     "unchanged": 0,
+     "update_test_cases": 10
+    },
+    "first": {
+     "add_suite_placements": 12,
+     "conflicts": 0,
+     "create_suites": 6,
+     "create_test_cases": 11,
+     "delete_operations": 0,
+     "reuse_suites": 0,
+     "skipped": 0,
+     "unchanged": 0,
+     "update_test_cases": 0
+    },
+    "second": {
+     "add_suite_placements": 0,
+     "conflicts": 0,
+     "create_suites": 0,
+     "create_test_cases": 0,
+     "delete_operations": 0,
+     "reuse_suites": 6,
+     "skipped": 0,
+     "unchanged": 11,
+     "update_test_cases": 0
+    },
+    "titles": "cb4708828519339f",
+    "writes": 11
+   },
+   "render": {
+    "files": [
+     "<ROOT>/artifacts\\output\\execution-plan.md",
+     "<ROOT>/artifacts\\output\\organization.json",
+     "<ROOT>/artifacts\\output\\questions.json",
+     "<ROOT>/artifacts\\output\\report.html",
+     "<ROOT>/artifacts\\output\\test-cases-md\\TC-001.md",
+     "<ROOT>/artifacts\\output\\test-cases-md\\TC-002.md",
+     "<ROOT>/artifacts\\output\\test-cases-md\\TC-003.md",
+     "<ROOT>/artifacts\\output\\test-cases-md\\TC-004.md",
+     "<ROOT>/artifacts\\output\\test-cases-md\\TC-005.md",
+     "<ROOT>/artifacts\\output\\test-cases-md\\TC-006.md",
+     "<ROOT>/artifacts\\output\\test-cases-md\\TC-007.md",
+     "<ROOT>/artifacts\\output\\test-cases-md\\TC-008.md",
+     "<ROOT>/artifacts\\output\\test-cases-md\\TC-009.md",
+     "<ROOT>/artifacts\\output\\test-cases-md\\TC-010.md",
+     "<ROOT>/artifacts\\output\\test-cases-md\\TC-011.md",
+     "<ROOT>/artifacts\\output\\test-cases.json",
+     "<ROOT>/artifacts\\output\\test-cases\\TC-001.json",
+     "<ROOT>/artifacts\\output\\test-cases\\TC-002.json",
+     "<ROOT>/artifacts\\output\\test-cases\\TC-003.json",
+     "<ROOT>/artifacts\\output\\test-cases\\TC-004.json",
+     "<ROOT>/artifacts\\output\\test-cases\\TC-005.json",
+     "<ROOT>/artifacts\\output\\test-cases\\TC-006.json",
+     "<ROOT>/artifacts\\output\\test-cases\\TC-007.json",
+     "<ROOT>/artifacts\\output\\test-cases\\TC-008.json",
+     "<ROOT>/artifacts\\output\\test-cases\\TC-009.json",
+     "<ROOT>/artifacts\\output\\test-cases\\TC-010.json",
+     "<ROOT>/artifacts\\output\\test-cases\\TC-011.json"
+    ],
+    "outputs_unchanged": true
+   }
+  },
+  "saas-accounts": {
+   "azure": {
+    "content_hashes": "f7a546dd224a55f0",
+    "export_keys": [
+     "canonical:TC-001",
+     "canonical:TC-002",
+     "canonical:TC-003",
+     "canonical:TC-004",
+     "canonical:TC-005",
+     "canonical:TC-006",
+     "canonical:TC-007",
+     "canonical:TC-008",
+     "canonical:TC-009",
+     "canonical:TC-010",
+     "canonical:TC-011",
+     "canonical:TC-012",
+     "chaos:regression:CH-001"
+    ],
+    "fields": {
+     "canonical:TC-001": "2edbaba181447de4",
+     "canonical:TC-002": "8cad3c0ac843ccb9",
+     "canonical:TC-003": "61a7b5458da9ad60",
+     "canonical:TC-004": "550162bd2d0d6d61",
+     "canonical:TC-005": "b2b039e279ec6318",
+     "canonical:TC-006": "bc63d12a3b3ea8b1",
+     "canonical:TC-007": "1b7dbad30b071856",
+     "canonical:TC-008": "962960245ef92a26",
+     "canonical:TC-009": "e7642d5629034b16",
+     "canonical:TC-010": "fdd092ab4be6b29f",
+     "canonical:TC-011": "a5ead6e46e888b4a",
+     "canonical:TC-012": "4b361800e63e61a4",
+     "chaos:regression:CH-001": "e4ea31e9545a691e"
+    },
+    "metadata": "efc6453241272cc5",
+    "package": "33d418813c72eee0",
+    "preview": {
+     "conflicts": 0,
+     "create": 13,
+     "skipped": 0,
+     "unchanged": 0,
+     "update": 0
+    },
+    "result": {
+     "canonical_test_cases": 12,
+     "chaos_runs": [
+      "regression"
+     ],
+     "chaos_test_cases": 1,
+     "cloned_test_cases": 0,
+     "conflicts": 0,
+     "create": 13,
+     "live_azure_calls": 0,
+     "multi_suite_cases": 1,
+     "requirement_groups": 5,
+     "skipped": 0,
+     "suite_placements": 14,
+     "suites": 6,
+     "unassigned_cases": 0,
+     "unchanged": 0,
+     "update": 0
+    },
+    "suites": [
+     [
+      "FR-01 — Invite Team Member",
+      "FUNCTIONAL",
+      [
+       "canonical:TC-001",
+       "chaos:regression:CH-001",
+       "canonical:TC-002",
+       "canonical:TC-011"
+      ]
+     ],
+     [
+      "FR-02 — Accept Invitation",
+      "FUNCTIONAL",
+      [
+       "canonical:TC-003",
+       "canonical:TC-004"
+      ]
+     ],
+     [
+      "UC-01 — Onboard a Teammate",
+      "USE_CASE",
+      [
+       "canonical:TC-008"
+      ]
+     ],
+     [
+      "Cross-cutting business rules",
+      "TRANSVERSAL",
+      [
+       "canonical:TC-005",
+       "canonical:TC-006",
+       "canonical:TC-007",
+       "canonical:TC-009",
+       "canonical:TC-010"
+      ]
+     ],
+     [
+      "End-to-end use cases (E2E)",
+      "EXECUTION_VIEW",
+      [
+       "canonical:TC-012"
+      ]
+     ],
+     [
+      "Load and concurrency",
+      "EXECUTION_VIEW",
+      [
+       "canonical:TC-010"
+      ]
+     ]
+    ]
+   },
+   "canonical": {
+    "cases": {
+     "TC-001": "b0ad781b76c733ec",
+     "TC-002": "a0fad6a9f83265d7",
+     "TC-003": "66c1697bc84d671c",
+     "TC-004": "66ba63da2603294a",
+     "TC-005": "1314322f0d9d7cd1",
+     "TC-006": "7df33f83a1a7ccf3",
+     "TC-007": "c51d8f2133fa9078",
+     "TC-008": "bcb5ef8ef36fff46",
+     "TC-009": "5823f23b644b5e3a",
+     "TC-010": "220d4b0839bc3b40",
+     "TC-011": "8ef41f9dc57ea6d6",
+     "TC-012": "54249b827c43509e"
+    },
+    "claims": "e1e5c42999ef0d8f",
+    "count": 12,
+    "coverage_points": "9c166e018bfdfa3a",
+    "findings": "9aed805bebdb6d55",
+    "ids": [
+     "TC-001",
+     "TC-002",
+     "TC-003",
+     "TC-004",
+     "TC-005",
+     "TC-006",
+     "TC-007",
+     "TC-008",
+     "TC-009",
+     "TC-010",
+     "TC-011",
+     "TC-012"
+    ],
+    "index": "739d5a9905216a17",
+    "procedures": {
+     "TC-001": "fd26cc3ab5ac35c3",
+     "TC-002": "b8a494dbd0d85329",
+     "TC-003": "48aadacea5bd08d8",
+     "TC-004": "cf8a5961d25a89ba",
+     "TC-005": "a63139b46ef95db3",
+     "TC-006": "3e1f3ba1c9842079",
+     "TC-007": "528637b7aee1feed",
+     "TC-008": "2ce8eca0f743dc78",
+     "TC-009": "2a29858e569b6eef",
+     "TC-010": "95b1815923bf699a",
+     "TC-011": "37739931a3b2e943",
+     "TC-012": "427fb0b0b9be89c4"
+    },
+    "questions": "33e38c7739c63ed5",
+    "requirements": "91320389a110e9af",
+    "semantic_fingerprint": "e3a689617504f567",
+    "statuses": {
+     "TC-001": [
+      "READY",
+      "HIGH",
+      "READY",
+      [],
+      "UI",
+      "NONE"
+     ],
+     "TC-002": [
+      "READY",
+      "MEDIUM",
+      "NEEDS_FIXTURE",
+      [
+       "MISSING_FIXTURE"
+      ],
+      "UI",
+      "NONE"
+     ],
+     "TC-003": [
+      "READY",
+      "HIGH",
+      "READY",
+      [],
+      "UI",
+      "NONE"
+     ],
+     "TC-004": [
+      "READY",
+      "HIGH",
+      "READY",
+      [],
+      "UI",
+      "NONE"
+     ],
+     "TC-005": [
+      "READY",
+      "HIGH",
+      "READY",
+      [],
+      "UI",
+      "NONE"
+     ],
+     "TC-006": [
+      "READY",
+      "HIGH",
+      "READY",
+      [],
+      "API",
+      "NONE"
+     ],
+     "TC-007": [
+      "READY",
+      "HIGH",
+      "READY",
+      [],
+      "API",
+      "NONE"
+     ],
+     "TC-008": [
+      "READY",
+      "HIGH",
+      "READY",
+      [],
+      "UI",
+      "NONE"
+     ],
+     "TC-009": [
+      "READY",
+      "HIGH",
+      "READY",
+      [],
+      "UI",
+      "NONE"
+     ],
+     "TC-010": [
+      "READY",
+      "MEDIUM",
+      "READY",
+      [],
+      "API",
+      "NONE"
+     ],
+     "TC-011": [
+      "EXPLORATORY",
+      "LOW",
+      "NEEDS_POLICY",
+      [
+       "AMBIGUOUS_POLICY"
+      ],
+      "INTEGRATION",
+      "NONE"
+     ],
+     "TC-012": [
+      "READY",
+      "HIGH",
+      "READY",
+      [],
+      "UI",
+      "NONE"
+     ]
+    }
+   },
+   "chaos": {
+    "canonical_unchanged": true,
+    "cases": "f2f2e758b5746669",
+    "organization": [
+     [
+      "FR01",
+      "FUNCTIONAL",
+      "FR-01 — Invite Team Member",
+      [
+       [
+        "CANONICAL",
+        null,
+        "TC-001"
+       ],
+       [
+        "POST_SUITE",
+        "regression",
+        "CH-001"
+       ],
+       [
+        "CANONICAL",
+        null,
+        "TC-002"
+       ],
+       [
+        "CANONICAL",
+        null,
+        "TC-011"
+       ]
+      ]
+     ],
+     [
+      "FR02",
+      "FUNCTIONAL",
+      "FR-02 — Accept Invitation",
+      [
+       [
+        "CANONICAL",
+        null,
+        "TC-003"
+       ],
+       [
+        "CANONICAL",
+        null,
+        "TC-004"
+       ]
+      ]
+     ],
+     [
+      "UC01",
+      "USE_CASE",
+      "UC-01 — Onboard a Teammate",
+      [
+       [
+        "CANONICAL",
+        null,
+        "TC-008"
+       ]
+      ]
+     ],
+     [
+      "TRANSVERSAL",
+      "TRANSVERSAL",
+      "Cross-cutting business rules",
+      [
+       [
+        "CANONICAL",
+        null,
+        "TC-005"
+       ],
+       [
+        "CANONICAL",
+        null,
+        "TC-006"
+       ],
+       [
+        "CANONICAL",
+        null,
+        "TC-007"
+       ],
+       [
+        "CANONICAL",
+        null,
+        "TC-009"
+       ],
+       [
+        "CANONICAL",
+        null,
+        "TC-010"
+       ]
+      ]
+     ],
+     [
+      "E2E",
+      "EXECUTION_VIEW",
+      "End-to-end use cases (E2E)",
+      [
+       [
+        "CANONICAL",
+        null,
+        "TC-012"
+       ]
+      ]
+     ],
+     [
+      "LOAD_CONCURRENCY",
+      "EXECUTION_VIEW",
+      "Load and concurrency",
+      [
+       [
+        "CANONICAL",
+        null,
+        "TC-010"
+       ]
+      ]
+     ]
+    ]
+   },
+   "check": "3dae9526a9034ca9",
+   "clarify": "543e0b9d3291c68d",
+   "current_run": {
+    "automatic": true,
+    "explicit": true,
+    "stale_pointer": "REFUSED"
+   },
+   "manual_import": {
+    "existing": {
+     "conflict": 0,
+     "create": 0,
+     "files": [
+      "secondary-suite-placements.csv",
+      "suite-order.md",
+      "manual-import-summary.md"
+     ],
+     "mode": "UPDATE",
+     "total_test_cases": 13,
+     "unchanged": 13,
+     "unmatched": 0,
+     "update": 0
+    },
+    "existing_actions": {
+     "canonical:TC-001": [
+      "UNCHANGED",
+      "1000"
+     ],
+     "canonical:TC-002": [
+      "UNCHANGED",
+      "1002"
+     ],
+     "canonical:TC-003": [
+      "UNCHANGED",
+      "1004"
+     ],
+     "canonical:TC-004": [
+      "UNCHANGED",
+      "1005"
+     ],
+     "canonical:TC-005": [
+      "UNCHANGED",
+      "1007"
+     ],
+     "canonical:TC-006": [
+      "UNCHANGED",
+      "1008"
+     ],
+     "canonical:TC-007": [
+      "UNCHANGED",
+      "1009"
+     ],
+     "canonical:TC-008": [
+      "UNCHANGED",
+      "1006"
+     ],
+     "canonical:TC-009": [
+      "UNCHANGED",
+      "1010"
+     ],
+     "canonical:TC-010": [
+      "UNCHANGED",
+      "1011"
+     ],
+     "canonical:TC-011": [
+      "UNCHANGED",
+      "1003"
+     ],
+     "canonical:TC-012": [
+      "UNCHANGED",
+      "1012"
+     ],
+     "chaos:regression:CH-001": [
+      "UNCHANGED",
+      "1001"
+     ]
+    },
+    "fresh": {
+     "files": {
+      "manual-import-create/01-FR-01.csv": "2667028f32d4fea0",
+      "manual-import-create/02-FR-02.csv": "9c107deed21bf441",
+      "manual-import-create/03-UC-01.csv": "11968613c18f5344",
+      "manual-import-create/04-Cross-cutting-business-rules.csv": "7e827e3e93fa38ca",
+      "manual-import-create/05-End-to-end-use-cases-E2E.csv": "67ffa171946dea54",
+      "manual-import-plan.json": "128ca1261e56546a",
+      "manual-import-summary.md": "866223092100504a",
+      "secondary-suite-placements.csv": "7770ba70b270bf95",
+      "suite-order.md": "5fd0c863a712afa7"
+     },
+     "summary": {
+      "conflict": 0,
+      "create": 13,
+      "files": [
+       "manual-import-create/01-FR-01.csv",
+       "manual-import-create/02-FR-02.csv",
+       "manual-import-create/03-UC-01.csv",
+       "manual-import-create/04-Cross-cutting-business-rules.csv",
+       "manual-import-create/05-End-to-end-use-cases-E2E.csv",
+       "secondary-suite-placements.csv",
+       "suite-order.md",
+       "manual-import-summary.md"
+      ],
+      "mode": "CREATE",
+      "total_test_cases": 13,
+      "unchanged": 0,
+      "unmatched": 0,
+      "update": 0
+     }
+    }
+   },
+   "organization": [
+    [
+     "FR01",
+     "FUNCTIONAL",
+     "FR-01 — Invite Team Member",
+     [
+      [
+       "CANONICAL",
+       null,
+       "TC-001"
+      ],
+      [
+       "CANONICAL",
+       null,
+       "TC-002"
+      ],
+      [
+       "CANONICAL",
+       null,
+       "TC-011"
+      ]
+     ]
+    ],
+    [
+     "FR02",
+     "FUNCTIONAL",
+     "FR-02 — Accept Invitation",
+     [
+      [
+       "CANONICAL",
+       null,
+       "TC-003"
+      ],
+      [
+       "CANONICAL",
+       null,
+       "TC-004"
+      ]
+     ]
+    ],
+    [
+     "UC01",
+     "USE_CASE",
+     "UC-01 — Onboard a Teammate",
+     [
+      [
+       "CANONICAL",
+       null,
+       "TC-008"
+      ]
+     ]
+    ],
+    [
+     "TRANSVERSAL",
+     "TRANSVERSAL",
+     "Cross-cutting business rules",
+     [
+      [
+       "CANONICAL",
+       null,
+       "TC-005"
+      ],
+      [
+       "CANONICAL",
+       null,
+       "TC-006"
+      ],
+      [
+       "CANONICAL",
+       null,
+       "TC-007"
+      ],
+      [
+       "CANONICAL",
+       null,
+       "TC-009"
+      ],
+      [
+       "CANONICAL",
+       null,
+       "TC-010"
+      ]
+     ]
+    ],
+    [
+     "E2E",
+     "EXECUTION_VIEW",
+     "End-to-end use cases (E2E)",
+     [
+      [
+       "CANONICAL",
+       null,
+       "TC-012"
+      ]
+     ]
+    ],
+    [
+     "LOAD_CONCURRENCY",
+     "EXECUTION_VIEW",
+     "Load and concurrency",
+     [
+      [
+       "CANONICAL",
+       null,
+       "TC-010"
+      ]
+     ]
+    ]
+   ],
+   "outputs": {
+    "execution-plan.md": "b3ae58942933e21a",
+    "organization.json": "da2bff6c65bc4120",
+    "questions.json": "33e38c7739c63ed5",
+    "report.html": "3b2bff5697fa71a6",
+    "test-cases-md/TC-001.md": "91191dd0022b5b08",
+    "test-cases-md/TC-002.md": "072580c56b597ee1",
+    "test-cases-md/TC-003.md": "424cba2faefc3fe5",
+    "test-cases-md/TC-004.md": "0112ade7e35571d6",
+    "test-cases-md/TC-005.md": "6bbd8fbe18f5ec12",
+    "test-cases-md/TC-006.md": "c54e14837d54e28e",
+    "test-cases-md/TC-007.md": "cdb399130e96899a",
+    "test-cases-md/TC-008.md": "26dc0a1c4cec26ba",
+    "test-cases-md/TC-009.md": "281e825319e3fdbc",
+    "test-cases-md/TC-010.md": "87e48745cf83c986",
+    "test-cases-md/TC-011.md": "42035448437b699b",
+    "test-cases-md/TC-012.md": "8419c3d2d54aa262",
+    "test-cases.json": "739d5a9905216a17",
+    "test-cases/TC-001.json": "b0ad781b76c733ec",
+    "test-cases/TC-002.json": "a0fad6a9f83265d7",
+    "test-cases/TC-003.json": "66c1697bc84d671c",
+    "test-cases/TC-004.json": "66ba63da2603294a",
+    "test-cases/TC-005.json": "1314322f0d9d7cd1",
+    "test-cases/TC-006.json": "7df33f83a1a7ccf3",
+    "test-cases/TC-007.json": "c51d8f2133fa9078",
+    "test-cases/TC-008.json": "bcb5ef8ef36fff46",
+    "test-cases/TC-009.json": "5823f23b644b5e3a",
+    "test-cases/TC-010.json": "220d4b0839bc3b40",
+    "test-cases/TC-011.json": "8ef41f9dc57ea6d6",
+    "test-cases/TC-012.json": "54249b827c43509e"
+   },
+   "publication": {
+    "applied": [
+     "APPLIED",
+     25
+    ],
+    "approval_required": "APPROVAL_REQUIRED",
+    "conflict": {
+     "add_suite_placements": 0,
+     "conflicts": 1,
+     "create_suites": 0,
+     "create_test_cases": 0,
+     "delete_operations": 0,
+     "reuse_suites": 6,
+     "skipped": 0,
+     "unchanged": 0,
+     "update_test_cases": 12
+    },
+    "first": {
+     "add_suite_placements": 14,
+     "conflicts": 0,
+     "create_suites": 6,
+     "create_test_cases": 13,
+     "delete_operations": 0,
+     "reuse_suites": 0,
+     "skipped": 0,
+     "unchanged": 0,
+     "update_test_cases": 0
+    },
+    "second": {
+     "add_suite_placements": 0,
+     "conflicts": 0,
+     "create_suites": 0,
+     "create_test_cases": 0,
+     "delete_operations": 0,
+     "reuse_suites": 6,
+     "skipped": 0,
+     "unchanged": 13,
+     "update_test_cases": 0
+    },
+    "titles": "186d2b44437264df",
+    "writes": 13
+   },
+   "render": {
+    "files": [
+     "<ROOT>/artifacts\\output\\execution-plan.md",
+     "<ROOT>/artifacts\\output\\organization.json",
+     "<ROOT>/artifacts\\output\\questions.json",
+     "<ROOT>/artifacts\\output\\report.html",
+     "<ROOT>/artifacts\\output\\test-cases-md\\TC-001.md",
+     "<ROOT>/artifacts\\output\\test-cases-md\\TC-002.md",
+     "<ROOT>/artifacts\\output\\test-cases-md\\TC-003.md",
+     "<ROOT>/artifacts\\output\\test-cases-md\\TC-004.md",
+     "<ROOT>/artifacts\\output\\test-cases-md\\TC-005.md",
+     "<ROOT>/artifacts\\output\\test-cases-md\\TC-006.md",
+     "<ROOT>/artifacts\\output\\test-cases-md\\TC-007.md",
+     "<ROOT>/artifacts\\output\\test-cases-md\\TC-008.md",
+     "<ROOT>/artifacts\\output\\test-cases-md\\TC-009.md",
+     "<ROOT>/artifacts\\output\\test-cases-md\\TC-010.md",
+     "<ROOT>/artifacts\\output\\test-cases-md\\TC-011.md",
+     "<ROOT>/artifacts\\output\\test-cases-md\\TC-012.md",
+     "<ROOT>/artifacts\\output\\test-cases.json",
+     "<ROOT>/artifacts\\output\\test-cases\\TC-001.json",
+     "<ROOT>/artifacts\\output\\test-cases\\TC-002.json",
+     "<ROOT>/artifacts\\output\\test-cases\\TC-003.json",
+     "<ROOT>/artifacts\\output\\test-cases\\TC-004.json",
+     "<ROOT>/artifacts\\output\\test-cases\\TC-005.json",
+     "<ROOT>/artifacts\\output\\test-cases\\TC-006.json",
+     "<ROOT>/artifacts\\output\\test-cases\\TC-007.json",
+     "<ROOT>/artifacts\\output\\test-cases\\TC-008.json",
+     "<ROOT>/artifacts\\output\\test-cases\\TC-009.json",
+     "<ROOT>/artifacts\\output\\test-cases\\TC-010.json",
+     "<ROOT>/artifacts\\output\\test-cases\\TC-011.json",
+     "<ROOT>/artifacts\\output\\test-cases\\TC-012.json"
+    ],
+    "outputs_unchanged": true
+   }
+  }
+ }
+}
