@@ -307,7 +307,11 @@ def convert_run(
     import_plan = None
     if manual_import is not None:  # decided before anything is written
         options = manual.import_options(**{k: manual_import.get(k) for k in ("area_path", "assigned_to", "state")})
-        import_plan = manual.build_plan(package, options, fresh_target=bool(manual_import.get("fresh_target")))
+        export = manual_import.get("existing_azure_export")
+        import_plan = manual.build_plan(
+            package, options, fresh_target=bool(manual_import.get("fresh_target")),
+            existing=manual.read_azure_export(Path(export), migrate_export_key) if export else None,
+            existing_source=Path(export).name if export else None, allow_create=bool(manual_import.get("allow_create")))
     target = target or {}
     state = migrate_integration_state(load_integration_state(run_dir))
     preview = preview_export(
@@ -335,6 +339,10 @@ def add_manual_import_arguments(parser: Any) -> None:
     group = parser.add_argument_group("manual Azure import (local CSV files; never connects)")
     group.add_argument("--manual-import", action="store_true", help="also write CSV files for a manual Azure import")
     group.add_argument("--fresh-target", action="store_true", help="the Azure target is new and empty: create every case")
+    group.add_argument("--existing-azure-export", type=Path,
+                       help="CSV/XLSX exported from Azure Test Plans (with Tags): update those Test Cases by their IDs")
+    group.add_argument("--allow-create", action="store_true",
+                       help="with --existing-azure-export: also create cases that have no stable match")
     group.add_argument("--area-path", help="Azure Area Path of the Test Cases (required with --manual-import)")
     group.add_argument("--assigned-to", help="optional Azure user; left blank when omitted")
     group.add_argument("--state", help=f"Azure state for the rows (default {manual.DEFAULT_STATE})")
@@ -342,10 +350,13 @@ def add_manual_import_arguments(parser: Any) -> None:
 
 def manual_import_request(args: Any) -> dict[str, Any] | None:
     if not args.manual_import:
-        if args.fresh_target or args.area_path or args.assigned_to or args.state:
-            raise ValueError("--fresh-target, --area-path, --assigned-to and --state apply only with --manual-import")
+        if any((args.fresh_target, args.existing_azure_export, args.allow_create, args.area_path, args.assigned_to,
+                args.state)):
+            raise ValueError("--fresh-target, --existing-azure-export, --allow-create, --area-path, --assigned-to and "
+                             "--state apply only with --manual-import")
         return None
-    return {"fresh_target": args.fresh_target, "area_path": args.area_path, "assigned_to": args.assigned_to,
+    return {"fresh_target": args.fresh_target, "existing_azure_export": args.existing_azure_export,
+            "allow_create": args.allow_create, "area_path": args.area_path, "assigned_to": args.assigned_to,
             "state": args.state}
 
 

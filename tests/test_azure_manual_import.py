@@ -203,5 +203,155 @@ class FreshTargetCreateTests(unittest.TestCase):
         self.assertTrue((run.artifacts / "output" / "azure" / "manual-import" / "manual-import-plan.json").is_file())
 
 
+def azure_export_of(created_rows: list[dict], *, start: int = 1000, older_format: bool = False,
+                    columns: tuple = mi.COLUMNS) -> tuple[str, dict[str, str]]:
+    """What Azure would export after importing `created_rows`: each Test Case got an ID. With
+    `older_format`, continuation rows leave the ID blank."""
+    ids: dict[str, str] = {}
+    out = io.StringIO()
+    writer = csv.DictWriter(out, fieldnames=columns, extrasaction="ignore", lineterminator="\r\n")
+    writer.writeheader()
+    for row in created_rows:
+        key = ftd_key(row)
+        first = key not in ids
+        ids.setdefault(key, str(start + len(ids)))
+        writer.writerow({**row, "ID": ids[key] if first or not older_format else ""})
+    return out.getvalue(), ids
+
+
+class ExistingTargetUpdateTests(unittest.TestCase):
+    """--existing-azure-export: stable FTD identity decides UPDATE/UNCHANGED/CONFLICT/UNMATCHED; a
+    case is never matched by title and never silently created."""
+
+    def setUp(self) -> None:
+        self.run = finalized_run(self)
+        self.folder = Path(convert(self.run)["manual_import"]["manual_import_dir"])
+        self.created = [r for p in sorted((self.folder / mi.CREATE_DIR).glob("*.csv")) for r in read_csv(p)]
+        self.export = self.folder / "azure-current.csv"
+
+    def reconcile(self, text: str, **manual) -> dict:
+        self.export.write_text(text, encoding="utf-8")
+        convert(self.run, fresh_target=False, existing_azure_export=str(self.export), **manual)
+        return json.loads((self.folder / "manual-import-plan.json").read_text(encoding="utf-8"))
+
+    def test_an_unchanged_import_is_unchanged_and_writes_no_create_or_update_rows(self) -> None:
+        text, ids = azure_export_of(self.created)
+        plan = self.reconcile(text)
+        self.assertEqual(len(ids), plan["summary"]["unchanged"])
+        self.assertEqual(0, plan["summary"]["create"] + plan["summary"]["update"])
+        self.assertFalse(list((self.folder / mi.CREATE_DIR).glob("*.csv")))
+        self.assertFalse((self.folder / mi.UPDATE_FILE).exists())
+        self.assertEqual(("UPDATE", "EXISTING"), (plan["mode"], plan["target_assumption"]))
+        self.assertTrue(self.export.exists())  # the user's export is never removed
+        placements = read_csv(self.folder / mi.SECONDARY_FILE)
+        self.assertTrue(all(p["Azure ID"] == ids[p["FTD Key"]] for p in placements))
+
+    def test_a_changed_case_updates_with_its_existing_id_and_never_a_blank_one(self) -> None:
+        changed = [{**r, "Description": "edited in Azure"} if ftd_key(r) == "chaos:field:CH-001" else r for r in self.created]
+        text, ids = azure_export_of(changed, older_format=True)
+        plan = self.reconcile(text)
+        self.assertEqual(1, plan["summary"]["update"])
+        rows = read_csv(self.folder / mi.UPDATE_FILE)
+        self.assertEqual({ids["chaos:field:CH-001"]}, {r["ID"] for r in rows})
+        self.assertTrue(all(r["ID"] for r in rows))
+        self.assertTrue(rows[0]["Title"].startswith("[EXPLORATORY] CH-001"))
+        self.assertFalse(list((self.folder / mi.CREATE_DIR).glob("*.csv")))
+
+    def test_a_second_generation_from_the_same_export_is_identical_and_creates_nothing(self) -> None:
+        text, _ = azure_export_of(self.created)
+        first = self.reconcile(text)
+        second = self.reconcile(text)
+        self.assertEqual(first["cases"], second["cases"])
+        self.assertEqual(0, second["summary"]["create"])
+
+    def test_a_title_look_alike_without_ftd_identity_is_never_matched_or_created(self) -> None:
+        target = self.created[0]
+        others = [r for r in self.created if ftd_key(r) != ftd_key(target)]
+        text, _ = azure_export_of(others)
+        look_alike = {**target, "ID": "77", "Tags": "imported-by-hand", "Description": "written by hand"}
+        writer_out = io.StringIO()
+        csv.DictWriter(writer_out, fieldnames=mi.COLUMNS, lineterminator="\r\n").writerow(look_alike)
+        plan = self.reconcile(text + writer_out.getvalue())
+        entry = next(e for e in plan["cases"] if e["export_key"] == ftd_key(target))
+        self.assertEqual(("UNMATCHED", None), (entry["action"], entry["azure_id"]))
+        self.assertIn("['77'] share the title but carry no FTD identity", entry["reason"])
+        self.assertFalse(list((self.folder / mi.CREATE_DIR).glob("*.csv")))
+        self.assertIn("| UNMATCHED | 1 |", (self.folder / "manual-import-summary.md").read_text(encoding="utf-8"))
+
+    def test_a_duplicated_ftd_key_in_azure_is_a_conflict_with_no_importable_row(self) -> None:
+        target = ftd_key(self.created[0])
+        text, _ = azure_export_of(self.created)
+        twin, _ = azure_export_of([r for r in self.created if ftd_key(r) == target], start=9000)
+        plan = self.reconcile(text + twin.split("\r\n", 1)[1])
+        entry = next(e for e in plan["cases"] if e["export_key"] == target)
+        self.assertEqual("CONFLICT", entry["action"])
+        self.assertIn("DUPLICATE_FTD_KEY", entry["reason"])
+        self.assertEqual(2, len(entry["candidates"]))
+        for path in [self.folder / mi.UPDATE_FILE, *(self.folder / mi.CREATE_DIR).glob("*.csv")]:
+            if path.exists():
+                self.assertFalse([r for r in read_csv(path) if ftd_key(r) == target])
+
+    def test_unmatched_cases_are_created_only_when_explicitly_allowed(self) -> None:
+        missing = "chaos:field:CH-001"
+        text, _ = azure_export_of([r for r in self.created if ftd_key(r) != missing])
+        self.assertEqual("UNMATCHED", next(e for e in self.reconcile(text)["cases"] if e["export_key"] == missing)["action"])
+        self.assertFalse(list((self.folder / mi.CREATE_DIR).glob("*.csv")))
+        plan = self.reconcile(text, allow_create=True)
+        self.assertEqual("UPDATE+CREATE", plan["mode"])
+        self.assertEqual("CREATE", next(e for e in plan["cases"] if e["export_key"] == missing)["action"])
+        create_rows = [r for p in (self.folder / mi.CREATE_DIR).glob("*.csv") for r in read_csv(p)]
+        self.assertEqual({missing}, {ftd_key(r) for r in create_rows})
+        self.assertEqual({""}, {r["ID"] for r in create_rows})
+        self.assertEqual(len(plan["cases"]) - 1, plan["summary"]["unchanged"])
+
+    def test_identity_is_recovered_from_the_metadata_block_when_tags_lack_the_key(self) -> None:
+        without_key = [{**r, "Tags": "; ".join(t for t in r["Tags"].split("; ") if not t.startswith("ftd-key:"))}
+                       for r in self.created]
+        text, _ = azure_export_of(self.created)
+        rows = list(csv.DictReader(io.StringIO(text)))
+        for row, stripped in zip(rows, without_key):
+            row["Tags"] = stripped["Tags"]
+        out = io.StringIO()
+        writer = csv.DictWriter(out, fieldnames=mi.COLUMNS, lineterminator="\r\n")
+        writer.writeheader()
+        writer.writerows(rows)
+        plan = self.reconcile(out.getvalue())
+        self.assertEqual(0, plan["summary"]["unmatched"] + plan["summary"]["conflict"])
+        self.assertTrue(all(e["azure_id"] for e in plan["cases"]))
+
+    def test_an_export_without_tags_or_description_is_refused_instead_of_matching_titles(self) -> None:
+        text, _ = azure_export_of(self.created, columns=mi.COLUMNS[:9])
+        self.export.write_text(text, encoding="utf-8")
+        before = {p: p.read_bytes() for p in self.folder.rglob("*") if p.is_file()}
+        with self.assertRaisesRegex(mi.ManualImportError, "Column options"):
+            convert(self.run, fresh_target=False, existing_azure_export=str(self.export))
+        self.assertEqual(before, {p: p.read_bytes() for p in self.folder.rglob("*") if p.is_file()})
+
+    def test_an_xlsx_export_is_read_without_extra_dependencies(self) -> None:
+        import zipfile
+        from xml.sax.saxutils import escape
+        text, ids = azure_export_of(self.created)
+        table = list(csv.reader(io.StringIO(text)))
+        cells = "".join(
+            "<row>" + "".join(f'<c t="inlineStr"><is><t xml:space="preserve">{escape(v)}</t></is></c>' for v in line) + "</row>"
+            for line in table)
+        path = self.folder / "azure-current.xlsx"
+        with zipfile.ZipFile(path, "w") as archive:
+            archive.writestr("xl/worksheets/sheet1.xml",
+                             '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+                             f"<sheetData>{cells}</sheetData></worksheet>")
+        items = mi.read_azure_export(path)
+        self.assertEqual(sorted(ids.values()), sorted(i["id"] for i in items))
+        self.assertEqual({k for i in items for k in i["keys"]}, set(ids))
+
+    def test_contradictory_or_incomplete_modes_are_refused(self) -> None:
+        text, _ = azure_export_of(self.created)
+        self.export.write_text(text, encoding="utf-8")
+        with self.assertRaisesRegex(mi.ManualImportError, "exclude each other"):
+            convert(self.run, existing_azure_export=str(self.export))
+        with self.assertRaisesRegex(mi.ManualImportError, "--allow-create only applies"):
+            convert(self.run, allow_create=True)
+
+
 if __name__ == "__main__":
     unittest.main()

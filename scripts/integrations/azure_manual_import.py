@@ -80,25 +80,178 @@ def suite_homes(package: dict[str, Any]) -> tuple[dict[str, str], dict[str, list
     return primary, additional
 
 
-def build_plan(package: dict[str, Any], options: dict[str, str], *, fresh_target: bool = False) -> dict[str, Any]:
-    if not fresh_target:
+def build_plan(
+    package: dict[str, Any], options: dict[str, str], *, fresh_target: bool = False,
+    existing: list[dict[str, Any]] | None = None, existing_source: str | None = None, allow_create: bool = False,
+) -> dict[str, Any]:
+    """CREATE for a declared empty target; otherwise reconcile every case with the existing Azure
+    Test Cases by stable FTD identity. A case without exactly one stable match is never created
+    silently: it is CONFLICT, or UNMATCHED unless creation is explicitly allowed."""
+    if fresh_target and existing is not None:
+        raise ManualImportError("--fresh-target and --existing-azure-export exclude each other")
+    if allow_create and existing is None:
+        raise ManualImportError("--allow-create only applies with --existing-azure-export")
+    if not fresh_target and existing is None:
         raise ManualImportError(
             "say what the Azure target holds: --fresh-target for a new, empty target (every case is created), "
             "or --existing-azure-export <file> to update a previously imported set without duplicates")
     primary, additional = suite_homes(package)
+    by_key: dict[str, list[dict[str, Any]]] = {}
+    by_title: dict[str, list[str]] = {}
+    for item in existing or []:
+        for key in item["keys"]:
+            by_key.setdefault(key, []).append(item)
+        if not item["keys"]:
+            by_title.setdefault(item["title"], []).append(item["id"])
     entries = []
     for case in package["test_cases"]:
         key = case["export_key"]
-        entries.append({"export_key": key, "ftd_id": case["local_id"],
-                        "title": work_item_fields(_payload(case), key)["System.Title"], "status": case["status"],
-                        "action": "CREATE", "azure_id": None, "primary_suite": primary.get(key),
-                        "additional_suites": additional.get(key, [])})
-    return {
-        "schema_version": "1", "operation": "AZURE_MANUAL_IMPORT_PLAN", "source_run": package["source_run"],
-        "mode": "CREATE", "target_assumption": "EMPTY", "existing_ids": "NONE",
-        "duplicate_safety": "safe only for an empty/new target: every row group has a blank ID and creates a Test Case",
-        "options": options, "summary": _summary(entries), "cases": entries,
-    }
+        rows = case_rows(case, None, options)
+        entry = {"export_key": key, "ftd_id": case["local_id"], "title": rows[0]["Title"], "status": case["status"],
+                 "action": "CREATE", "azure_id": None, "primary_suite": primary.get(key),
+                 "additional_suites": additional.get(key, [])}
+        matches = by_key.get(key, [])
+        if existing is None:
+            pass
+        elif len(matches) > 1:
+            entry.update(action="CONFLICT", reason="DUPLICATE_FTD_KEY: several Azure Test Cases carry this FTD key",
+                         candidates=sorted(m["id"] for m in matches))
+        elif matches and len(matches[0]["keys"]) > 1:
+            entry.update(action="CONFLICT", reason="AMBIGUOUS_FTD_IDENTITY: the Azure Test Case carries several FTD keys",
+                         candidates=[matches[0]["id"]])
+        elif matches:
+            entry.update(action="UNCHANGED" if _same_content(matches[0], rows) else "UPDATE", azure_id=matches[0]["id"])
+        else:
+            look_alikes = by_title.get(entry["title"], []) + by_title.get(case["title"], [])
+            reason = "NO_STABLE_MATCH" + (f": Azure Test Cases {sorted(set(look_alikes))} share the title but carry no "
+                                          "FTD identity" if look_alikes else "")
+            entry.update(action="CREATE" if allow_create else "UNMATCHED", reason=reason)
+        entries.append(entry)
+    known = {c["export_key"] for c in package["test_cases"]}
+    if existing is None:
+        header = {"mode": "CREATE", "target_assumption": "EMPTY", "existing_ids": "NONE",
+                  "duplicate_safety": "safe only for an empty/new target: every row group has a blank ID and creates a Test Case"}
+    else:
+        matched = sum(e["action"] in {"UPDATE", "UNCHANGED"} for e in entries)
+        header = {
+            "mode": "UPDATE+CREATE" if allow_create else "UPDATE", "target_assumption": "EXISTING",
+            "existing_ids": f"{matched} matched by ftd-key / FTD_METADATA_V1 in {existing_source or 'the Azure export'}",
+            "duplicate_safety": "update rows carry the existing Azure ID; " + (
+                "cases without a stable match are created with a blank ID because --allow-create was given"
+                if allow_create else "cases without a stable match are UNMATCHED and never created"),
+            "not_in_package": sorted({k for item in existing for k in item["keys"] if k not in known}),
+        }
+    return {"schema_version": "1", "operation": "AZURE_MANUAL_IMPORT_PLAN", "source_run": package["source_run"],
+            **header, "options": options, "summary": _summary(entries), "cases": entries}
+
+
+def _same_content(item: dict[str, Any], rows: list[dict[str, Any]]) -> bool:
+    """UNCHANGED only when the export shows every compared field and each one already matches."""
+    if item["tags"] is None or item["description"] is None:
+        return False
+    return (item["title"] == rows[0]["Title"] and set(item["tags"]) == set(rows[0]["Tags"].split("; "))
+            and item["description"] == rows[0]["Description"]
+            and item["steps"] == [(r["Step Action"], r["Step Expected"]) for r in rows if r["Step Action"] or r["Step Expected"]])
+
+
+# --- reading the user's Azure export (CSV or XLSX, obtained from Azure DevOps by hand) -------
+
+def read_azure_export(path: Path, normalize_key: Any = None) -> list[dict[str, Any]]:
+    """Existing Test Cases from an Azure export: one record per work item ID with its FTD keys
+    (`ftd-key:` tags first, else the FTD_METADATA_V1 export key). Title is kept for reporting
+    look-alikes only; it is never identity."""
+    from integrations.azure_devops import read_ftd_metadata
+    path = Path(path)
+    if not path.is_file():
+        raise ManualImportError(f"the Azure export {path} does not exist")
+    rows = _xlsx_rows(path) if path.suffix.casefold() == ".xlsx" else _csv_rows(path)
+    columns = {name.strip().casefold() for row in rows[:1] for name in row}
+    if "id" not in columns:
+        raise ManualImportError(f"{path.name} has no ID column; export the Test Cases from Azure DevOps Test Plans")
+    if not columns & {"tags", "description"}:
+        raise ManualImportError(
+            f"{path.name} has neither a Tags nor a Description column, so no FTD identity can be read. In Azure "
+            "Test Plans use Column options to add Tags (and Description), export again and retry. FTD never "
+            "matches Test Cases by title.")
+    normalize_key = normalize_key or (lambda key: key)
+    items: dict[str, dict[str, Any]] = {}
+    current = None
+    for raw in rows:
+        row = {name.strip().casefold(): (value or "") for name, value in raw.items() if name}
+        work_item = row.get("id", "").strip().removesuffix(".0")
+        if work_item:
+            current = items.setdefault(work_item, {"id": work_item, "title": row.get("title", "").strip(),
+                                                   "tags": None, "description": None, "steps": [], "keys": []})
+        if current is None:
+            continue
+        if "tags" in row and row["tags"].strip():
+            current["tags"] = [t.strip() for t in row["tags"].split(";") if t.strip()]
+        elif "tags" in row and current["tags"] is None:
+            current["tags"] = []
+        if "description" in row and row["description"].strip():
+            current["description"] = row["description"]
+        if row.get("step action", "").strip() or row.get("step expected", "").strip():
+            current["steps"].append((row.get("step action", ""), row.get("step expected", "")))
+    for item in items.values():
+        keys = [t[len("ftd-key:"):] for t in item["tags"] or [] if t.casefold().startswith("ftd-key:")]
+        if not keys and item["description"]:
+            try:
+                metadata = read_ftd_metadata(item["description"])
+            except ValueError:
+                metadata = None
+            if metadata and metadata.get("export_key"):
+                keys = [metadata["export_key"]]
+        item["keys"] = sorted({normalize_key(k.strip()) for k in keys if k.strip()})
+    return list(items.values())
+
+
+def _csv_rows(path: Path) -> list[dict[str, str]]:
+    with path.open(encoding="utf-8-sig", newline="") as handle:
+        return list(csv.DictReader(handle))
+
+
+def _xlsx_rows(path: Path) -> list[dict[str, str]]:
+    """The first worksheet of an XLSX as header-keyed rows, read with the standard library only."""
+    import posixpath
+    import zipfile
+    from xml.etree import ElementTree
+    main = "{http://schemas.openxmlformats.org/spreadsheetml/2006/main}"
+    rel = "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}"
+    try:
+        archive = zipfile.ZipFile(path)
+    except zipfile.BadZipFile as exc:
+        raise ManualImportError(f"{path.name} is not a valid XLSX file") from exc
+    with archive:
+        names = set(archive.namelist())
+        shared = []
+        if "xl/sharedStrings.xml" in names:
+            shared = ["".join(t.text or "" for t in si.iter(f"{main}t"))
+                      for si in ElementTree.fromstring(archive.read("xl/sharedStrings.xml")).iter(f"{main}si")]
+        sheet = "xl/worksheets/sheet1.xml"
+        if "xl/workbook.xml" in names and "xl/_rels/workbook.xml.rels" in names:
+            first = next(ElementTree.fromstring(archive.read("xl/workbook.xml")).iter(f"{main}sheet"), None)
+            targets = {r.get("Id"): r.get("Target") for r in ElementTree.fromstring(archive.read("xl/_rels/workbook.xml.rels"))}
+            target = targets.get(first.get(f"{rel}id")) if first is not None else None
+            if target:
+                sheet = target.lstrip("/") if target.startswith("/") else posixpath.normpath(posixpath.join("xl", target))
+        table = []
+        for row in ElementTree.fromstring(archive.read(sheet)).iter(f"{main}row"):
+            values: dict[int, str] = {}
+            for cell in row.iter(f"{main}c"):
+                letters = re.match(r"[A-Z]+", cell.get("r", "")).group(0) if cell.get("r") else None
+                column = sum((ord(ch) - 64) * 26 ** i for i, ch in enumerate(reversed(letters))) - 1 if letters else len(values)
+                kind, value = cell.get("t"), cell.find(f"{main}v")
+                if kind == "s" and value is not None:
+                    values[column] = shared[int(value.text)]
+                elif kind == "inlineStr":
+                    values[column] = "".join(t.text or "" for t in cell.iter(f"{main}t"))
+                else:
+                    values[column] = value.text if value is not None and value.text else ""
+            table.append([values.get(i, "") for i in range(max(values) + 1)] if values else [])
+    if not table:
+        return []
+    header = table[0]
+    return [dict(zip(header, line + [""] * (len(header) - len(line)))) for line in table[1:]]
 
 
 def _summary(entries: list[dict[str, Any]]) -> dict[str, int]:
@@ -185,11 +338,17 @@ def summary_markdown(plan: dict[str, Any]) -> str:
         "every Test Case is created once, in its primary Suite. Place it in further Suites with "
         "**Add existing test cases**, as listed in `secondary-suite-placements.csv` — never by importing it again.",
         "",
+        f"`{UPDATE_FILE}` rows carry existing Azure IDs: importing it updates those Test Cases (Azure replaces "
+        "their steps) and creates none.",
+        "",
     ]
     held = [e for e in plan["cases"] if e["action"] in {"CONFLICT", "UNMATCHED"}]
     if held:
         lines += ["## Not imported", "", "| FTD ID | Action | Reason |", "| --- | --- | --- |",
                   *(f"| {e['ftd_id']} | {e['action']} | {e.get('reason', '')} |" for e in held), ""]
+    if plan.get("not_in_package"):
+        lines += ["## In Azure but not in this package (left untouched)", "",
+                  *(f"- `{key}`" for key in plan["not_in_package"]), ""]
     return "\n".join(lines)
 
 
