@@ -1,5 +1,8 @@
 # Changelog
 
+## Unreleased
+- Native-first reading: source records and reader tasks carry `format`, `native_reading` and `extracted_layer`; reader results may declare how a source was read (`reading.method`), and a PDF read only from its pypdf text layer must declare its limitations. The PDF text layer is relabelled as excerpt verification and fallback, not a complete reading.
+
 ## 2.5.0 - 2026-10-01
 
 FTD ADR: incremental maintenance of a validated suite as ADRs and other project decisions arrive. The canonical pipeline, its eight gates and every existing command keep their v2.4.2 behavior, which a frozen regression baseline over the synthetic domain packs now enforces.

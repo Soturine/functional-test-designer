@@ -31,6 +31,35 @@ BINARY_EXTENSIONS = {
     ".png", ".jpg", ".jpeg", ".gif", ".ico", ".webp", ".gz", ".zip", ".exe", ".dll", ".pyc",
     ".woff", ".woff2", ".ttf", ".mp4", ".mp3",
 }
+# Native-first: readers open the ORIGINAL with the host's own tools. Extracted text is the snapshot
+# used to verify excerpt lines and the fallback when the host cannot open the format; it is never
+# proof that a document was read completely.
+NATIVE_READING = {
+    "text": "open the original file; the snapshot text is identical",
+    "pdf": "open the original PDF natively, page by page (figures, tables, layout, diagrams); "
+           "the pypdf text layer only verifies excerpt lines",
+    "image": "look at the original with native vision; its content enters as a transcription",
+    "other": "open the original natively if the host can; otherwise report it",
+}
+EXTRACTED_LAYER = {
+    "text": "decoded text, identical to the original",
+    "pdf": "PDF text layer only: no layout, figures, drawn diagrams or scanned pages",
+    "image": "none",
+    "other": "none",
+}
+
+
+def source_format(path: Path) -> str:
+    suffix = path.suffix.casefold()
+    if suffix == ".pdf":
+        return "pdf"
+    if suffix in {".png", ".jpg", ".jpeg", ".gif", ".webp"}:
+        return "image"
+    if suffix in TEXT_EXTENSIONS or not suffix:
+        return "text"
+    return "other"
+
+
 ROLES = {
     "FUNCTIONAL_AUTHORITY": "NORMATIVE",
     "IMPLEMENTATION_EVIDENCE": "IMPLEMENTATION",
@@ -225,7 +254,7 @@ def read_text(path: Path) -> tuple[str | None, str, str]:
             return None, "FAILED", f"PDF text extraction failed: {type(exc).__name__}"
         if not text.strip():
             return None, "NEEDS_TRANSCRIPTION", "PDF has no extractable text layer"
-        return text, "READ", "text extracted with pypdf"
+        return text, "READ", "PDF text layer extracted with pypdf (excerpt verification and fallback)"
     if suffix in TEXT_EXTENSIONS or not suffix:
         try:
             return path.read_text(encoding="utf-8"), "READ", "UTF-8 text"
@@ -266,10 +295,12 @@ def build_source_records(
         path = (Path(workspace) / relative).resolve()
         digest = file_digest(path)
         text, status, reason = _extract(path, digest, text_cache)
+        fmt = source_format(path)
         record: dict[str, Any] = {
             "path": relative, "role": role, "authority": ROLES[role], "status": status,
             "reason": reason, "content_digest": digest,
             "size_bytes": path.stat().st_size,
+            "format": fmt, "native_reading": NATIVE_READING[fmt], "extracted_layer": EXTRACTED_LAYER[fmt],
         }
         if text is None and relative in transcriptions:
             transcript = Path(transcriptions[relative])

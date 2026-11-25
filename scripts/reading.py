@@ -59,7 +59,8 @@ FORBIDDEN_FIELDS = {
 # and test code that mention an identifier describe how it is realized: references.
 DEFINING_ROLES = {"FUNCTIONAL_AUTHORITY", "TECHNICAL_CONTEXT"}
 
-RESULT_FIELDS = {"source_key", "path", "content_digest", "role", "status", "reader", "catalog", "error"}
+RESULT_FIELDS = {"source_key", "path", "content_digest", "role", "status", "reader", "catalog", "error", "reading"}
+READING_METHODS = {"native", "native_vision", "extracted_text"}
 SELECTOR_RESULT_FIELDS = {"selector_id", "selector_path", "role", "reader", "catalog", "files", "shard", "error"}
 FILE_STATUSES = ("CATALOGED", "INSPECTED", "FAILED")
 
@@ -145,6 +146,9 @@ def plan(
         key = source_key(record["path"])
         task = {"source_key": key, "path": record["path"], "role": record["role"],
                 "content_digest": record["content_digest"], "selector_id": owner[record["path"]]}
+        for hint in ("format", "native_reading", "extracted_layer"):
+            if record.get(hint):
+                task[hint] = record[hint]
         if record["status"] in {"METADATA_ONLY", "UNSUPPORTED"}:
             task["state"] = "UNSUPPORTED"
         elif record["status"] not in {"READ", "TRANSCRIBED"}:
@@ -308,6 +312,18 @@ def _validate_result(result: dict[str, Any], task: dict[str, Any] | None, line_c
     reader = result.get("reader") if isinstance(result.get("reader"), dict) else {}
     if reader.get("role", READER_ROLE) != READER_ROLE:
         errors.append(f"{label} reader.role must be {READER_ROLE}")
+    reading = result.get("reading")
+    if reading is not None:
+        if not isinstance(reading, dict) or reading.get("method") not in READING_METHODS:
+            errors.append(f"{label} reading.method must be one of {sorted(READING_METHODS)}")
+        elif not isinstance(reading.get("limitations", []), list):
+            errors.append(f"{label} reading.limitations must be a list")
+        elif (task.get("format") == "pdf" and reading["method"] == "extracted_text"
+              and not reading.get("limitations")):
+            errors.append(
+                f"{label} read a PDF from its text layer only; declare reading.limitations "
+                "(figures, layout and drawn content were not seen)"
+            )
     status = result.get("status")
     if status not in FILE_STATUSES:
         errors.append(f"{label} status must be one of {list(FILE_STATUSES)}")
@@ -554,6 +570,8 @@ def reconcile(run_dir: Path, artifact_root: Path) -> dict[str, Any]:
             cat = result.get("catalog") or {}
             entry.update({"result_ref": f"results/{task['source_key']}.json", "reader": result.get("reader", {}),
                           "disposition": result.get("status")})
+            if result.get("reading"):
+                entry["reading"] = result["reading"]
             if (result.get("reader") or {}).get("model"):
                 models.add(str(result["reader"]["model"]))
             bucket = buckets.setdefault(task.get("selector_id") or task["source_key"], {})

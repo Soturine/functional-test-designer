@@ -97,6 +97,7 @@ When `start` plans reader tasks (`next_stage: reading`), every `PLANNED` source 
 ```
 
 - Reader failures are `"status": "FAILED"` with an `error`. A source is never silently omitted.
+- Native-first: read the original (`path`; each task carries `format`, `native_reading` and `extracted_layer`). Optional `"reading": {"method": "native" | "native_vision" | "extracted_text", "tool": "...", "limitations": []}` records how; `extracted_text` on a PDF requires `limitations`. Excerpts still cite snapshot lines, which the runtime verifies mechanically.
 - The digest must match. The role is fixed. Excerpt lines must exist in the snapshot.
 - Any of `claims`, `tests`, `test_cases`, `oracles`, `findings`, `questions`, `requirements`, `coverage`, `dispositions`, `authority`, `role_override` or `completeness` is rejected: those decisions belong to the main model.
 - A submission is all-or-nothing.
