@@ -234,6 +234,51 @@
         "content_digest": {
           "type": "string",
           "minLength": 1
+        },
+        "reading": {
+          "description": "How the original was read under the native-first reading policy; absent when no reading declaration exists.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "status"
+          ],
+          "properties": {
+            "status": {
+              "enum": [
+                "COMPLETE",
+                "PARTIAL",
+                "LEGACY_UNASSESSED",
+                "MAIN_MODEL_FULL_TEXT",
+                "FAILED",
+                "UNSUPPORTED",
+                "EMPTY"
+              ]
+            },
+            "method": {
+              "enum": [
+                "native",
+                "native_vision",
+                "extracted_text"
+              ]
+            },
+            "completeness": {
+              "enum": [
+                "COMPLETE",
+                "PARTIAL"
+              ]
+            },
+            "limitations": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "reader_role": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
         }
       }
     },

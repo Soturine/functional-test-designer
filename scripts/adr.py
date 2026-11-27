@@ -239,12 +239,18 @@ def _scope_files(scope: Path) -> tuple[Path, list[tuple[str, Path]]]:
     return root, files
 
 
-def inventory(scope: Path, ledger: dict[str, Any], text_dir: Path | None = None) -> list[dict[str, Any]]:
-    """One disposition per physical file: NEW_READ / CHANGED_READ (text extracted), UNCHANGED_REUSED
-    (same digest as an already analyzed file: its catalog is reused, its text is not reread),
-    UNSUPPORTED or FAILED. A previously analyzed file missing from the selection is
-    SOURCE_REMOVED_FROM_SELECTION: a removed file is not a revoked decision."""
+def inventory(scope: Path, ledger: dict[str, Any], text_dir: Path | None = None,
+              transcriptions: dict[str, Path] | None = None) -> list[dict[str, Any]]:
+    """One disposition per physical file: NEW_READ / CHANGED_READ (text extracted, or a native
+    transcription the host supplied for a file the runtime cannot extract), UNCHANGED_REUSED
+    (same digest - and same transcription - as an already analyzed file: its catalog is reused,
+    its text is not reread), UNSUPPORTED or FAILED. A previously analyzed file missing from the
+    selection is SOURCE_REMOVED_FROM_SELECTION: a removed file is not a revoked decision."""
     root, files = _scope_files(scope)
+    transcriptions = {str(k).replace("\\", "/"): Path(v) for k, v in (transcriptions or {}).items()}
+    unknown = sorted(set(transcriptions) - {key for key, _ in files})
+    if unknown:
+        raise AdrError("transcriptions name files outside the ADR selection: " + ", ".join(unknown))
     entries = []
     for key, path in files:
         entry: dict[str, Any] = {"path": key}
@@ -256,11 +262,21 @@ def inventory(scope: Path, ledger: dict[str, Any], text_dir: Path | None = None)
         digest = file_digest(resolved)
         entry["digest"] = digest
         previous = ledger.get(key)
-        if previous and previous.get("digest") == digest and previous.get("readable"):
+        transcript = transcriptions.get(key)
+        transcript_digest = file_digest(transcript) if transcript is not None else None
+        if previous and previous.get("digest") == digest and previous.get("readable") \
+                and previous.get("transcription_digest") == transcript_digest:
             entries.append({**entry, "disposition": "UNCHANGED_REUSED", "reason": "same digest as the analyzed file",
                             "read_in": previous.get("read_in")})
             continue
         text, status, reason = sources.read_text(resolved)
+        fmt = sources.source_format(resolved)
+        if transcript is not None:
+            if status == "READ":
+                raise AdrError(f"{key} has runtime text ({reason}); a transcription only replaces missing text")
+            text, status = transcript.read_text(encoding="utf-8"), "READ"
+            reason = f"native transcription supplied by the host ({fmt}: {reason}); the original stays the evidence"
+            entry.update(transcription_digest=transcript_digest, transcription_origin="NATIVE_READING")
         if status == "READ" and text is not None:
             entry.update(disposition="CHANGED_READ" if previous else "NEW_READ", reason=reason,
                          line_count=len(text.splitlines()))
@@ -273,6 +289,10 @@ def inventory(scope: Path, ledger: dict[str, Any], text_dir: Path | None = None)
             entry.update(disposition="UNSUPPORTED", reason=reason)
         else:
             entry.update(disposition="FAILED", reason=reason)
+        if entry["disposition"] in {"UNSUPPORTED", "FAILED"} and fmt in sources.NATIVE_FORMATS:
+            # Not text to the runtime, but readable by a host that opens it natively.
+            entry.update(format=fmt, native_reading=sources.NATIVE_READING[fmt] + "; then start the round again "
+                         f"with --transcription {key}=<text file>")
         entries.append(entry)
     present = {entry["path"] for entry in entries}
     for key in sorted(set(ledger) - present):
@@ -302,7 +322,8 @@ def _claims(run_dir: Path) -> list[dict[str, Any]]:
             for c in canonical["index"].get("normative_clauses", [])]
 
 
-def start_adr(run_dir: Path, scope: Path, *, base_adr: str | None = None) -> dict[str, Any]:
+def start_adr(run_dir: Path, scope: Path, *, base_adr: str | None = None,
+              transcriptions: dict[str, Path] | None = None) -> dict[str, Any]:
     """Resolve the base effective state, inventory the selection, extract only new or changed
     files, and write the work order. The parent run is read, never written."""
     run_dir = Path(run_dir).resolve()
@@ -314,7 +335,7 @@ def start_adr(run_dir: Path, scope: Path, *, base_adr: str | None = None) -> dic
     if staging.exists():
         raise AdrError(f"a previous start of {adr_id} was interrupted; remove {staging} and start again")
     try:
-        entries = inventory(scope, base["sources"], staging / "text")
+        entries = inventory(scope, base["sources"], staging / "text", transcriptions)
         texts = {e["path"]: (staging / e["text_ref"]).read_text(encoding="utf-8")
                  for e in entries if e["disposition"] in READABLE}
         lineage = {
@@ -350,7 +371,9 @@ def work_order(run_dir: Path, base: dict[str, Any], adr_id: str, entries: list[d
         "adr_run_id": adr_id, "parent_run_id": run_dir.name, "base_adr_id": base["adr_run_id"],
         "output_locale": base["output_locale"],
         "adr_sources": [{"path": e["path"], "disposition": e["disposition"], "text": texts.get(e["path"]),
-                         "reason": e.get("reason")} for e in entries],
+                         "reason": e.get("reason"),
+                         **{k: e[k] for k in ("format", "native_reading", "transcription_origin") if e.get(k)}}
+                        for e in entries],
         "reused_decisions": [d for d in base["decisions"] if d["source"] in reused],
         "decision_ledger": [{k: d[k] for k in ("id", "official_id", "source", "status", "statement", "relationship")}
                             for d in base["decisions"]],
@@ -695,6 +718,7 @@ def build_effective(base: dict[str, Any], analysis: dict[str, Any], built: dict[
         if entry["disposition"] in READABLE:
             document["sources"][path] = {
                 "digest": entry["digest"], "readable": True, "read_in": adr_id, "text_ref": f"{adr_id}/{entry['text_ref']}",
+                **({"transcription_digest": entry["transcription_digest"]} if entry.get("transcription_digest") else {}),
                 "classification": analysis["classification"].get(path),
                 "decisions": [d["id"] for d in analysis["decisions"] if d["source"] == path]}
         elif entry["disposition"] in {"UNSUPPORTED", "FAILED"}:
@@ -863,7 +887,8 @@ def dispatch(request: dict[str, Any]) -> dict[str, Any]:
         scope = request.get("scope") or request.get("adr")
         if not scope:
             raise AdrError("/ftd --adr needs the ADR file or folder to analyze")
-        return start_adr(run_dir, Path(scope), base_adr=request.get("base_adr"))
+        return start_adr(run_dir, Path(scope), base_adr=request.get("base_adr"),
+                         transcriptions=request.get("transcriptions"))
     if phase == "status":
         return status(run_dir, request.get("adr_id"))
     adr_id = request.get("adr_id")
@@ -899,6 +924,9 @@ def main(argv: list[str] | None = None) -> int:
         if name == "start":
             sub.add_argument("--scope", "--adr", dest="scope", required=True, help="the ADR file or folder")
             sub.add_argument("--base-adr", help="an earlier finalized round to build on, or `none` for the canonical suite")
+            sub.add_argument("--transcription", action="append", default=[],
+                             help="PATH=TEXT_FILE: the host's native transcription of an ADR file the runtime cannot "
+                                  "extract (scanned PDF, image, office document); PATH is relative to the ADR scope")
         else:
             sub.add_argument("--adr-id", required=name != "status")
         if name.startswith("submit-"):
@@ -914,6 +942,14 @@ def main(argv: list[str] | None = None) -> int:
     for field in ("scope", "base_adr", "adr_id", "file", "source", "query"):
         if getattr(args, field, None) is not None:
             request[field] = getattr(args, field)
+    if getattr(args, "transcription", None):
+        pairs = {}
+        for value in args.transcription:
+            key, separator, item = value.rpartition("=")
+            if not separator or not key or not item:
+                parser.error(f"--transcription must look like PATH=TEXT_FILE: {value}")
+            pairs[key] = Path(item)
+        request["transcriptions"] = pairs
     if getattr(args, "lines", None):
         start_line, _, end_line = args.lines.partition("-")
         request.update(line_start=int(start_line), line_end=int(end_line or start_line))

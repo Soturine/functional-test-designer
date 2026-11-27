@@ -310,14 +310,15 @@ def start_run(
         shutil.rmtree(run_dir)
         events.append({"event": "invalidated", "reason": changes[0], "reasons": changes})
     run_dir.mkdir(parents=True, exist_ok=True)
-    authority_texts = [texts[r["path"]] for r in records if r["role"] == "FUNCTIONAL_AUTHORITY"]
+    # Authority without runtime text (awaiting its native transcription) has no text yet.
+    authority_texts = [texts[r["path"]] for r in records if r["role"] == "FUNCTIONAL_AUTHORITY" and r["path"] in texts]
     locale_info = sources.infer_locale(locale, authority_texts, request_text)
     authority_index = sources.index_authority(records, texts, id_pattern)
     asset_warnings: list[str] = []
     test_assets = sources.discover_all_test_assets(records, texts, asset_warnings)
     text_dir = run_dir / "authority-text"
     for record in records:
-        if record["role"] == "FUNCTIONAL_AUTHORITY":
+        if record["role"] == "FUNCTIONAL_AUTHORITY" and record["path"] in texts:
             name = reading_stage.source_key(record["path"]) + ".txt"
             (text_dir / name).parent.mkdir(parents=True, exist_ok=True)
             (text_dir / name).write_text(texts[record["path"]], encoding="utf-8")
@@ -372,7 +373,7 @@ def start_run(
             outputs={"authority_index": authority_index, "test_assets": test_assets, **locale_info})
     if reading_states["PLANNED"] == 0:
         # Nothing left for readers (sequential, or every catalog reused): reconcile now.
-        if reading_plan["strategy"] != "SEQUENTIAL":
+        if reading_plan["strategy"] != "SEQUENTIAL" or reading_states["REUSED"]:
             _reconcile_and_bind(run_dir, root)
         first = "design"
     else:
@@ -389,8 +390,60 @@ def start_run(
 
 # --- reading: reader results and reconciliation ------------------------------------------
 
+def _adopt_transcriptions(run_dir: Path, items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Make the native transcriptions of files without runtime text this run's snapshots, and
+    re-index authority and test assets over them. Everything is computed (and can be refused)
+    in memory first; files are written only once it all holds. The original is still the
+    authority: the record keeps its digest, and says the text is an agent transcription."""
+    run, state = _load(run_dir)
+    records = [dict(record) for record in state["records"]]
+    by_path = {record["path"]: record for record in records}
+    catalog = read_json(run_dir / "evidence" / "source-catalog.json")
+    entries = {entry["path"]: dict(entry) for entry in catalog["sources"]}
+    texts = {path: (run_dir / "evidence" / entry["text_ref"]).read_text(encoding="utf-8")
+             for path, entry in entries.items() if entry.get("text_ref")}
+    adopted = []
+    for item in items:
+        record, text = by_path[item["path"]], item["text"]
+        digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
+        role = item["reader"].get("role") or reading_stage.READER_ROLE
+        record.update(status="TRANSCRIBED", snapshot="TRANSCRIPTION", transcription_digest=digest,
+                      transcription_origin="NATIVE_READING",
+                      reason=f"native {item['method']} transcription by {role}; the original stays the authority")
+        texts[item["path"]] = text
+        name = reading_stage.source_key(item["path"]) + ".txt"
+        entries[item["path"]].update(status="TRANSCRIBED", text_ref=f"text/{name}", line_count=len(text.splitlines()))
+        adopted.append({"path": item["path"], "transcription_digest": digest, "method": item["method"],
+                        "reader_role": role, "reader_model": item["reader"].get("model"),
+                        "lines": len(text.splitlines())})
+    try:
+        authority_index = sources.index_authority(records, texts, run.get("id_pattern"))
+        warnings: list[str] = []
+        test_assets = sources.discover_all_test_assets(records, texts, warnings)
+    except sources.ScopeError as exc:
+        raise StageError("reading", [f"native transcription cannot be indexed: {exc}"]) from exc
+    for item in items:
+        name = reading_stage.source_key(item["path"]) + ".txt"
+        (run_dir / "evidence" / "text").mkdir(parents=True, exist_ok=True)
+        (run_dir / "evidence" / "text" / name).write_text(item["text"], encoding="utf-8")
+        if by_path[item["path"]]["role"] == "FUNCTIONAL_AUTHORITY":
+            (run_dir / "authority-text").mkdir(parents=True, exist_ok=True)
+            (run_dir / "authority-text" / name).write_text(item["text"], encoding="utf-8")
+    write_json(run_dir / "evidence" / "source-catalog.json",
+               {"sources": [entries[entry["path"]] for entry in catalog["sources"]]})
+    write_json(run_dir / "sources.json", {**state, "records": records, "authority_index": authority_index,
+                                          "test_assets": test_assets,
+                                          "test_asset_warnings": [*state.get("test_asset_warnings", []), *warnings]})
+    if run.get("locale_source") in {"USER_REQUEST", "FALLBACK_AMBIGUOUS"}:
+        authority_texts = [texts[r["path"]] for r in records if r["role"] == "FUNCTIONAL_AUTHORITY" and r["path"] in texts]
+        inferred = sources.infer_locale(None, authority_texts, run.get("request_text", ""))
+        if inferred["locale_source"] == "FUNCTIONAL_AUTHORITY":
+            write_json(run_dir / "run.json", {**run, **inferred})
+    return adopted
+
+
 def _reconcile_and_bind(run_dir: Path, artifact_root: Path) -> dict[str, Any]:
-    result = reading_stage.reconcile(run_dir, artifact_root)
+    result = reading_stage.reconcile(run_dir, artifact_root, lambda items: _adopt_transcriptions(run_dir, items))
     # Bound into the TEST_DESIGN manifest record, so Design provably ran on this catalog.
     write_json(run_dir / "stages" / "reading.reconciliation.json", result)
     return result
@@ -455,13 +508,16 @@ def submit_stage(run_dir: Path, stage: str, payload: dict[str, Any]) -> dict[str
     workspace = Path(run["workspace"])
     texts = {}
     for record in records:
-        if record["role"] == "FUNCTIONAL_AUTHORITY":
-            name = reading_stage.source_key(record["path"]) + ".txt"
+        name = reading_stage.source_key(record["path"]) + ".txt"
+        if record["role"] == "FUNCTIONAL_AUTHORITY" and (run_dir / "authority-text" / name).is_file():
             texts[record["path"]] = (run_dir / "authority-text" / name).read_text(encoding="utf-8")
     base = {"locale": run["output_locale"], "source_records": records,
             "authority_index": source_state["authority_index"], "authority_texts": list(texts.values())}
     try:
         if stage == "design":
+            reconciled = run_dir / "stages" / "reading.reconciliation.json"
+            if reconciled.is_file():
+                base["authority_visual_facts"] = read_json(reconciled).get("authority_visual_facts") or []
             result = design_stage.validate_design(payload, base)
             for number, test in enumerate(result["tests"], 1):
                 test["id"] = f"TC-{number:03d}"
@@ -757,6 +813,19 @@ def build_canonical(run_dir: Path, baseline_comparison: dict[str, Any] | None = 
     exercised = {claim for test in tests for claim in test["claims"]}
     gaps = validation.gap_metrics(ledger, design["claims"], exercised,
                                   expanded["test_asset_challenge"], questions, cases)
+    reconciliation_path = run_dir / "stages" / "reading.reconciliation.json"
+    reconciliation = read_json(reconciliation_path) if reconciliation_path.is_file() else {}
+    readings = {}
+    if reconciliation.get("reading_policy") and (run_dir / "reading" / "source-catalog.json").is_file():
+        for entry in read_json(run_dir / "reading" / "source-catalog.json")["sources"]:
+            declared = entry.get("reading") or {}
+            readings[entry["path"]] = {"status": entry.get("reading_status")} | {
+                key: declared[key] for key in ("method", "completeness", "limitations") if declared.get(key)} | (
+                {"reader_role": entry["reader"]["role"]} if (entry.get("reader") or {}).get("role") else {})
+    partial = reconciliation.get("partial_authority_readings") or []
+    if partial:
+        # A partially read authority source limits any claim of complete coverage.
+        gaps["partially_read_authority_sources"] = len(partial)
     summary = expanded["dimension_summary"]
     evidence = {
         "SCOPE_VALID": f"{len(source_state['records'])} physical source record(s); roles and digests locked at start.",
@@ -777,6 +846,7 @@ def build_canonical(run_dir: Path, baseline_comparison: dict[str, Any] | None = 
         "sources": [{key: record[key] for key in ("path", "role", "status", "reason", "content_digest")}
                     | {"authority": {"NORMATIVE": "NORMATIVE_PRIMARY", "IMPLEMENTATION": "IMPLEMENTATION",
                                      "SUPPORTING": "SUPPORTING", "QA_ASSET": "QA_ASSET"}[record["authority"]]}
+                    | ({"reading": readings[record["path"]]} if record["path"] in readings else {})
                     for record in source_state["records"]],
         "requirements": public_requirements, "normative_clauses": clauses, "findings": findings,
         "coverage_points": points, "scenarios": families,
@@ -806,6 +876,16 @@ def build_canonical(run_dir: Path, baseline_comparison: dict[str, Any] | None = 
         "merge_detector": {k: v for k, v in merge.items() if k != "candidates"},
         "warnings": [*design["warnings"], *_result(run_dir, "procedures")["warnings"]],
     }
+    if reconciliation.get("reading_policy"):
+        diagnostics["source_reading"] = {
+            "reading_policy": reconciliation["reading_policy"], "reading_status": reconciliation.get("reading_status", {}),
+            "native_transcriptions": reconciliation.get("native_transcriptions", []),
+            "partial_authority_readings": partial,
+            "authority_visual_facts": [{**fact, "disposition": design.get("visual_fact_dispositions", {}).get(fact["id"])}
+                                       for fact in reconciliation.get("authority_visual_facts", [])],
+        }
+        diagnostics["warnings"] += [f"AUTHORITY_PARTIALLY_READ: {item['path']} - " + "; ".join(item["limitations"])
+                                    for item in partial]
     return {"index": index, "questions": {"schema_version": "2.2", "questions": questions},
             "cases": cases, "diagnostics": diagnostics}
 
@@ -1523,8 +1603,9 @@ STAGE_GUIDE = {
     "reading": [
         "One lightweight reader per entry in `reader_assignments`: each entry is one source selector the user declared (a file or a whole directory), never one reader per physical file. Prefer the lightweight model this host offers (e.g. Haiku on Claude). Run at most `concurrency` readers at once; later `wave`s wait for a free slot. Honor any explicit user preference recorded in `reading`.",
         "Each reader reads its selector's files with ordinary file/navigation tools (list, open, read ranges, search) — it must not write or run helper scripts, parsers or crawlers to automate cataloging. It returns one selector result: facts (headings, identifiers with their stated titles, actors, entities, states, operations, integrations, config_facts, candidate_rules, flows, test_assets, excerpts with file and line spans, references, ambiguities), each citing its `file`, plus a `files` entry for EVERY pending file: CATALOGED with that file's own catalog, INSPECTED (read, nothing to add), or FAILED with an error. Readers never decide claims, oracles, Test Cases, Findings, Questions, coverage or authority.",
+        "Native-first: open each ORIGINAL with the host's own tools (file reader, native PDF/document reader, vision) and read all of it, including tables, figures, diagrams, captions and scanned pages; the snapshot is only for verifying excerpt lines. Every file entry carries `reading` = {method, completeness, inspected, limitations}: COMPLETE only when you saw the whole original; a text layer alone is PARTIAL. Content only a picture, table or drawn diagram shows goes in `visual_facts` (file, locator, kind, text). Functional authority marked transcription_required has no runtime text: transcribe it in reading.transcription, keeping identifiers and titles verbatim. If the host cannot open a format, report FAILED with the reason - never claim a reading that did not happen.",
         "Split a selector into internal shards only when it cannot fit the reader's real context limit; submit each shard's result separately (same `selector_id`, a `shard` label) — they reconcile back into one selector catalog.",
-        "Submit results with `pipeline.py reading-submit`, then run `pipeline.py reading-reconcile`, which refuses while any physical file is unaccounted. You may prepare an authority-only skeleton while readers run, but Design is decided and submitted only after reconciliation. If sub-agents are unavailable, restart with --reading-strategy SEQUENTIAL and read the sources yourself; say which mode actually ran.",
+        "Submit results with `pipeline.py reading-submit`, then run `pipeline.py reading-reconcile`, which refuses while any physical file is unaccounted. You may prepare an authority-only skeleton while readers run, but Design is decided and submitted only after reconciliation. If sub-agents are unavailable, restart with --reading-strategy SEQUENTIAL and read the sources yourself; say which mode actually ran. In a SEQUENTIAL run the files listed here are the ones whose originals need native reading: read them yourself and submit their results with reader.role MAIN_MODEL.",
     ],
     "design": [
         "This is a semantic reasoning stage (so are expansion and procedures): write each item from its own claims, evidence and oracle. Do not generate the payload with a mapping or template script; templated items are rejected, and helper files never go into the run's stages/ directory.",
@@ -1599,22 +1680,49 @@ def _work_order(run_dir: Path) -> Path:
                 **{k: t[k] for k in ("source_key", "path", "content_digest")},
                 "snapshot": str(run_dir / "evidence" / catalog[t["path"]]["text_ref"]) if catalog[t["path"]]["text_ref"] else None,
                 "line_count": catalog[t["path"]]["line_count"],
+                **{k: t[k] for k in ("format", "native_reading", "extracted_layer", "page_count", "transcription_required")
+                   if t.get(k) is not None},
+                **({"snapshot_kind": t["snapshot"]} if t.get("snapshot") else {}),
             } for t in a["files_pending"]],
         } for a in reading_stage.assignments(task_plan)]
         order["reader_result_contract"] = {
             "selector_result_fields": sorted(reading_stage.SELECTOR_RESULT_FIELDS),
-            "file_entry": {"fields": ["source_key", "path", "content_digest", "status", "catalog", "error"],
+            "file_entry": {"fields": ["source_key", "path", "content_digest", "status", "catalog", "error", "reading"],
                            "status": list(reading_stage.FILE_STATUSES)},
+            "reading_declaration": {
+                "required": bool(task_plan.get("reading_policy")), "policy": task_plan.get("reading_policy"),
+                "fields": {"method": sorted(reading_stage.READING_METHODS),
+                           "completeness": list(reading_stage.COMPLETENESS),
+                           "inspected": "what was looked at (pages, sections, sheets, figures) where knowable",
+                           "limitations": "what was not seen or could not be read; required when PARTIAL",
+                           "tool": "the host tool that opened the original",
+                           "page_count": "optional; must match the runtime's count when it knows one",
+                           "transcription": "only for a file with no runtime text; required for such functional authority"},
+                "visual_facts": {"fields": ["file", "locator", "kind", "text", "page"], "kind": list(reading_stage.VISUAL_KINDS),
+                                 "note": "content only a table, figure, diagram, scan or image shows; never invent ids"},
+            },
             "catalog_sections": sorted(reading_stage.CATALOG_FIELDS),
             "forbidden_catalog_sections": sorted(reading_stage.FORBIDDEN_FIELDS),
             "provenance": "every selector-level fact may cite `file` (an owned path); excerpts must",
-            "reader": {"role": reading_stage.READER_ROLE, "model": "the model that actually ran"},
+            "reader": {"role": reading_stage.MAIN_MODEL_ROLE if task_plan["strategy"] == "SEQUENTIAL"
+                       else reading_stage.READER_ROLE, "model": "the model that actually ran",
+                       "attribution": "use MAIN_MODEL for a file the main model read itself; never claim a reader that did not run"},
         }
     if stage == "design":
         order["sources"] = [{k: r[k] for k in ("path", "role", "status", "reason")} for r in source_state["records"]]
         if (run_dir / "reading" / "reconciliation.json").is_file():
             order["reader_catalog"] = str(run_dir / "reading" / "source-catalog.json")
             order["reading_reconciliation"] = str(run_dir / "reading" / "reconciliation.json")
+            reconciled = read_json(run_dir / "reading" / "reconciliation.json")
+            if reconciled.get("authority_visual_facts"):
+                order["authority_visual_facts"] = reconciled["authority_visual_facts"]
+                order["visual_fact_dispositions"] = {
+                    "required": True, "dispositions": list(design_stage.VISUAL_FACT_DISPOSITIONS),
+                    "note": "Each fact a reader saw only in a table, figure, diagram or scan of functional authority "
+                            "gets one entry: REQUIREMENT / COVERED_BY_TEXT (requirements), NOT_NORMATIVE (reason) or "
+                            "QUESTION_REQUIRED (question). It is agent-attested evidence: cite its file and locator."}
+            if reconciled.get("partial_authority_readings"):
+                order["partial_authority_readings"] = reconciled["partial_authority_readings"]
         order["authority_identifiers"] = source_state["authority_index"]
         order["domain_dimensions"] = list(design_stage.DOMAIN_DIMENSIONS)
     elif stage == "expansion":

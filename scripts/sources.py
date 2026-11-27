@@ -31,33 +31,57 @@ BINARY_EXTENSIONS = {
     ".png", ".jpg", ".jpeg", ".gif", ".ico", ".webp", ".gz", ".zip", ".exe", ".dll", ".pyc",
     ".woff", ".woff2", ".ttf", ".mp4", ".mp3",
 }
+IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
+# Office/OpenDocument originals: the runtime extracts no text from them; a host that can open
+# them natively reads them, otherwise the reader reports it (FAILED) or the user transcribes.
+DOCUMENT_EXTENSIONS = {".docx", ".xlsx", ".pptx", ".odt", ".ods", ".odp", ".doc", ".xls", ".ppt"}
+# Formats whose meaning can lie beyond any runtime text (layout, tables, figures, scans):
+# they are always offered to a reader, who declares how it read them.
+NATIVE_FORMATS = {"pdf", "image", "document"}
 # Native-first: readers open the ORIGINAL with the host's own tools. Extracted text is the snapshot
 # used to verify excerpt lines and the fallback when the host cannot open the format; it is never
 # proof that a document was read completely.
 NATIVE_READING = {
     "text": "open the original file; the snapshot text is identical",
     "pdf": "open the original PDF natively, page by page (figures, tables, layout, diagrams); "
-           "the pypdf text layer only verifies excerpt lines",
-    "image": "look at the original with native vision; its content enters as a transcription",
+           "the pypdf text layer, when present, only verifies excerpt lines",
+    "image": "look at the original with native vision; record what it shows as visual_facts "
+             "(and a transcription when it is functional authority)",
+    "document": "open the original natively if the host can; if it cannot, report FAILED with the reason "
+                "(the runtime extracts no text from this format)",
     "other": "open the original natively if the host can; otherwise report it",
 }
 EXTRACTED_LAYER = {
     "text": "decoded text, identical to the original",
     "pdf": "PDF text layer only: no layout, figures, drawn diagrams or scanned pages",
     "image": "none",
+    "document": "none",
     "other": "none",
 }
+# What the runtime snapshot of a file is: the whole original, only a PDF text layer, a
+# user-supplied transcription, or nothing at all.
+SNAPSHOT_KINDS = ("FULL_TEXT", "TEXT_LAYER", "TRANSCRIPTION", "NONE")
 
 
-def source_format(path: Path) -> str:
-    suffix = path.suffix.casefold()
+def source_format(path: Path | str) -> str:
+    suffix = Path(path).suffix.casefold()
     if suffix == ".pdf":
         return "pdf"
-    if suffix in {".png", ".jpg", ".jpeg", ".gif", ".webp"}:
+    if suffix in IMAGE_EXTENSIONS:
         return "image"
+    if suffix in DOCUMENT_EXTENSIONS:
+        return "document"
     if suffix in TEXT_EXTENSIONS or not suffix:
         return "text"
     return "other"
+
+
+def snapshot_kind(fmt: str, status: str) -> str:
+    if status == "TRANSCRIBED":
+        return "TRANSCRIPTION"
+    if status == "READ":
+        return "TEXT_LAYER" if fmt == "pdf" else "FULL_TEXT"
+    return "NONE"
 
 
 ROLES = {
@@ -237,46 +261,55 @@ def assign_roles(workspace: Path, sources: list[dict[str, Any]]) -> dict[str, An
 
 # --- reading ------------------------------------------------------------------------
 
-def read_text(path: Path) -> tuple[str | None, str, str]:
-    """Return (text, status, reason) without executing or importing anything."""
+def _read(path: Path) -> tuple[str | None, str, str, dict[str, Any]]:
+    """Return (text, status, reason, meta) without executing or importing anything."""
     suffix = path.suffix.casefold()
     if suffix in BINARY_EXTENSIONS:
-        return None, "METADATA_ONLY", "binary media is not text evidence"
+        return None, "METADATA_ONLY", "binary media is not text evidence", {}
     if suffix == ".pdf":
         try:
             from pypdf import PdfReader  # optional dependency
         except ImportError:
-            return None, "NEEDS_TRANSCRIPTION", "pypdf is not installed; supply a transcription"
+            return None, "NEEDS_TRANSCRIPTION", "pypdf is not installed: no text layer was extracted", {}
         try:
             reader = PdfReader(str(path))
+            pages = len(reader.pages)
             text = "\n".join((page.extract_text() or "") for page in reader.pages)
         except Exception as exc:  # malformed PDFs must be reported, not guessed
-            return None, "FAILED", f"PDF text extraction failed: {type(exc).__name__}"
+            return None, "FAILED", f"PDF text extraction failed: {type(exc).__name__}", {}
         if not text.strip():
-            return None, "NEEDS_TRANSCRIPTION", "PDF has no extractable text layer"
-        return text, "READ", "PDF text layer extracted with pypdf (excerpt verification and fallback)"
+            return None, "NEEDS_TRANSCRIPTION", "PDF has no extractable text layer", {"page_count": pages}
+        return (text, "READ", "PDF text layer extracted with pypdf (excerpt verification and fallback)",
+                {"page_count": pages})
     if suffix in TEXT_EXTENSIONS or not suffix:
         try:
-            return path.read_text(encoding="utf-8"), "READ", "UTF-8 text"
+            return path.read_text(encoding="utf-8"), "READ", "UTF-8 text", {}
         except UnicodeDecodeError:
-            return path.read_text(encoding="latin-1"), "READ", "Latin-1 text"
+            return path.read_text(encoding="latin-1"), "READ", "Latin-1 text", {}
         except OSError as exc:
-            return None, "FAILED", f"read failed: {type(exc).__name__}"
-    return None, "UNSUPPORTED", f"unsupported format {suffix}"
+            return None, "FAILED", f"read failed: {type(exc).__name__}", {}
+    return None, "UNSUPPORTED", f"unsupported format {suffix}", {}
 
 
-def _extract(path: Path, digest: str, text_cache: Path | None) -> tuple[str | None, str, str]:
+def read_text(path: Path) -> tuple[str | None, str, str]:
+    """Return (text, status, reason) without executing or importing anything."""
+    text, status, reason, _ = _read(path)
+    return text, status, reason
+
+
+def _extract(path: Path, digest: str, text_cache: Path | None) -> tuple[str | None, str, str, dict[str, Any]]:
     """Text extraction keyed by content digest: an unchanged source (e.g. a large PDF)
     is never re-extracted for a new run; a changed one always is."""
     cached = text_cache / f"{digest}.json" if text_cache else None
     if cached and cached.is_file():
         entry = json.loads(cached.read_text(encoding="utf-8"))
-        return entry["text"], entry["status"], entry["reason"]
-    text, status, reason = read_text(path)
+        return entry["text"], entry["status"], entry["reason"], entry.get("meta") or {}
+    text, status, reason, meta = _read(path)
     if cached and status == "READ":
         cached.parent.mkdir(parents=True, exist_ok=True)
-        cached.write_text(json.dumps({"text": text, "status": status, "reason": reason}), encoding="utf-8")
-    return text, status, reason
+        cached.write_text(json.dumps({"text": text, "status": status, "reason": reason, "meta": meta}),
+                          encoding="utf-8")
+    return text, status, reason, meta
 
 
 def build_source_records(
@@ -294,7 +327,7 @@ def build_source_records(
     for relative, role in sorted(roles.items()):
         path = (Path(workspace) / relative).resolve()
         digest = file_digest(path)
-        text, status, reason = _extract(path, digest, text_cache)
+        text, status, reason, meta = _extract(path, digest, text_cache)
         fmt = source_format(path)
         record: dict[str, Any] = {
             "path": relative, "role": role, "authority": ROLES[role], "status": status,
@@ -302,6 +335,8 @@ def build_source_records(
             "size_bytes": path.stat().st_size,
             "format": fmt, "native_reading": NATIVE_READING[fmt], "extracted_layer": EXTRACTED_LAYER[fmt],
         }
+        if meta.get("page_count"):
+            record["page_count"] = int(meta["page_count"])
         if text is None and relative in transcriptions:
             transcript = Path(transcriptions[relative])
             text = transcript.read_text(encoding="utf-8")
@@ -311,21 +346,27 @@ def build_source_records(
             })
         if text is not None:
             texts[relative] = text
+        record["snapshot"] = snapshot_kind(fmt, record["status"])
         records.append(record)
     unused = sorted(set(transcriptions) - set(roles))
     if unused:
         raise ScopeError("transcriptions reference unselected sources: " + ", ".join(unused))
+    # Authority the runtime cannot extract is not rejected when its format is one a host reader
+    # can open natively (PDF, image, office document): the reading stage must then account for
+    # it and transcribe it before Design (reading.py). Anything else still needs a transcription.
     authority_unreadable = [
         item["path"] for item in records
         if item["role"] == "FUNCTIONAL_AUTHORITY" and item["status"] in {"NEEDS_TRANSCRIPTION", "FAILED"}
+        and item["format"] not in NATIVE_FORMATS
     ]
     if authority_unreadable:
         raise ScopeError(
             "Functional authority must be readable or transcribed before design: "
             + ", ".join(authority_unreadable)
         )
-    if not any(item["role"] == "FUNCTIONAL_AUTHORITY" and item["path"] in texts for item in records):
-        raise ScopeError("no selected Functional Authority source contains readable text")
+    if not any(item["role"] == "FUNCTIONAL_AUTHORITY" and (item["path"] in texts or item["format"] in NATIVE_FORMATS)
+               for item in records):
+        raise ScopeError("no selected Functional Authority source contains readable text or a natively readable original")
     return records, texts
 
 

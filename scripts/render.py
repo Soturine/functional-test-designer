@@ -76,6 +76,8 @@ LABELS = {
         "single_step": "1 passo", "multi_step": "Vários passos", "catalog": "Catálogo de expansão",
         "catalog_intro": "Test Cases adicionados pela segunda passada obrigatória, agrupados por dimensão. Cada linha aponta para um Test Case canônico.",
         "evidence": "Evidência", "gap_metrics": "Métricas de lacunas", "authority_covered": "Identificadores cobertos",
+        "source_reading": "Leitura das fontes", "role": "Papel", "reading_status": "Leitura", "reading_method": "Método",
+        "limitations": "Limitações",
         "expansion_help_title": "Como ler estas colunas",
         "candidates_help": "Quantidade de cenários candidatos materialmente relevantes considerados nesta dimensão. Não é o número de Test Cases finais.",
         "materialized_help": "Candidatos que viraram Test Cases canônicos adicionais durante a expansão aditiva.",
@@ -137,6 +139,8 @@ LABELS = {
         "single_step": "1 step", "multi_step": "Multiple steps", "catalog": "Expansion catalog",
         "catalog_intro": "Test Cases added by the mandatory second pass, grouped by dimension. Each row points at a canonical Test Case.",
         "evidence": "Evidence", "gap_metrics": "Gap metrics", "authority_covered": "Identifiers covered",
+        "source_reading": "Source reading", "role": "Role", "reading_status": "Reading", "reading_method": "Method",
+        "limitations": "Limitations",
         "expansion_help_title": "How to read these columns",
         "candidates_help": "Number of materially relevant scenario candidates considered for this dimension. Not the number of final Test Cases.",
         "materialized_help": "Candidates that became additional canonical Test Cases during the additive expansion pass.",
@@ -1290,6 +1294,20 @@ def render_report(output_dir: Path, destination: Path | None = None, artifact_fo
         f'{sum(item["id"] in case["requirement_refs"] for case in cases)}</td></tr>'
         for item in index["requirements"]
     )
+    # How each original was read (native-first runs only; runs without declarations show nothing new).
+    read_sources = [item for item in index.get("sources", []) if item.get("reading")]
+    reading_rows = "".join(
+        f'<tr><td>{esc(item["path"])}</td><td>{esc(item["role"])}</td><td>{esc(item["reading"]["status"])}</td>'
+        f'<td>{esc(item["reading"].get("method") or "-")}</td>'
+        f'<td>{esc("; ".join(item["reading"].get("limitations") or []) or "-")}</td></tr>'
+        for item in read_sources
+    )
+    reading_html = (
+        f'<h3>{esc(labels.get("source_reading", "Source reading"))}</h3><div class="table-wrap"><table><thead><tr>'
+        f'<th>{esc(labels["sources"])}</th><th>{esc(labels.get("role", "Role"))}</th>'
+        f'<th>{esc(labels.get("reading_status", "Reading"))}</th><th>{esc(labels.get("reading_method", "Method"))}</th>'
+        f'<th>{esc(labels.get("limitations", "Limitations"))}</th></tr></thead><tbody>{reading_rows}</tbody></table></div>'
+        if read_sources else "")
     coverage_html = (
         (f'<div class="table-wrap"><table><thead><tr><th>{esc(labels["identifier"])}</th><th>{esc(labels["kind"])}</th>'
          f'<th>{esc(labels["disposition"])}</th><th>TCs</th></tr></thead><tbody>{coverage_rows}</tbody></table></div>'
@@ -1482,7 +1500,7 @@ dialog::backdrop {{ background:rgba(20,29,34,.72); }}
 <section id="merge"><h2>{esc(labels['merge'])}</h2>{merge_html or f'<p class="empty">{esc(labels["no_merge"])}</p>'}</section>
 <section id="findings"><h2>{esc(labels['findings'])}</h2>{finding_html or f'<p class="empty">{esc(labels["no_findings"])}</p>'}</section>
 <section id="questions"><h2>{esc(labels['questions'])}</h2>{question_html or f'<p class="empty">{esc(labels["no_questions"])}</p>'}</section>
-<section id="coverage"><h2>{esc(labels['coverage'])}</h2>{coverage_html}</section>
+<section id="coverage"><h2>{esc(labels['coverage'])}</h2>{coverage_html}{reading_html}</section>
 <section id="expansion"><h2>{esc(labels['expansion'])}</h2>{expansion_html}</section>
 <section id="gates"><h2>{esc(labels['gates'])}</h2><ul class="gates">{gate_html or f'<li>{esc(labels["none"])}</li>'}</ul>{f'<h3>{esc(labels["gap_metrics"])}</h3><ul>{gap_html}</ul>' if gap_html else ''}</section>
 {render_glossary(labels, language)}

@@ -44,8 +44,12 @@ TEST_INTENT_FIELDS = (
 )
 DESIGN_KEYS = {
     "domain_model", "requirements", "claims", "tests", "dispositions", "questions", "findings",
-    "structure_reviews",
+    "structure_reviews", "visual_fact_dispositions",
 }
+# How Design accounts for a fact a reader saw only in a table, figure, diagram or scan of
+# functional authority (reconciliation's authority_visual_facts). The disposition is the
+# model's judgment; the runtime checks it is complete and points at real requirements/questions.
+VISUAL_FACT_DISPOSITIONS = ("REQUIREMENT", "COVERED_BY_TEXT", "NOT_NORMATIVE", "QUESTION_REQUIRED")
 # Universal reasoning dimensions. Their values are inferred by the model from the
 # selected sources; the framework stores them and never interprets their meaning.
 DOMAIN_DIMENSIONS = (
@@ -235,7 +239,10 @@ def validate_design(payload: dict[str, Any], context: dict[str, Any]) -> dict[st
     locale = context["locale"]
     domain_model = validate_domain_model(payload.get("domain_model"), errors)
     authority = {normalize_identifier(item["identifier"]): item for item in context["authority_index"]}
-    authority_texts = context["authority_texts"]
+    visual_facts = context.get("authority_visual_facts") or []
+    # An identifier printed only inside a figure or table of authority is still the authority's
+    # own (verbatim, located); it may be named, never invented.
+    authority_texts = [*context["authority_texts"], *(fact["text"] for fact in visual_facts)]
 
     # Requirements keep their official identifier, title and statement.
     requirements: list[dict[str, Any]] = []
@@ -396,16 +403,69 @@ def validate_design(payload: dict[str, Any], context: dict[str, Any]) -> dict[st
     explicit = validate_explicit_dispositions(payload.get("dispositions", []) or [], authority, question_keys, errors)
     reviews = structure_review(context["authority_index"], claims, payload.get("structure_reviews", []) or [], errors)
     ledger = identifier_ledger(context["authority_index"], claims, tests, explicit, errors)
+    visual = validate_visual_facts(payload.get("visual_fact_dispositions", []) or [], visual_facts, by_key,
+                                   question_keys, errors)
     errors.extend(mechanical_templates(payload.get("tests", []) or [], ("title", "state", "trigger", "expected"), "tests"))
     if errors:
         from common import StageError
         raise StageError("design", errors)
-    return {
+    result = {
         "domain_model": domain_model, "requirements": requirements, "claims": claims, "tests": tests,
         "questions": questions, "findings": findings, "dispositions": explicit,
         "identifier_ledger": ledger, "baseline": baseline_snapshot(tests), "structure_reviews": reviews,
         "warnings": priority_warnings(tests),
     }
+    if visual:
+        result["visual_fact_dispositions"] = visual
+    return result
+
+
+def validate_visual_facts(entries: list[Any], facts: list[dict[str, Any]], requirements: dict[str, dict[str, Any]],
+                          question_keys: set[str], errors: list[str]) -> dict[str, dict[str, Any]]:
+    """Every authority visual fact gets exactly one disposition. REQUIREMENT needs a requirement
+    whose evidence cites the fact's file; COVERED_BY_TEXT names the requirement and why; NOT_NORMATIVE
+    explains why; QUESTION_REQUIRED links a question. Nothing a reader saw only in a picture can
+    disappear unanswered."""
+    known = {fact["id"]: fact for fact in facts}
+    out: dict[str, dict[str, Any]] = {}
+    for entry in entries:
+        if not isinstance(entry, dict):
+            errors.append("visual_fact_dispositions entries must be objects")
+            continue
+        fact_id = str(entry.get("fact", ""))
+        label = f"visual fact {fact_id or '<missing>'}"
+        if fact_id not in known:
+            errors.append(f"{label} is not an authority visual fact of this run")
+            continue
+        if fact_id in out:
+            errors.append(f"{label} has more than one disposition")
+            continue
+        disposition = entry.get("disposition")
+        keys = _keys(entry.get("requirements"))
+        reason = _text(entry.get("reason"))
+        question = _text(entry.get("question"))
+        if disposition not in VISUAL_FACT_DISPOSITIONS:
+            errors.append(f"{label} disposition must be one of {list(VISUAL_FACT_DISPOSITIONS)}")
+            continue
+        if disposition in {"REQUIREMENT", "COVERED_BY_TEXT"}:
+            unknown = [key for key in keys if key not in requirements]
+            if not keys or unknown:
+                errors.append(f"{label} {disposition} must name known requirements" + (f" (unknown: {unknown})" if unknown else ""))
+            elif disposition == "REQUIREMENT" and not any(
+                    ref.get("source") == known[fact_id]["file"] for key in keys for ref in requirements[key]["source_refs"]):
+                errors.append(f"{label} REQUIREMENT: the requirement's source_refs must cite {known[fact_id]['file']} "
+                              f"({known[fact_id]['locator']})")
+        if disposition in {"COVERED_BY_TEXT", "NOT_NORMATIVE"} and len(reason.split()) < 3:
+            errors.append(f"{label} {disposition} needs a reason")
+        if disposition == "QUESTION_REQUIRED" and question not in question_keys:
+            errors.append(f"{label} QUESTION_REQUIRED must link a known question")
+        out[fact_id] = {"disposition": disposition, "requirements": [requirements[k]["id"] for k in keys if k in requirements],
+                        "reason": reason or None, "question": question or None}
+    for fact_id, fact in known.items():
+        if fact_id not in out:
+            errors.append(f"visual fact {fact_id} ({fact['file']}, {fact['locator']}) has no design disposition: a reader "
+                          "saw it only in a table, figure, diagram or scan of functional authority")
+    return out
 
 
 def traceability(

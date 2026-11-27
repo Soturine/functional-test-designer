@@ -44,6 +44,7 @@ def reader_result(task: dict, **overrides) -> dict:
         "status": "CATALOGED", "reader": {"role": reading.READER_ROLE, "model": "test-double"},
         "catalog": {"headings": [f"Heading of {task['path']}"],
                     "excerpts": [{"line_start": 1, "line_end": 1, "text": "first line"}]},
+        "reading": {"method": "native", "completeness": "COMPLETE", "inspected": ["whole file"]},
     }
     result.update(overrides)
     return result
@@ -101,13 +102,22 @@ class ReadingTaskPlanTests(unittest.TestCase):
         self.assertEqual(0, result["reading_states"]["CATALOGED"])  # requested, not yet run
 
     def test_unreadable_sources_stay_visible_with_honest_states(self) -> None:
+        # Native-first (v2.6.0): a PDF without a text layer and an image are offered to a reader,
+        # which reads the original natively; only formats no reader can open stay UNSUPPORTED.
+        # Before v2.6.0 both were FAILED_TO_READ / UNSUPPORTED and never reached any reader.
         with tempfile.TemporaryDirectory() as temp:
             plan = reading.plan([
                 {"path": "docs/spec.pdf", "role": "FUNCTIONAL_AUTHORITY", "status": "NEEDS_TRANSCRIPTION", "content_digest": "x"},
                 {"path": "assets/logo.png", "role": "TECHNICAL_CONTEXT", "status": "METADATA_ONLY", "content_digest": "y"},
+                {"path": "assets/font.woff", "role": "TECHNICAL_CONTEXT", "status": "METADATA_ONLY", "content_digest": "w"},
+                {"path": "docs/notes.bin", "role": "TECHNICAL_CONTEXT", "status": "UNSUPPORTED", "content_digest": "v"},
             ], Path(temp), Path(temp) / "run")
-        states = {task["path"]: task["state"] for task in plan["tasks"]}
-        self.assertEqual({"docs/spec.pdf": "FAILED_TO_READ", "assets/logo.png": "UNSUPPORTED"}, states)
+        tasks = {task["path"]: task for task in plan["tasks"]}
+        self.assertEqual({"docs/spec.pdf": "PLANNED", "assets/logo.png": "PLANNED", "assets/font.woff": "UNSUPPORTED",
+                          "docs/notes.bin": "UNSUPPORTED"}, {path: t["state"] for path, t in tasks.items()})
+        self.assertTrue(tasks["docs/spec.pdf"]["transcription_required"])
+        self.assertNotIn("transcription_required", tasks["assets/logo.png"])  # not authority
+        self.assertEqual(("pdf", "NONE"), (tasks["docs/spec.pdf"]["format"], tasks["docs/spec.pdf"]["snapshot"]))
 
     def test_an_empty_source_is_accounted_for_without_a_reader(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -308,6 +318,7 @@ class SelectorReaderTests(unittest.TestCase):
         tasks = [t for t in plan["tasks"] if t["selector_id"] == sid and t["state"] == "PLANNED"]
         files = tasks if files is None else files
         result = {"selector_id": sid, "reader": {"role": reading.READER_ROLE, "model": "test-double"},
+                  "reading": {"method": "native", "completeness": "COMPLETE", "inspected": ["every owned file"]},
                   "catalog": {"operations": [{"file": files[0]["path"], "fact": "defines a function"}]},
                   "files": [{"source_key": t["source_key"], "content_digest": t["content_digest"], "status": "INSPECTED"}
                             for t in files]}

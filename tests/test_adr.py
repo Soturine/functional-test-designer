@@ -108,6 +108,30 @@ class IncrementalReadingTests(AdrTestCase):
         self.assertEqual({fx.ADR_FILE: "UNCHANGED_REUSED", fx.NOTE_FILE: "CHANGED_READ", fx.ROUND2_FILE: "NEW_READ",
                           "diagram.png": "UNSUPPORTED"}, inventory)
 
+    def test_a_native_file_points_at_native_reading_and_accepts_a_host_transcription(self) -> None:
+        # Before v2.6.0 an image or scanned PDF in an ADR folder could only ever be UNSUPPORTED/FAILED.
+        started = self.start()
+        work_order = json.loads(Path(started["work_order"]).read_text(encoding="utf-8"))
+        diagram = next(s for s in work_order["adr_sources"] if s["path"] == "diagram.png")
+        self.assertEqual("image", diagram["format"])
+        self.assertIn("--transcription diagram.png=", diagram["native_reading"])
+        transcript = self.run.pack.root / "diagram.txt"
+        transcript.write_text("Diagram: the refund approval box now sits after the fraud check.", encoding="utf-8")
+        again = self.start(transcriptions={"diagram.png": transcript})
+        self.assertEqual({"NEW_READ": 3}, {k: v for k, v in again["sources"].items() if v})
+        inventory = json.loads((Path(again["adr_dir"]) / "inventory.json").read_text(encoding="utf-8"))["sources"]
+        entry = next(e for e in inventory if e["path"] == "diagram.png")
+        self.assertEqual("NATIVE_READING", entry["transcription_origin"])
+        self.assertIn("native transcription supplied by the host", entry["reason"])
+
+    def test_adr_transcriptions_are_scoped_and_never_replace_runtime_text(self) -> None:
+        transcript = self.run.pack.root / "t.txt"
+        transcript.write_text("x", encoding="utf-8")
+        with self.assertRaisesRegex(adr.AdrError, "outside the ADR selection"):
+            self.start(transcriptions={"elsewhere.png": transcript})
+        with self.assertRaisesRegex(adr.AdrError, "only replaces missing text"):
+            self.start(transcriptions={fx.ADR_FILE: transcript})
+
     def test_a_removed_file_never_revokes_its_decisions(self) -> None:
         self.run.round()
         (self.run.corpus / fx.ADR_FILE).unlink()

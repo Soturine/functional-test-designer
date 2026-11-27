@@ -18,13 +18,23 @@ claims, oracles, Test Cases, Findings or Questions.
 
 File task states:
     PLANNED        waiting for its selector's reader to account for it
-    REUSED         a compatible file catalog (same key, digest, role, contract) was reused
+    REUSED         a compatible file catalog (same key, digest, role, reading policy) was reused
     CATALOGED      a validated reader result exists (a catalog, or INSPECTED with nothing to add)
     FAILED_WORKER  a reader reported failure for this file; it stays visible
     FAILED_TO_READ the runtime could not extract text (needs transcription/failed)
     UNSUPPORTED    binary/metadata-only file; nothing to read
     EMPTY          readable but zero bytes; nothing to catalog, still accounted for
-    MAIN_MODEL     SEQUENTIAL strategy: the main model reads it directly, no reader
+    MAIN_MODEL     SEQUENTIAL strategy: the main model reads its full-text snapshot directly
+
+Native-first reading policy (READING_POLICY): an original whose meaning can lie beyond any
+runtime text (PDF, image, office document) is always offered to a reader - in SEQUENTIAL runs
+the main model itself, attributed as MAIN_MODEL - and every result of a plan written under the
+policy carries a reading declaration: how the original was read (method), whether completely,
+what was inspected and what was not seen. A digest proves byte identity, never understanding;
+a declaration is the reader's account, which the runtime checks for consistency with what it
+knows (format, snapshot, page count) but cannot verify visually. Facts only an image, table or
+drawn diagram carries enter as `visual_facts` with a locator; functional authority that has no
+runtime text must be transcribed by its native reading before Design.
 """
 
 from __future__ import annotations
@@ -36,9 +46,14 @@ from pathlib import Path
 from typing import Any
 
 from common import StageError, normalize, normalize_identifier, now, read_json, write_json
+from sources import NATIVE_FORMATS, snapshot_kind, source_format
 
 CONTRACT_VERSION = "2"
+# The reading policy a plan was written under. Plans and cached catalogs without it predate
+# native-first reading: they stay valid for their own runs and are never upgraded silently.
+READING_POLICY = "native-first/1"
 READER_ROLE = "LIGHTWEIGHT_SOURCE_READER"
+MAIN_MODEL_ROLE = "MAIN_MODEL"
 STRATEGIES = ("MULTI_AGENT_PER_SOURCE", "MULTI_AGENT_BATCHED", "SEQUENTIAL")
 DEFAULT_CONCURRENCY = 8  # host execution default, never business data
 TASK_STATES = ("PLANNED", "REUSED", "CATALOGED", "FAILED_WORKER", "FAILED_TO_READ", "UNSUPPORTED", "EMPTY",
@@ -49,7 +64,11 @@ EMPTY_DIGEST = hashlib.sha256(b"").hexdigest()
 CATALOG_FIELDS = {
     "headings", "identifiers", "actors", "entities", "states", "operations", "integrations",
     "config_facts", "candidate_rules", "flows", "test_assets", "excerpts", "references", "ambiguities",
+    "visual_facts",
 }
+# A visual fact: content only a table, figure, diagram, scan or image of a native-format file
+# carries, with the locator a person can find it by. Agent-attested, never runtime-verified.
+VISUAL_KINDS = ("table", "figure", "diagram", "chart", "image", "scan", "caption", "footnote", "form", "other")
 # Decisions that belong to the main model only.
 FORBIDDEN_FIELDS = {
     "claims", "tests", "test_cases", "oracles", "findings", "questions", "requirements",
@@ -61,7 +80,13 @@ DEFINING_ROLES = {"FUNCTIONAL_AUTHORITY", "TECHNICAL_CONTEXT"}
 
 RESULT_FIELDS = {"source_key", "path", "content_digest", "role", "status", "reader", "catalog", "error", "reading"}
 READING_METHODS = {"native", "native_vision", "extracted_text"}
-SELECTOR_RESULT_FIELDS = {"selector_id", "selector_path", "role", "reader", "catalog", "files", "shard", "error"}
+READING_FIELDS = {"method", "tool", "completeness", "inspected", "limitations", "page_count", "transcription"}
+COMPLETENESS = ("COMPLETE", "PARTIAL")
+# How a file's reading ended, as reconciliation reports it (a label, never a gate).
+READING_STATUSES = ("COMPLETE", "PARTIAL", "LEGACY_UNASSESSED", "MAIN_MODEL_FULL_TEXT", "FAILED", "UNSUPPORTED",
+                    "EMPTY")
+SELECTOR_RESULT_FIELDS = {"selector_id", "selector_path", "role", "reader", "catalog", "files", "shard", "error",
+                          "reading"}
 FILE_STATUSES = ("CATALOGED", "INSPECTED", "FAILED")
 
 
@@ -83,8 +108,12 @@ def _cache_path(artifact_root: Path, key: str) -> Path:
 
 
 def cached_catalog(artifact_root: Path, record: dict[str, Any]) -> dict[str, Any] | None:
-    """A reusable file catalog must match key, digest, role and contract version exactly.
-    Contract 1 file results are the same per-file shape and stay reusable."""
+    """A reusable file catalog must match key, digest, role and the reading policy exactly,
+    and carry a valid reading declaration. A catalog cached before native-first reading is
+    reused only for a full-text file (its snapshot is the whole original, so nothing visual
+    could have been missed); it is then labelled LEGACY_UNASSESSED, never native-complete.
+    A PDF, image or document catalog from before the policy is read again. A user-supplied
+    transcription that changed (or appeared, or vanished) invalidates the catalog too."""
     path = _cache_path(artifact_root, source_key(record["path"]))
     if not path.is_file():
         return None
@@ -92,10 +121,32 @@ def cached_catalog(artifact_root: Path, record: dict[str, Any]) -> dict[str, Any
         entry = read_json(path)
     except Exception:
         return None
-    if (entry.get("content_digest") == record["content_digest"] and entry.get("role") == record["role"]
-            and entry.get("contract_version") in {CONTRACT_VERSION, "1"} and entry.get("status") == "CATALOGED"):
+    if (entry.get("content_digest") != record["content_digest"] or entry.get("role") != record["role"]
+            or entry.get("status") != "CATALOGED"):
+        return None
+    if entry.get("reading_policy") == READING_POLICY:
+        if entry.get("transcription_digest") != record.get("transcription_digest"):
+            return None
+        task = _task_facts(record)
+        declared = (entry.get("result") or {}).get("reading")
+        if _declaration_errors(declared, task, (entry.get("result") or {}).get("status"), "cached catalog", True):
+            return None
         return entry
+    if entry.get("contract_version") in {CONTRACT_VERSION, "1"} and _task_facts(record)["snapshot"] == "FULL_TEXT" \
+            and _task_facts(record)["format"] not in NATIVE_FORMATS:
+        return {**entry, "legacy_unassessed": True}
     return None
+
+
+def _task_facts(record: dict[str, Any]) -> dict[str, Any]:
+    """What the runtime knows about a file's original and snapshot, for a task or a check."""
+    fmt = record.get("format") or source_format(record["path"])
+    # A task of a plan written before the policy has neither: its snapshot stays unknown (None).
+    snapshot = record.get("snapshot") or (snapshot_kind(fmt, record["status"]) if "status" in record else None)
+    facts = {"format": fmt, "snapshot": snapshot}
+    if record.get("page_count"):
+        facts["page_count"] = record["page_count"]
+    return facts
 
 
 def _selector_entries(records: list[dict[str, Any]], selectors: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
@@ -145,17 +196,22 @@ def plan(
     for record in records:
         key = source_key(record["path"])
         task = {"source_key": key, "path": record["path"], "role": record["role"],
-                "content_digest": record["content_digest"], "selector_id": owner[record["path"]]}
-        for hint in ("format", "native_reading", "extracted_layer"):
+                "content_digest": record["content_digest"], "selector_id": owner[record["path"]],
+                **_task_facts(record), "declaration_required": True}
+        for hint in ("native_reading", "extracted_layer", "transcription_digest"):
             if record.get(hint):
                 task[hint] = record[hint]
-        if record["status"] in {"METADATA_ONLY", "UNSUPPORTED"}:
-            task["state"] = "UNSUPPORTED"
-        elif record["status"] not in {"READ", "TRANSCRIBED"}:
-            task["state"] = "FAILED_TO_READ"
-        elif record["content_digest"] == EMPTY_DIGEST:
+        native = task["format"] in NATIVE_FORMATS
+        if native and task["snapshot"] == "NONE" and record["role"] == "FUNCTIONAL_AUTHORITY":
+            # No runtime text: its native reading must transcribe it before Design.
+            task["transcription_required"] = True
+        if record["content_digest"] == EMPTY_DIGEST:
             task["state"] = "EMPTY"
-        elif strategy == "SEQUENTIAL":
+        elif not native and record["status"] in {"METADATA_ONLY", "UNSUPPORTED"}:
+            task["state"] = "UNSUPPORTED"
+        elif not native and record["status"] not in {"READ", "TRANSCRIBED"}:
+            task["state"] = "FAILED_TO_READ"
+        elif strategy == "SEQUENTIAL" and not native:
             task["state"] = "MAIN_MODEL"
         else:
             reused = cached_catalog(artifact_root, record)
@@ -163,11 +219,14 @@ def plan(
                 results_dir.mkdir(parents=True, exist_ok=True)
                 write_json(results_dir / f"{key}.json", {**reused["result"], "reused_from_cache": True})
                 task["state"] = "REUSED"
+                if reused.get("legacy_unassessed"):
+                    task["legacy_unassessed"] = True
             else:
                 task["state"] = "PLANNED"
         tasks.append(task)
     document = {
-        "contract_version": CONTRACT_VERSION, "reader_role": READER_ROLE, "strategy": strategy,
+        "contract_version": CONTRACT_VERSION, "reading_policy": READING_POLICY, "reader_role": READER_ROLE,
+        "strategy": strategy,
         "worker_model": worker_model if strategy != "SEQUENTIAL" else None,
         "concurrency": None if strategy == "SEQUENTIAL" else int(concurrency or DEFAULT_CONCURRENCY),
         "selectors": _selector_view(entries), "tasks": tasks, "history": [], "created_at": now(),
@@ -266,8 +325,18 @@ def assignments(task_plan: dict[str, Any]) -> list[dict[str, Any]]:
     return out
 
 
+def _check_page(item: dict[str, Any], task: dict[str, Any] | None, label: str, errors: list[str]) -> None:
+    page = item.get("page")
+    if page is None:
+        return
+    total = (task or {}).get("page_count")
+    if not isinstance(page, int) or isinstance(page, bool) or page < 1 or (total and page > total):
+        errors.append(f"{label} page {page!r} is not a page of the source" + (f" ({total} pages)" if total else ""))
+
+
 def _check_catalog(catalog: Any, label: str, errors: list[str], owned: dict[str, int] | None,
-                   own_lines: int | None) -> None:
+                   own_lines: int | None, files: dict[str, dict[str, Any]] | None = None,
+                   own_path: str | None = None) -> None:
     if not isinstance(catalog, dict):
         errors.append(f"{label} catalog must be an object")
         return
@@ -277,13 +346,30 @@ def _check_catalog(catalog: Any, label: str, errors: list[str], owned: dict[str,
     unknown = sorted(set(catalog) - CATALOG_FIELDS - FORBIDDEN_FIELDS)
     if unknown:
         errors.append(f"{label} catalog contains unknown sections {unknown}")
+    files = files or {}
     for section in sorted(CATALOG_FIELDS & set(catalog)):
         for item in catalog.get(section) or []:
             if not isinstance(item, dict):
+                if section == "visual_facts":
+                    errors.append(f"{label} visual_facts entries must be objects with locator, kind and text")
                 continue
             cited = item.get("file")
             if owned is not None and cited is not None and cited not in owned:
                 errors.append(f"{label} {section} cites {cited!r}, which this selector does not own")
+                continue
+            task = files.get(cited or own_path or "")
+            if section == "visual_facts":
+                if owned is not None and not cited:
+                    errors.append(f"{label} visual fact must name its file")
+                    continue
+                if task is not None and _task_facts(task)["format"] not in NATIVE_FORMATS:
+                    errors.append(f"{label} visual fact cites {task['path']}, a text file: cite its lines as an excerpt")
+                for field in ("locator", "text"):
+                    if not str(item.get(field) or "").strip():
+                        errors.append(f"{label} visual fact needs a non-empty {field}")
+                if item.get("kind") not in VISUAL_KINDS:
+                    errors.append(f"{label} visual fact kind must be one of {list(VISUAL_KINDS)}")
+                _check_page(item, task, f"{label} visual fact", errors)
                 continue
             if section != "excerpts":
                 continue
@@ -291,13 +377,82 @@ def _check_catalog(catalog: Any, label: str, errors: list[str], owned: dict[str,
             if owned is not None and not cited:
                 errors.append(f"{label} excerpt must name its file")
                 continue
+            _check_page(item, task, f"{label} excerpt", errors)
             start, end = item.get("line_start"), item.get("line_end", item.get("line_start"))
             if start is not None and not (isinstance(start, int) and isinstance(end, int)
                                           and 1 <= start <= end <= (total or 0)):
                 errors.append(f"{label} excerpt {start}-{end} is outside the source ({total} lines)")
 
 
-def _validate_result(result: dict[str, Any], task: dict[str, Any] | None, line_counts: dict[str, int]) -> list[str]:
+def _declaration_errors(reading: Any, task: dict[str, Any], status: Any, label: str, required: bool) -> list[str]:
+    """Consistency of a reading declaration with what the runtime knows about the file.
+    It cannot prove the reader looked; it refuses what is missing, malformed or contradicts the
+    format, the snapshot or the page count, so an omission never certifies a complete read."""
+    errors: list[str] = []
+    if reading is None:
+        if required and status != "FAILED":
+            errors.append(f"{label} needs a reading declaration: reading = {{method, completeness, inspected, "
+                          "limitations} - how the original was read and what was not seen")
+        return errors
+    if not isinstance(reading, dict) or not reading:
+        return [f"{label} reading must be a non-empty object"]
+    unknown = sorted(set(reading) - READING_FIELDS)
+    if unknown:
+        errors.append(f"{label} reading contains unknown fields {unknown}")
+    method = reading.get("method")
+    if method not in READING_METHODS:
+        errors.append(f"{label} reading.method must be one of {sorted(READING_METHODS)}")
+    for field in ("limitations", "inspected"):
+        value = reading.get(field, [])
+        if not isinstance(value, list) or not all(isinstance(v, str) and v.strip() for v in value):
+            errors.append(f"{label} reading.{field} must be a list of non-empty strings")
+    limitations = reading.get("limitations") if isinstance(reading.get("limitations"), list) else []
+    completeness = reading.get("completeness")
+    if required and completeness not in COMPLETENESS:
+        errors.append(f"{label} reading.completeness must be one of {list(COMPLETENESS)}")
+    elif completeness is not None and completeness not in COMPLETENESS:
+        errors.append(f"{label} reading.completeness must be one of {list(COMPLETENESS)}")
+    fmt, snapshot = task.get("format"), task.get("snapshot")
+    if method == "extracted_text":
+        if snapshot == "NONE":
+            errors.append(f"{label} declares extracted_text, but the runtime has no text for this file")
+        elif fmt in NATIVE_FORMATS or snapshot != "FULL_TEXT":
+            if fmt == "pdf" and not limitations:
+                errors.append(f"{label} read a PDF from its text layer only; declare reading.limitations "
+                              "(figures, layout and drawn content were not seen)")
+            if completeness == "COMPLETE":
+                errors.append(f"{label} cannot be COMPLETE from extracted text alone: a text layer or "
+                              "transcription is not the whole original")
+    if completeness == "PARTIAL" and not limitations:
+        errors.append(f"{label} PARTIAL reading must list its limitations")
+    if required and status == "INSPECTED" and not reading.get("inspected"):
+        errors.append(f"{label} INSPECTED needs reading.inspected: what was looked at before concluding "
+                      "there is nothing to catalog")
+    if "page_count" in reading:
+        declared = reading["page_count"]
+        if not isinstance(declared, int) or isinstance(declared, bool) or declared < 1:
+            errors.append(f"{label} reading.page_count must be a positive integer")
+        elif task.get("page_count") and declared != task["page_count"]:
+            errors.append(f"{label} declares {declared} page(s); the original has {task['page_count']}")
+    transcription = reading.get("transcription")
+    if transcription is not None:
+        if not isinstance(transcription, str) or not transcription.strip():
+            errors.append(f"{label} reading.transcription must be non-empty text")
+        elif snapshot != "NONE":
+            errors.append(f"{label} has runtime text ({snapshot}); a transcription only replaces a missing one "
+                          "(put visual-only content in visual_facts)")
+        elif method not in {"native", "native_vision"}:
+            errors.append(f"{label} a transcription comes from reading the original natively")
+        if status == "FAILED":
+            errors.append(f"{label} FAILED cannot carry a transcription")
+    elif task.get("transcription_required") and status != "FAILED" and required:
+        errors.append(f"{label} is functional authority with no runtime text: read it natively and put what it "
+                      "says in reading.transcription (identifiers and titles verbatim), or report FAILED")
+    return errors
+
+
+def _validate_result(result: dict[str, Any], task: dict[str, Any] | None, line_counts: dict[str, int],
+                     strategy: str | None = None, files: dict[str, dict[str, Any]] | None = None) -> list[str]:
     label = f"reader result for {result.get('path') or result.get('source_key') or '<unknown>'}"
     errors: list[str] = []
     if task is None:
@@ -310,21 +465,17 @@ def _validate_result(result: dict[str, Any], task: dict[str, Any] | None, line_c
     if result.get("role", task["role"]) != task["role"]:
         errors.append(f"{label} tries to change the source role; readers never change authority")
     reader = result.get("reader") if isinstance(result.get("reader"), dict) else {}
-    if reader.get("role", READER_ROLE) != READER_ROLE:
-        errors.append(f"{label} reader.role must be {READER_ROLE}")
-    reading = result.get("reading")
-    if reading is not None:
-        if not isinstance(reading, dict) or reading.get("method") not in READING_METHODS:
-            errors.append(f"{label} reading.method must be one of {sorted(READING_METHODS)}")
-        elif not isinstance(reading.get("limitations", []), list):
-            errors.append(f"{label} reading.limitations must be a list")
-        elif (task.get("format") == "pdf" and reading["method"] == "extracted_text"
-              and not reading.get("limitations")):
-            errors.append(
-                f"{label} read a PDF from its text layer only; declare reading.limitations "
-                "(figures, layout and drawn content were not seen)"
-            )
+    # Honest attribution: in a SEQUENTIAL run the main model reads; in a multi-agent run a
+    # lightweight reader does, unless the main model read a file itself and says so.
+    sequential = strategy == "SEQUENTIAL"
+    role = reader.get("role", MAIN_MODEL_ROLE if sequential else READER_ROLE)
+    allowed = {MAIN_MODEL_ROLE} if sequential else {READER_ROLE, MAIN_MODEL_ROLE}
+    if role not in allowed:
+        errors.append(f"{label} reader.role must be {' or '.join(sorted(allowed))}")
     status = result.get("status")
+    facts = {**_task_facts(task), **task}
+    errors.extend(_declaration_errors(result.get("reading"), facts, status, label,
+                                      bool(task.get("declaration_required"))))
     if status not in FILE_STATUSES:
         errors.append(f"{label} status must be one of {list(FILE_STATUSES)}")
     if status == "FAILED":
@@ -339,7 +490,8 @@ def _validate_result(result: dict[str, Any], task: dict[str, Any] | None, line_c
     if not isinstance(catalog, dict) or not any(catalog.get(field) for field in CATALOG_FIELDS):
         errors.append(f"{label} CATALOGED requires a non-empty factual catalog")
         return errors
-    _check_catalog(catalog, label, errors, None, line_counts.get(task["path"], 0))
+    _check_catalog(catalog, label, errors, None, line_counts.get(task["path"], 0), files or {task["path"]: facts},
+                   task["path"])
     return errors
 
 
@@ -374,9 +526,14 @@ def _expand(results: list[dict[str, Any]], task_plan: dict[str, Any], line_count
                 errors.append(f"{label} accounts for {entry.get('path') or entry.get('source_key')!r}, "
                               "which this selector does not own")
                 continue
-            files.append({"source_key": task["source_key"], "path": task["path"], "reader": reader, **entry})
+            item = {"source_key": task["source_key"], "path": task["path"], "reader": reader, **entry}
+            # A selector-level declaration is the default only for full-text files (code, markdown):
+            # a PDF, image or document under the selector is accounted for with its own declaration.
+            if "reading" not in item and result.get("reading") is not None                     and _task_facts(task)["format"] not in NATIVE_FORMATS:
+                item["reading"] = result["reading"]
+            files.append(item)
         if result.get("catalog"):
-            _check_catalog(result["catalog"], label, errors, owned, None)
+            _check_catalog(result["catalog"], label, errors, owned, None, by_path)
             selector_catalogs.append({"selector_id": sid, "shard": result.get("shard"), "reader": reader,
                                       "catalog": result["catalog"]})
     return files, selector_catalogs
@@ -402,7 +559,7 @@ def submit(run_dir: Path, results: list[dict[str, Any]]) -> dict[str, Any]:
             seen.add(task["source_key"])
             if task["state"] not in {"PLANNED", "FAILED_WORKER"}:
                 errors.append(f"reader result for {task['path']} not expected in state {task['state']}")
-        errors.extend(_validate_result(result, task, line_counts))
+        errors.extend(_validate_result(result, task, line_counts, task_plan.get("strategy"), by_path))
     if errors:
         raise StageError("reading", errors)
     results_dir = run_dir / "reading" / "results"
@@ -532,18 +689,59 @@ def refresh_file_cache(run_dir: Path, artifact_root: Path) -> int:
             result["catalog"], _ = _dedupe(catalog)
             if result.get("status") == "INSPECTED" and any(result["catalog"].values()):
                 result["status"] = "CATALOGED"
-        write_json(_cache_path(artifact_root, task["source_key"]), {
+        entry = {
             "contract_version": CONTRACT_VERSION, "path": task["path"], "role": task["role"],
             "content_digest": task["content_digest"], "status": "CATALOGED", "result": result,
-            "selector_facts_folded": sum(len(v) for v in folded.values())})
+            "selector_facts_folded": sum(len(v) for v in folded.values())}
+        if task_plan.get("reading_policy"):
+            entry["reading_policy"] = task_plan["reading_policy"]
+            if task.get("transcription_digest"):
+                entry["transcription_digest"] = task["transcription_digest"]
+        write_json(_cache_path(artifact_root, task["source_key"]), entry)
         written += 1
     return written
 
 
-def reconcile(run_dir: Path, artifact_root: Path) -> dict[str, Any]:
+def reading_status(task: dict[str, Any], result: dict[str, Any] | None) -> str:
+    """One label per file for reports: how its reading actually ended."""
+    state = task["state"]
+    if state in {"CATALOGED", "REUSED"}:
+        declared = (result or {}).get("reading") or {}
+        if task.get("legacy_unassessed") or not declared.get("completeness"):
+            return "LEGACY_UNASSESSED"
+        return declared["completeness"]
+    return {"MAIN_MODEL": "MAIN_MODEL_FULL_TEXT", "FAILED_WORKER": "FAILED", "FAILED_TO_READ": "FAILED",
+            "UNSUPPORTED": "UNSUPPORTED", "EMPTY": "EMPTY"}.get(state, state)
+
+
+def pending_transcriptions(run_dir: Path) -> tuple[list[dict[str, Any]], list[str]]:
+    """Native transcriptions to adopt as snapshots, and the authority files that still have
+    no text at all. Reads only; reconciliation refuses before writing anything when the
+    second list is not empty."""
+    task_plan = read_json(run_dir / "reading" / "task-plan.json")
+    results_dir = run_dir / "reading" / "results"
+    adopt, missing = [], []
+    for task in task_plan["tasks"]:
+        result = read_json(results_dir / f"{task['source_key']}.json") if task["state"] in {"CATALOGED", "REUSED"} \
+            and (results_dir / f"{task['source_key']}.json").is_file() else None
+        text = ((result or {}).get("reading") or {}).get("transcription")
+        if text and task.get("snapshot") == "NONE":
+            adopt.append({"path": task["path"], "source_key": task["source_key"], "role": task["role"], "text": text,
+                          "method": result["reading"].get("method"), "reader": result.get("reader") or {}})
+        elif task.get("transcription_required"):
+            missing.append(task["path"])
+    return adopt, missing
+
+
+def reconcile(run_dir: Path, artifact_root: Path, adopt_transcriptions: Any = None) -> dict[str, Any]:
     """Require every physical file under every selector to be accounted for, preserve
     conflicts, build one provenance-preserving catalog per selector and fill the file
-    cache. Nothing is majority-voted: conflicting statements go to the main model."""
+    cache. Nothing is majority-voted: conflicting statements go to the main model.
+
+    Functional authority without runtime text must have been transcribed by its native
+    reading; `adopt_transcriptions(items)` (the pipeline's) turns those transcriptions into
+    run snapshots and re-indexes authority before identifier conflicts are computed. Every
+    refusal happens before anything is written."""
     task_plan = read_json(run_dir / "reading" / "task-plan.json")
     missing = [task["path"] for task in pending(task_plan)]
     if missing:
@@ -551,6 +749,12 @@ def reconcile(run_dir: Path, artifact_root: Path) -> dict[str, Any]:
             f"{len(missing)} selected file(s) have no reader disposition yet: " + ", ".join(missing[:20])
             + " — each selector's reader must account for every file it owns; no file may silently disappear"
         ])
+    adopt, untranscribed = pending_transcriptions(run_dir)
+    if untranscribed:
+        raise StageError("reading", [
+            f"functional authority with no readable text: {', '.join(untranscribed[:20])} — its native reading must "
+            "transcribe it (reading.transcription); a reader that cannot open it reports FAILED, and the user may "
+            "supply --transcription on a new run. Design never starts on unread authority."])
     results_dir = run_dir / "reading" / "results"
     identifier_statements: dict[str, list[dict[str, str]]] = {}
     references: list[dict[str, Any]] = []
@@ -571,7 +775,10 @@ def reconcile(run_dir: Path, artifact_root: Path) -> dict[str, Any]:
             entry.update({"result_ref": f"results/{task['source_key']}.json", "reader": result.get("reader", {}),
                           "disposition": result.get("status")})
             if result.get("reading"):
-                entry["reading"] = result["reading"]
+                entry["reading"] = {k: v for k, v in result["reading"].items() if k != "transcription"}
+                if result["reading"].get("transcription"):
+                    entry["reading"]["transcription_lines"] = len(result["reading"]["transcription"].splitlines())
+            entry["reading_status"] = reading_status(task, result)
             if (result.get("reader") or {}).get("model"):
                 models.add(str(result["reader"]["model"]))
             bucket = buckets.setdefault(task.get("selector_id") or task["source_key"], {})
@@ -589,6 +796,8 @@ def reconcile(run_dir: Path, artifact_root: Path) -> dict[str, Any]:
                 references.append({"source": task["path"], "target": target, "selected": target in selected_paths})
         elif task["state"] == "FAILED_WORKER":
             entry["error"] = task.get("error")
+        if "reading_status" not in entry:
+            entry["reading_status"] = reading_status(task, None)
         sources.append(entry)
     shards: dict[str, int] = {}
     for folder in sorted((run_dir / "reading" / "selector-results").glob("*")):
@@ -600,6 +809,9 @@ def reconcile(run_dir: Path, artifact_root: Path) -> dict[str, Any]:
             bucket = buckets.setdefault(folder.name, {})
             for section, values in sorted((item.get("catalog") or {}).items()):
                 bucket.setdefault(section, []).extend(values or [])
+    # Everything above only read; the first write is the adoption of native transcriptions,
+    # which itself validates (re-indexes) in memory before writing.
+    transcribed = adopt_transcriptions(adopt) if (adopt and adopt_transcriptions) else []
     duplicates_removed = 0
     for sid in list(buckets):
         buckets[sid], removed = _dedupe(buckets[sid])
@@ -621,12 +833,30 @@ def reconcile(run_dir: Path, artifact_root: Path) -> dict[str, Any]:
                               "catalog_ref": catalog_ref})
     conflicts, identifier_references = identifier_conflicts(identifier_statements, _official_identifiers(run_dir))
     counts = summary(task_plan)
+    roles = {t["path"]: t["role"] for t in task_plan["tasks"]}
+    visual = []
+    for selector in sorted(task_plan.get("selectors") or [], key=lambda s: s["order"]):
+        for item in buckets.get(selector["selector_id"], {}).get("visual_facts", []):
+            if isinstance(item, dict) and roles.get(item.get("file")) == "FUNCTIONAL_AUTHORITY":
+                visual.append({"id": f"VF-{len(visual) + 1:03d}",
+                               **{k: item[k] for k in ("file", "locator", "kind", "text", "page") if k in item}})
+    partial = [{"path": s["path"], "method": (s.get("reading") or {}).get("method"),
+                "limitations": (s.get("reading") or {}).get("limitations", [])}
+               for s in sources if s["role"] == "FUNCTIONAL_AUTHORITY" and s.get("reading_status") == "PARTIAL"]
+    reading_counts: dict[str, int] = {}
+    for s in sources:
+        reading_counts[s["reading_status"]] = reading_counts.get(s["reading_status"], 0) + 1
     reconciliation = {
         "contract_version": CONTRACT_VERSION, "reconciled_at": now(), "strategy": task_plan["strategy"],
         "worker_model": task_plan.get("worker_model"), "states": counts, "selectors": selectors_out,
         "worker_failures": [s for s in sources if s["state"] == "FAILED_WORKER"],
         "identifier_conflicts": conflicts, "identifier_references": identifier_references,
         "cross_references": references,
+        "reading_policy": task_plan.get("reading_policy"),
+        "reading_status": dict(sorted(reading_counts.items())),
+        "authority_visual_facts": visual,
+        "partial_authority_readings": partial,
+        "native_transcriptions": transcribed,
         "telemetry": {
             "user_source_selectors": len(task_plan.get("selectors") or []),
             "physical_files_selected": len(task_plan["tasks"]),

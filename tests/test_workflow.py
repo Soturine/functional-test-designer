@@ -102,8 +102,12 @@ class CommandSurfaceTests(unittest.TestCase):
             self.assertNotIn(fragment, source)
 
 
-@unittest.skipUnless(importlib.util.find_spec("pypdf"), "reading a PDF authority needs the optional pypdf package")
 class NaturalGenerationTests(unittest.TestCase):
+    """A PDF authority works with and without the optional pypdf: with it, the text layer indexes
+    the authority at start; without it, the PDF goes to its native reader, which transcribes it."""
+
+    HAS_PYPDF = importlib.util.find_spec("pypdf") is not None
+
     def setUp(self) -> None:
         self.temp = tempfile.TemporaryDirectory()
         self.root = Path(self.temp.name)
@@ -139,13 +143,45 @@ class NaturalGenerationTests(unittest.TestCase):
         sources = json.loads((Path(result["run_dir"]) / "sources.json").read_text(encoding="utf-8"))
         paths = [item["path"] for item in sources["records"]]
         self.assertEqual(["HTML", "JSON", "MARKDOWN", "DIAGNOSTICS"], run["formats"])
-        self.assertEqual({"RF-01", "RN-01"}, {item["identifier"] for item in sources["authority_index"]})
+        if self.HAS_PYPDF:
+            self.assertEqual({"RF-01", "RN-01"}, {item["identifier"] for item in sources["authority_index"]})
+        else:
+            plan = json.loads((Path(result["run_dir"]) / "reading" / "task-plan.json").read_text(encoding="utf-8"))
+            pdf = next(t for t in plan["tasks"] if t["path"] == "requirements.pdf")
+            self.assertEqual(("PLANNED", True), (pdf["state"], pdf["transcription_required"]))
+            self.assertEqual([], sources["authority_index"])
         self.assertIn("apps/orders/test_service.py", paths)
         self.assertIn("docs/user/orders.md", paths)
         self.assertNotIn("outside/secret.md", paths)
-        self.assertEqual("pt-BR", result["output_locale"])
+        if self.HAS_PYPDF:
+            self.assertEqual("pt-BR", result["output_locale"])
+        else:
+            # Provisional (from the request) until the authority's native transcription lands.
+            self.assertEqual("USER_REQUEST", result["locale_source"])
+            self._transcribe_natively(Path(result["run_dir"]))
+            run = json.loads((Path(result["run_dir"]) / "run.json").read_text(encoding="utf-8"))
+            self.assertEqual(("pt-BR", "FUNCTIONAL_AUTHORITY"), (run["output_locale"], run["locale_source"]))
         order = json.loads(Path(result["work_order"]).read_text(encoding="utf-8"))
         self.assertEqual(["HTML", "JSON", "MARKDOWN", "DIAGNOSTICS"], order["requested_formats"])
+
+    def _transcribe_natively(self, run_dir: Path) -> None:
+        import pipeline
+        import reading
+        plan = json.loads((run_dir / "reading" / "task-plan.json").read_text(encoding="utf-8"))
+        text = ("RF-01 - Emitir Pedido\nO vendedor emite o pedido e o sistema gera o numero do pedido.\n"
+                "RN-01 - Numero Unico\nCada pedido recebe um numero unico.\n")
+        results = []
+        for task in reading.pending(plan):
+            declaration = {"method": "native", "completeness": "COMPLETE", "inspected": ["whole file"]}
+            if task["path"] == "requirements.pdf":
+                declaration = {**declaration, "method": "native_vision", "transcription": text}
+            results.append({"source_key": task["source_key"], "content_digest": task["content_digest"],
+                            "path": task["path"], "status": "INSPECTED", "reading": declaration,
+                            "reader": {"role": reading.READER_ROLE, "model": "test-double"}})
+        pipeline.submit_reading(run_dir, results)
+        pipeline.reconcile_reading(run_dir)
+        sources = json.loads((run_dir / "sources.json").read_text(encoding="utf-8"))
+        self.assertEqual({"RF-01", "RN-01"}, {item["identifier"] for item in sources["authority_index"]})
 
     def test_alias_and_natural_language_start_identical_runs(self) -> None:
         natural = dispatch_request("Generate test cases from these sources", resolved_intent="ftd-gen",
@@ -160,7 +196,7 @@ class NaturalGenerationTests(unittest.TestCase):
         result = dispatch("ftd-gen", workspace=self.workspace, artifact_root=self.root / "c", run_id="legacy",
                           selectors=["requirements.pdf", "apps"],
                           roles={"requirements.pdf": "FUNCTIONAL_AUTHORITY", "apps": "IMPLEMENTATION_EVIDENCE"})
-        self.assertEqual(2, result["authority_identifiers"])
+        self.assertEqual(2 if self.HAS_PYPDF else 0, result["authority_identifiers"])
         with self.assertRaisesRegex(ValueError, "needs a role"):
             dispatch("ftd-gen", workspace=self.workspace, artifact_root=self.root / "d", run_id="x", selectors=["apps"])
 
