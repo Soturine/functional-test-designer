@@ -1,7 +1,7 @@
 # ftd-adr
 
 ```text
-/ftd --adr <file|folder> [--run <run-id>] [--output-dir <dir>] [--base-adr <adr-id|none>]
+/ftd --adr <file|folder> [--run <run-id>] [--output-dir <dir>] [--base-adr <adr-id|none>] [--transcription <path>=<text file>]
 /ftd-adr <file|folder> ...                      # the same command
 ```
 
@@ -15,7 +15,7 @@ Intent: keep an already validated Test Case suite current as ADRs and other proj
   4. `finalize --adr-id <id>`.
   - `lookup --adr-id <id> --source <parent source> --query "..."` (or `--lines A-B`, at most 80 lines) returns a bounded excerpt of an original project source from the parent run's persisted evidence; each lookup is counted.
   - Lifecycle `STARTED → ANALYZED → PROCEDURES_READY → FINALIZED`. A rejected submission returns every problem at once and records nothing. A finalized round is immutable: a mistake is fixed by a new round.
-- **Incremental reading:** every physical file of the selection (a folder is recursive only below itself) gets a disposition: `NEW_READ`, `CHANGED_READ` (text extracted with the same readers as `/ftd-gen`: `.md`, `.txt`, `.pdf`, …), `UNCHANGED_REUSED` (same digest as an analyzed file: its statements and decisions are reused, its text is not reread), `UNSUPPORTED`, `FAILED`. A file that disappears is `SOURCE_REMOVED_FROM_SELECTION`: deleting a file is not a business decision, so its decisions stay in effect until a decision explicitly revokes or supersedes them. Original project sources are never reread (`runtime_full_parent_source_rereads = 0`).
+- **Incremental reading:** every physical file of the selection (a folder is recursive only below itself) gets a disposition: `NEW_READ`, `CHANGED_READ` (text extracted with the same readers as `/ftd-gen`: `.md`, `.txt`, `.pdf`, …), `UNCHANGED_REUSED` (same digest as an analyzed file: its statements and decisions are reused, its text is not reread), `UNSUPPORTED`, `FAILED`. A scanned PDF, an image or an office document is not text to the runtime: its entry carries `format` and `native_reading` — read it natively and start the round with `--transcription <path>=<text file>` (path relative to the ADR scope; repeatable). The file then counts as read, with `transcription_origin: NATIVE_READING`; a transcription never replaces text the runtime extracted itself, and a changed transcription is read again. A file that disappears is `SOURCE_REMOVED_FROM_SELECTION`: deleting a file is not a business decision, so its decisions stay in effect until a decision explicitly revokes or supersedes them. Original project sources are never reread (`runtime_full_parent_source_rereads = 0`).
 
 ## The analysis (you)
 

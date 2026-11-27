@@ -13,7 +13,7 @@ import json
 import re
 from typing import Any
 
-from common import StageError, jaccard, normalize, normalize_identifier, similarity
+from common import StageError, jaccard, negated, normalize, normalize_identifier, similarity
 from design import (
     check_locale, mechanical_templates, traceability, unknown_keys, validate_questions_and_findings,
     validate_test_intent,
@@ -75,6 +75,7 @@ ALIGNMENT_THRESHOLDS = {
     "actor": 0.34, "state": 0.34, "trigger": 0.34, "failure_domain": 0.4, "expected": 0.34,
 }
 STRICT_FIELDS = {"failure_domain", "expected"}
+OPPOSITE_WORDING_OVERLAP = 0.8
 EXPANSION_KEYS = {"dimensions", "test_assets", "questions", "findings", "guidance_dispositions"}
 # How each instructions guidance/seed item ended. Guidance is never authority and never
 # forces a Test Case; it must simply not disappear without an answer.
@@ -99,7 +100,15 @@ def intent_alignment(intent: dict[str, Any], target: dict[str, Any]) -> dict[str
         for field in INTENT_FIELDS
     }
     misaligned = [field for field, minimum in ALIGNMENT_THRESHOLDS.items() if scores[field] < minimum]
-    return {"scores": scores, "aligned": not misaligned, "misaligned_fields": misaligned}
+    # Shared words are not shared meaning: two outcomes worded almost identically, one negated and
+    # one not ("is created" / "is not created"), are opposite observations. Negation words are
+    # stopwords, so the overlap score alone calls them equal. Differently worded outcomes are left
+    # to the overlap thresholds ("only one exists" and "no second exists" can agree).
+    polarity_match = negated(intent.get("expected")) == negated(target.get("expected"))
+    if not polarity_match and scores["expected"] >= OPPOSITE_WORDING_OVERLAP:
+        misaligned.append("expected_polarity")
+    return {"scores": scores, "aligned": not misaligned, "misaligned_fields": misaligned,
+            "expected_polarity_match": polarity_match}
 
 
 # Words that name the testing act itself, not the behavior a test exercises.

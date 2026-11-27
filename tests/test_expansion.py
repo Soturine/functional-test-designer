@@ -273,3 +273,55 @@ class GuidanceAccountabilityTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class OppositeOutcomeCoverageTests(unittest.TestCase):
+    """Shared words are not shared meaning (v2.6.0). Negation words are stopwords for the overlap
+    scores, so before v2.6.0 an outcome and its negation scored 1.0 and ALREADY_COVERED accepted
+    the opposite behavior as covered."""
+
+    TARGET = {"actor": "Owner", "state": "account with free seats", "trigger": "owner submits an invitation",
+              "failure_domain": "invitation creation", "expected": "A pending invitation is created for the email."}
+
+    def alignment(self, **changes):
+        import expansion as stage
+        return stage.intent_alignment({**self.TARGET, **changes}, self.TARGET)
+
+    def test_an_opposite_outcome_with_the_same_words_is_not_coverage(self) -> None:
+        for expected in ("No pending invitation is created for the email.",
+                         "A pending invitation is not created for the email.",
+                         "A pending invitation can't be created for the email."):
+            with self.subTest(expected=expected):
+                result = self.alignment(expected=expected, failure_domain="invitation creation refused")
+                self.assertFalse(result["aligned"])
+                self.assertIn("expected_polarity", result["misaligned_fields"])
+
+    def test_portuguese_and_spanish_negations_are_recognized(self) -> None:
+        import expansion as stage
+        pt = {"actor": "vendedor", "state": "pedido aberto", "trigger": "vendedor emite o pedido",
+              "failure_domain": "emissao do pedido", "expected": "O pedido e emitido com numero unico."}
+        self.assertFalse(stage.intent_alignment({**pt, "expected": "O pedido nao e emitido com numero unico."}, pt)["aligned"])
+        es = {**pt, "expected": "El pedido se emite con numero unico."}
+        self.assertFalse(stage.intent_alignment({**es, "expected": "El pedido no se emite con numero unico."}, es)["aligned"])
+
+    def test_same_polarity_and_differently_worded_equivalents_still_align(self) -> None:
+        self.assertTrue(self.alignment()["aligned"])
+        double = self.alignment(expected="A pending invitation is never not created for the email.")
+        self.assertTrue(double["expected_polarity_match"])  # an even count of negations cancels
+        import expansion as stage
+        # The frozen api-refunds case: "only one refund exists" and "no second refund exists" agree.
+        refund = {"actor": "API client operator", "state": "refund already created", "trigger": "the client repeats the request",
+                  "failure_domain": "idempotent creation", "expected": "The API returns the original response and no second refund exists."}
+        self.assertTrue(stage.intent_alignment(
+            {**refund, "expected": "the original response is returned and only one refund exists"}, refund)["aligned"])
+
+    def test_a_pack_cannot_claim_its_happy_path_covers_the_opposite_outcome(self) -> None:
+        def flip(pack):
+            entry = candidate(pack, "STATE_TRANSITION", "S1")
+            entry["intent"]["expected"] = "The user does not join the account with the Member role."
+        run = PackRun("saas-accounts", flip)
+        self.addCleanup(run.close)
+        run.through("design")
+        with self.assertRaises(StageError) as caught:
+            run.submit("expansion")
+        self.assertIn("expected_polarity", " ".join(caught.exception.errors))

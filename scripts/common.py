@@ -136,6 +136,22 @@ def content_tokens(text: Any) -> set[str]:
     }
 
 
+# Negation markers (accent-free, as normalize() leaves them). Negation words are stopwords for
+# similarity, so "is created" and "is not created" share every content token: polarity is
+# compared separately, never inferred from overlap.
+NEGATIONS = {
+    "en": {"not", "no", "never", "without", "cannot", "none", "nothing", "nobody", "neither", "nor", "t"},
+    "pt": {"nao", "nunca", "sem", "nenhum", "nenhuma", "nada", "jamais", "nem", "ninguem"},
+    "es": {"no", "nunca", "sin", "ningun", "ninguna", "nada", "jamas", "ni", "nadie"},
+}
+_NEGATION_WORDS = set().union(*NEGATIONS.values())
+
+
+def negated(text: Any) -> bool:
+    """True when the text carries an odd number of negation markers (a double negative cancels)."""
+    return sum(word in _NEGATION_WORDS for word in normalize(text).split()) % 2 == 1
+
+
 def similarity(left: Any, right: Any) -> float:
     """Containment similarity: shared meaningful tokens over the smaller token set."""
     a, b = content_tokens(left), content_tokens(right)

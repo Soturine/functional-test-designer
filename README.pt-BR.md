@@ -157,7 +157,7 @@ Detalhes: [`entrypoints/adr.md`](entrypoints/adr.md).
 
 ```text
 start       (runtime)  escopo → fontes e papéis → identificadores oficiais → idioma → testes existentes
-reading     (leitores) catálogos factuais por fonte (reaproveitados se a fonte não mudou)
+reading     (leitores) leitura nativa de cada original → catálogos factuais declarados (reaproveitados se não mudou)
 design      (modelo)   requisitos → claims atômicos → TCs Acceptance → baseline normativo congelado
 expansion   (modelo)   17 dimensões, erros de operador, falhas, testes existentes, jornadas E2E (só adiciona)
 procedures  (modelo)   passos executáveis, fixtures semânticas, pendências, automação
@@ -169,6 +169,15 @@ Cada estágio do modelo é validado pelo runtime; um estágio inválido é rejei
 - **Escopo:** só as fontes selecionadas; um diretório é recursivo apenas dentro dele.
 - **Papéis:** `FUNCTIONAL_AUTHORITY` (o que deve acontecer), `TECHNICAL_CONTEXT` (como chegar lá), `IMPLEMENTATION_EVIDENCE` (o que existe), `TEST_ASSET` (testes existentes: desafiam a suíte, nunca são autoridade).
 - **Idioma:** o da autoridade, salvo pedido explícito.
+
+### Leitura das fontes: nativa primeiro, verificada pelo runtime
+
+Ler e interpretar é papel do agente; verificar é papel do runtime. Os leitores (ou você, numa run sequencial) abrem cada **original** com as ferramentas do próprio host — leitores nativos de PDF/documento e visão inclusive — e declaram como leram: `method`, `COMPLETE`/`PARTIAL`, o que foi inspecionado e o que não foi visto. O runtime não enxerga a página; ele confere o que pode: escopo, digests, número de páginas, intervalos de linhas, que todo arquivo foi contabilizado e que a declaração nunca contradiz o arquivo (só a camada de texto de um PDF nunca é leitura completa).
+
+- **Formatos:** texto e código são lidos como são. PDFs, imagens e documentos de escritório sempre vão para um leitor; ler nativamente depende do host, e um host que não consegue abrir o arquivo informa isso em vez de fingir. O FTD não tem OCR próprio.
+- **pypdf é opcional:** instalado, extrai a camada de texto do PDF usada para verificar trechos e indexar identificadores cedo. Sem ele — ou num PDF escaneado sem texto — o leitor transcreve a autoridade, e os identificadores são indexados a partir dessa transcrição.
+- **Figuras e tabelas:** o que só um diagrama, tabela ou digitalização mostra é registrado como `visual_fact` localizado; o Design precisa dar destino a cada um vindo da autoridade funcional. Uma autoridade lida parcialmente continua sendo uma lacuna visível.
+- **Cache e runs antigas:** um catálogo reutilizado precisa bater com digest, papel e política de leitura do arquivo; um catálogo de PDF ou imagem anterior à v2.6.0 é lido de novo, um de texto é reutilizado como `LEGACY_UNASSESSED`. Runs e saídas de versões anteriores continuam verificando e renderizando sem mudança.
 
 ## Saídas
 
@@ -218,7 +227,7 @@ python -m unittest discover -s tests
 
 ## Limites
 
-A FTD não executa testes, não cria Shared Steps, não faz indexação global do repositório e, na publicação, não apaga nem move nada no Azure DevOps.
+A FTD não executa testes, não cria Shared Steps, não faz indexação global do repositório, não faz OCR e, na publicação, não apaga nem move nada no Azure DevOps. A leitura nativa de PDFs, imagens e documentos de escritório é tão boa quanto as ferramentas do próprio agente host; o runtime registra, mas não consegue verificar, o que um leitor viu numa imagem.
 
 Veja também [`CHANGELOG.md`](CHANGELOG.md), os [guias de migração](docs/migrations/README.md) e o [histórico](docs/history/v2.3-simplification-report.md).
 
