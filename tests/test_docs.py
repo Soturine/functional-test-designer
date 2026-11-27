@@ -114,8 +114,15 @@ class RepositoryLayoutTests(unittest.TestCase):
     ROOT_FILES = {"README.md", "README.pt-BR.md", "SKILL.md", "CHANGELOG.md", "LICENSE", "ATTRIBUTION.md", "VERSION", "requirements.txt",
                   ".gitignore"}
 
+    @staticmethod
+    def _is_worktree_pointer(path: Path) -> bool:
+        """In a linked worktree `.git` is a one-line `gitdir:` pointer file, not a directory."""
+        if path.name != ".git" or path.stat().st_size > 4096:
+            return False
+        return path.read_text(encoding="utf-8", errors="replace").startswith("gitdir:")
+
     def test_the_root_holds_only_current_entry_point_files(self) -> None:
-        files = {p.name for p in ROOT.iterdir() if p.is_file()}
+        files = {p.name for p in ROOT.iterdir() if p.is_file() and not self._is_worktree_pointer(p)}
         self.assertEqual(set(), files - self.ROOT_FILES)
         self.assertFalse(list(ROOT.glob("MIGRATION-*.md")))
         self.assertFalse((ROOT / "SIMPLIFICATION_REPORT.md").exists())
