@@ -1021,6 +1021,34 @@ class CacheCompatibilityTests(Workspace):
 
 
 
+class UserTranscriptionCacheTests(Workspace):
+    """A catalog read alongside a user-supplied transcription is reused only with that same
+    transcription. Found by a v2.6.0 targeted fault injection: no test failed when the
+    transcription-digest check was removed."""
+
+    def run_with(self, run_id: str, text: str) -> dict:
+        transcript = self.root / f"{run_id}.txt"
+        transcript.write_text(text, encoding="utf-8")
+        out = pipeline.start_run(workspace=self.workspace, artifact_root=self.artifacts, run_id=run_id, locale="en",
+                                 sources_selected=[{"path": "scan.pdf", "role": "FUNCTIONAL_AUTHORITY"}],
+                                 transcriptions={"scan.pdf": transcript})
+        run_dir = Path(out["run_dir"])
+        plan = read_json(run_dir / "reading" / "task-plan.json")
+        task = plan["tasks"][0]
+        if task["state"] == "PLANNED":
+            pipeline.submit_reading(run_dir, [self.file_result(task, {"method": "native_vision", "completeness": "COMPLETE",
+                                                                      "inspected": ["page 1"]})])
+            pipeline.reconcile_reading(run_dir)
+        return task
+
+    def test_a_changed_user_transcription_is_read_again(self) -> None:
+        drawn_pdf(self.workspace / "scan.pdf")
+        first = "REQ-7 - Order approval\nA supervisor approves the order.\n"
+        self.assertEqual("PLANNED", self.run_with("r1", first)["state"])
+        self.assertEqual("REUSED", self.run_with("r2", first)["state"])
+        self.assertEqual("PLANNED", self.run_with("r3", first + "REQ-8 - Order rejection\nA supervisor rejects it.\n")["state"])
+
+
 class EndToEndNativeAuthorityTests(unittest.TestCase):
 
     """A real pack, its authority replaced by a PDF with no text layer, through the whole pipeline."""

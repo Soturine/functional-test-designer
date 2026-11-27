@@ -186,3 +186,23 @@ class FindingQuestionTraceabilityTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class OrphanClaimTests(unittest.TestCase):
+    """Found by a v2.6.0 targeted fault injection: removing the orphan-claim check left every
+    design test green, because each existing case also left its identifier uncovered."""
+
+    def test_a_test_claim_no_acceptance_test_exercises_is_refused(self) -> None:
+        import copy as _copy
+        from support import PackRun as _PackRun
+        def orphan(pack):
+            claim = _copy.deepcopy(pack["stages"]["design"]["claims"][0])
+            claim.update(key="C-ORPHAN", text="The invitation email names the inviting owner.")
+            pack["stages"]["design"]["claims"].append(claim)
+        run = _PackRun("saas-accounts", orphan)
+        self.addCleanup(run.close)
+        run.start()
+        with self.assertRaises(StageError) as caught:
+            run.submit("design")
+        self.assertIn("claim C-ORPHAN has destination TEST but no acceptance test exercises it",
+                      " ".join(caught.exception.errors))

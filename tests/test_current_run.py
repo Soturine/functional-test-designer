@@ -118,6 +118,20 @@ class ResolutionTests(CurrentRunTestCase):
             pipeline.resolve_run(None, self.run.artifacts)
 
 
+class SupersededPointerTests(CurrentRunTestCase):
+    """Found by a v2.6.0 targeted fault injection: the stale-pointer test used an unfinished run,
+    which fails earlier for lack of canonical state, so the status check itself was never exercised."""
+
+    def test_an_intact_run_that_is_no_longer_validated_is_refused(self) -> None:
+        state_path = self.run.run_dir / "run-state.json"
+        state = json.loads(state_path.read_text(encoding="utf-8"))
+        state["status"] = "SUPERSEDED"
+        state_path.write_text(json.dumps(state), encoding="utf-8")
+        pipeline.verify_manifest(self.run.run_dir / "run-manifest.json")  # its files are intact
+        with self.assertRaisesRegex(pipeline.IntegrityError, "cannot be trusted"):
+            pipeline.resolve_run(None, self.run.artifacts)
+
+
 class CommandTests(CurrentRunTestCase):
     def cli(self, main, argv):
         out = io.StringIO()
