@@ -325,3 +325,26 @@ class OppositeOutcomeCoverageTests(unittest.TestCase):
         with self.assertRaises(StageError) as caught:
             run.submit("expansion")
         self.assertIn("expected_polarity", " ".join(caught.exception.errors))
+
+
+class ExternalSeedIdentityTests(GuidanceAccountabilityTests):
+    """A seed handed over by another tool (a PBD handoff 1.1 puts the canonical criterion id at the
+    start of the seed) is published verbatim, so the other tool can join its ids back by exact token.
+    The seed stays context: it never becomes authority and links nothing by title or order."""
+
+    SEED = "[PBD-AC-B4GAJDQFPQP1 · CA-01] um leitor com 3 empréstimos ativos — o empréstimo é recusado"
+    REQUEST = {"guidance": ["Explore sustained load and bursts on invitations."],
+               "seeds": [{"text": SEED, "section": "Emprestar livros no balcão"}],
+               "source_order": [], "effective": {}}
+
+    def test_the_seed_text_and_its_canonical_id_survive_byte_for_byte(self) -> None:
+        import pipeline
+        run = self.reach([{"item": self.LOAD, "disposition": "ALREADY_COVERED", "tests": ["D2"]},
+                          {"item": self.FLOW, "disposition": "NOT_APPLICABLE_WITH_REASON",
+                           "reason": "the seed describes a library loan, which no selected source defines"}])
+        run.submit("expansion")
+        run.submit("procedures")
+        pipeline.finalize_run(run.run_dir, ["JSON"])
+        seed = next(d for d in run.output("test-cases.json")["guidance_dispositions"] if d["item"] == self.FLOW)
+        self.assertEqual(self.SEED, seed["text"])
+        self.assertEqual(([], "NOT_APPLICABLE_WITH_REASON"), (seed["test_refs"], seed["disposition"]))
