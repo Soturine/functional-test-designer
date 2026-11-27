@@ -15,6 +15,8 @@ Native-first reading made enforceable, plus fixes found by a real dogfood and by
 - **Contract clarification:** an automation-only unknown means a person can still prepare and run the case; a starting state nobody can reach is `UNKNOWN_SETUP_PATH` and is not READY.
 - **Tests:** negative controls for every new reading invariant, real synthetic PDFs (text, scanned, mixed) with and without pypdf, and three tests closing gaps found by fault injection (user-transcription cache, orphan TEST claim, superseded current-run pointer).
 
+Qualification evidence: [docs/evidence/v2.6.0.md](docs/evidence/v2.6.0.md); migration notes: [docs/migrations/v2.6.0.md](docs/migrations/v2.6.0.md).
+
 Compatibility: runs, manifests and outputs written by earlier versions still verify and render unchanged; resumed pre-v2.6.0 reading plans keep their optional declarations. Known limitations: FTD performs no OCR and cannot verify what a reader saw in a picture (visual facts are agent-attested); native reading of PDFs, images and office documents depends on the host agent.
 
 ## 2.5.0 - 2026-10-01
