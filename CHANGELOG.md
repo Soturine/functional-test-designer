@@ -1,7 +1,21 @@
 # Changelog
 
-## Unreleased
-- Native-first reading: source records and reader tasks carry `format`, `native_reading` and `extracted_layer`; reader results may declare how a source was read (`reading.method`), and a PDF read only from its pypdf text layer must declare its limitations. The PDF text layer is relabelled as excerpt verification and fallback, not a complete reading.
+## 2.6.0 - 2026-11-27
+
+Native-first reading made enforceable, plus fixes found by a real dogfood and by targeted fault injection. The eight gates, the 17 expansion dimensions, every command and the frozen v2.4.2 regression baseline over the synthetic packs are unchanged.
+
+- **Native-first reading (policy `native-first/1`):** source records separate format, runtime snapshot (`FULL_TEXT`, `TEXT_LAYER`, `TRANSCRIPTION`, `NONE`) and extraction status. PDFs, images and office documents are always offered to a reader — in SEQUENTIAL runs to the main model, attributed `MAIN_MODEL`. Authority in those formats is no longer refused before any reader sees it; pypdf stays optional.
+- **Reading declarations are required for new runs:** method, completeness, what was inspected and what was not seen. Omitted, empty, malformed or contradictory declarations are refused; a PDF text layer alone is never a complete reading; a declared page count must match the original.
+- **Native transcription:** functional authority with no runtime text is transcribed by its reader; reconciliation adopts it as the run snapshot and re-indexes authority, or refuses before writing anything.
+- **Visual facts:** content only a table, figure, diagram or scan shows is recorded with a locator; Design gives each fact of authority a disposition, and an official identifier defined only there joins the normative ledger with its locator.
+- **Cache:** catalogs are reused only under the same reading policy, digest, role and user transcription. Pre-v2.6.0 catalogs are reused only for full-text files and reported `LEGACY_UNASSESSED`.
+- **Reporting:** canonical sources may carry a `reading` object (additive schema field); a partially read authority source becomes the `partially_read_authority_sources` gap; the HTML report lists how each source was read.
+- **ADR:** `/ftd --adr ... --transcription <path>=<text file>` brings in scanned, image or office-document ADRs read natively by the host.
+- **Fixes:** coverage claims whose outcome is the negation of the target's are refused; evidence line ranges on implementation, context and test files are checked against their own snapshot (they were always refused); a malformed normalized request is a validation error instead of a crash; the root-layout test accepts a linked-worktree `.git` pointer.
+- **Contract clarification:** an automation-only unknown means a person can still prepare and run the case; a starting state nobody can reach is `UNKNOWN_SETUP_PATH` and is not READY.
+- **Tests:** negative controls for every new reading invariant, real synthetic PDFs (text, scanned, mixed) with and without pypdf, and three tests closing gaps found by fault injection (user-transcription cache, orphan TEST claim, superseded current-run pointer).
+
+Compatibility: runs, manifests and outputs written by earlier versions still verify and render unchanged; resumed pre-v2.6.0 reading plans keep their optional declarations. Known limitations: FTD performs no OCR and cannot verify what a reader saw in a picture (visual facts are agent-attested); native reading of PDFs, images and office documents depends on the host agent.
 
 ## 2.5.0 - 2026-10-01
 

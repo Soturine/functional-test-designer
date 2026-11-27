@@ -15,7 +15,7 @@ Agent Skill que projeta **Test Cases funcionais rastreáveis e executáveis** a 
 
 O modelo faz o raciocínio de QA; o runtime protege escopo, rastreabilidade, validação e publicação. Nada é inventado: o que as fontes não dizem vira Question ou pendência.
 
-> Versão publicada: 2.5.0.
+> Versão publicada: 2.6.0.
 
 ## Início rápido
 
@@ -27,6 +27,12 @@ O modelo faz o raciocínio de QA; o runtime protege escopo, rastreabilidade, val
 ```
 
 3. Abra `./ftd-output/output/report.html`.
+
+<p align="center">
+  <img src="docs/screenshots/report-walkthrough.gif" alt="Relatório HTML offline de uma run sintética: resumo, busca, filtro de status, um grupo de Test Cases e a tabela de leitura das fontes" width="100%">
+</p>
+
+Capturas reais do relatório offline de uma run sintética de dogfood (a política de uma biblioteca cujos limites de empréstimo e regra de renovação existem só como tabela e diagrama dentro de um PDF): [resumo](docs/screenshots/report-summary.png), [leitura das fontes](docs/screenshots/report-source-reading.png).
 
 `--output-dir ./ftd-output` significa "salve todos os artefatos da FTD em `./ftd-output`" (o padrão é `<workspace>/ftd-output`). Sem `--run-id`, a FTD cria um id como `ftd-20260925-143000`; o estado da execução fica em `./ftd-output/.ftd/runs/<run-id>/`.
 

@@ -15,7 +15,7 @@ Agent Skill that designs **traceable, executable functional Test Cases** using o
 
 The model performs the QA reasoning; the runtime protects scope, traceability, validation, and publication. Nothing is silently invented: when the selected sources do not define something safely, the FTD records a Question or an explicit pending item instead.
 
-> Published version: 2.5.0.
+> Published version: 2.6.0.
 
 ## Quick start
 
@@ -27,6 +27,12 @@ The model performs the QA reasoning; the runtime protects scope, traceability, v
 ~~~
 
 3. Open `./ftd-output/output/report.html`.
+
+<p align="center">
+  <img src="docs/screenshots/report-walkthrough.gif" alt="Offline HTML report of a synthetic run: summary, search, status filter, a group of Test Cases and the source-reading table" width="100%">
+</p>
+
+Real captures of the offline report of a synthetic dogfood run (a lending-library policy whose loan limits and renewal rule exist only as a table and a diagram inside a PDF): [summary](docs/screenshots/report-summary.png), [source reading](docs/screenshots/report-source-reading.png).
 
 `--output-dir ./ftd-output` means “store all FTD artifacts under `./ftd-output`” (the default is `<workspace>/ftd-output`). Without `--run-id`, the FTD creates an id such as `ftd-20260925-143000`; run state is stored under `./ftd-output/.ftd/runs/<run-id>/`.
 
