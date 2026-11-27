@@ -273,3 +273,12 @@ class ChaosSeedTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class MalformedHostPayloadTests(unittest.TestCase):
+    def test_a_string_input_file_is_a_validation_error_not_a_crash(self) -> None:
+        # Found by the v2.6.0 dogfood: the host wrote "input_file": "instructions.md" and the
+        # runtime raised AttributeError instead of reporting the problem.
+        errors = instructions.validate_request({"input_file": "instructions.md"}, {"digest": "abc"})
+        self.assertTrue(any("input_file must be the object" in e for e in errors), errors)
+        self.assertTrue(any("digest mismatch" in e for e in errors), errors)

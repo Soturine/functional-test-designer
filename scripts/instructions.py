@@ -219,7 +219,12 @@ def validate_request(request: dict[str, Any], input_doc: dict[str, Any] | None) 
     if unknown:
         errors.append(f"normalized request has unknown keys {unknown}; put free text under guidance")
     if input_doc is not None:
-        declared = (request.get("input_file") or {}).get("digest")
+        input_file = request.get("input_file") or {}
+        if not isinstance(input_file, dict):
+            # A malformed host payload is a validation error, never a crash.
+            errors.append("input_file must be the object the work order returned ({path, digest})")
+            input_file = {}
+        declared = input_file.get("digest")
         if declared != input_doc["digest"]:
             errors.append("normalized request was produced for a different revision of the instructions file "
                           "(input_file.digest mismatch); normalize the current file again")

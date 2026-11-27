@@ -269,7 +269,8 @@ def validate_design(payload: dict[str, Any], context: dict[str, Any]) -> dict[st
             errors.append(f"{label} requires source_statement")
         refs = _refs(item.get("source_refs"))
         if not refs and indexed:
-            refs = [{"source": indexed["source"], "reference": f"{indexed['identifier']} (line {indexed['line']})"}]
+            where = f"line {indexed['line']}" if indexed.get("line") else indexed.get("locator", "")
+            refs = [{"source": indexed["source"], "reference": f"{indexed['identifier']} ({where})"}]
         if not refs:
             errors.append(f"{label} requires source_refs")
         status = str(item.get("status", "TESTABLE"))
@@ -598,7 +599,8 @@ def identifier_ledger(
         test_ids = [test.get("id") or test["key"] for test in covering]
         record = {
             "identifier": entry["identifier"], "kind": entry["kind"], "title": entry["title"],
-            "source": entry["source"], "line": entry["line"],
+            "source": entry["source"],
+            **({"line": entry["line"]} if entry.get("line") else {"locator": entry.get("locator")}),
             "claim_refs": [claim["id"] for claim in own_claims], "test_refs": test_ids,
             "reason": None, "question_refs": [],
         }

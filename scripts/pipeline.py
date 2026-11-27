@@ -442,8 +442,44 @@ def _adopt_transcriptions(run_dir: Path, items: list[dict[str, Any]]) -> list[di
     return adopted
 
 
+def _index_visual_identifiers(run_dir: Path, reconciliation: dict[str, Any]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Official identifiers that functional authority defines only inside a table, figure, diagram
+    or scan (its visual facts) join the authority index, so the normative ledger accounts for them
+    like any text-defined identifier. The same definition rule and --id-pattern apply; nothing is
+    inferred from domain words. An identifier already defined in text keeps its text definition;
+    one defined visually by two different files is listed for the main model, never voted on."""
+    run, state = _load(run_dir)
+    index = list(state["authority_index"])
+    known = {normalize_identifier(entry["identifier"]): entry for entry in index}
+    added, conflicts = [], []
+    for fact in reconciliation.get("authority_visual_facts") or []:
+        for entry in sources.extract_identifiers(fact["text"], fact["file"], run.get("id_pattern")):
+            key = normalize_identifier(entry["identifier"])
+            if key in known:
+                if known[key]["source"] != fact["file"] and known[key].get("visual_fact"):
+                    conflicts.append({"identifier": entry["identifier"], "sources": [known[key]["source"], fact["file"]],
+                                      "visual_facts": [known[key]["visual_fact"], fact["id"]]})
+                continue
+            item = {"identifier": entry["identifier"], "kind": entry["kind"], "title": entry["title"],
+                    "source": fact["file"], "line": None, "locator": fact["locator"], "visual_fact": fact["id"],
+                    "excerpt": fact["text"][:1200], "structural_items": 0}
+            known[key] = item
+            added.append(item)
+    if added:
+        write_json(run_dir / "sources.json", {**state, "authority_index": [*index, *added]})
+    return added, conflicts
+
+
 def _reconcile_and_bind(run_dir: Path, artifact_root: Path) -> dict[str, Any]:
     result = reading_stage.reconcile(run_dir, artifact_root, lambda items: _adopt_transcriptions(run_dir, items))
+    visual_identifiers, visual_conflicts = _index_visual_identifiers(run_dir, result)
+    if visual_identifiers:
+        result["visual_identifiers"] = [{k: v for k, v in item.items() if k in {"identifier", "title", "source", "locator", "visual_fact"}}
+                                        for item in visual_identifiers]
+    if visual_conflicts:
+        result["visual_identifier_conflicts"] = visual_conflicts
+    if visual_identifiers or visual_conflicts:
+        write_json(run_dir / "reading" / "reconciliation.json", result)
     # Bound into the TEST_DESIGN manifest record, so Design provably ran on this catalog.
     write_json(run_dir / "stages" / "reading.reconciliation.json", result)
     return result
@@ -551,7 +587,12 @@ def submit_stage(run_dir: Path, stage: str, payload: dict[str, Any]) -> dict[str
                 "blocking_by_test": _blocking_by_test(tests, questions),
                 "blocking_questions": {q["key"] for q in questions if q["blocking"]},
             })
-        ref_errors, checked = sources.check_source_refs(workspace, records, texts, [payload])
+        # Line ranges are checked against each cited source's own run snapshot (implementation,
+        # context and test evidence included), not only against functional authority.
+        catalog = {e["path"]: e for e in read_json(run_dir / "evidence" / "source-catalog.json")["sources"]}
+        ref_texts = {**{path: (run_dir / "evidence" / entry["text_ref"]).read_text(encoding="utf-8")
+                        for path, entry in catalog.items() if entry.get("text_ref")}, **texts}
+        ref_errors, checked = sources.check_source_refs(workspace, records, ref_texts, [payload])
         if ref_errors:
             raise StageError(stage, ref_errors)
     except StageError:
@@ -925,7 +966,9 @@ def _use_case_flows(authority_index: list[dict[str, Any]], authority_texts: dict
     section runs to the next use case (or higher-level identifier); numbered lines before
     its first alternative flow are the main flow; flows defined inside the section are its
     alternatives."""
-    ordered = sorted(authority_index, key=lambda item: (item.get("source", ""), item.get("line") or 0))
+    # Flow steps are read from text lines; an identifier located in a figure has none.
+    ordered = sorted((item for item in authority_index if item.get("line")),
+                     key=lambda item: (item.get("source", ""), item.get("line") or 0))
     flows: dict[str, Any] = {}
     for position, item in enumerate(ordered):
         if sources.identifier_kind(item["identifier"]) != "USE_CASE" or not item.get("line"):
@@ -1636,7 +1679,7 @@ STAGE_GUIDE = {
         "A step that changes the environment or suppresses a signal to create the test condition (restart or stop a service, cut a connection, power off or shield a device, keep a tag or label from being read) needs evidence that says how: list the step number in an evidence_ref's `supports`. Without it, keep the scenario (its intent, e.g. 'a traversal in which the identifier is not captured') and declare UNKNOWN_SETUP_PATH or MISSING_EXECUTION_SURFACE — never invent the technique, and such a case is not READY.",
         "Every expected result states what becomes observable (a status, counter, state, message or record) — never only that the request was sent, received or processed — and names one outcome: when the policy could go either way, declare the unknown instead of writing 'X or Y'. Every semantic fixture used (ACTOR_A, ENTITY_A, DEVICE_B) is described in test_data with its role, properties and relationships, consistently across preconditions and steps.",
         "Load, latency and capacity: an expected result may assert a numeric threshold only when the designed Test Case states it. When the sources define no SLA, write a characterization: apply a declared, progressively increasing load (experiment configuration, in the action or test_data), record rate, throughput, latency, errors/timeouts, lost or duplicated operations and integrity failures, stop by the declared method, and report the observed saturation or degradation point — linking the Question that asks for the threshold.",
-        "Record only material unknowns (MISSING_ORACLE, AMBIGUOUS_POLICY, UNRESOLVED_PERMISSION, MISSING_EXECUTION_SURFACE, UNKNOWN_SETUP_PATH, EXTERNAL_DEPENDENCY_UNAVAILABLE) or automation-only unknowns (MISSING_FIXTURE, MISSING_SELECTOR, MISSING_ENVIRONMENT). Status and automation readiness are derived from them.",
+        "Record only material unknowns (MISSING_ORACLE, AMBIGUOUS_POLICY, UNRESOLVED_PERMISSION, MISSING_EXECUTION_SURFACE, UNKNOWN_SETUP_PATH, EXTERNAL_DEPENDENCY_UNAVAILABLE) or automation-only unknowns (MISSING_FIXTURE, MISSING_SELECTOR, MISSING_ENVIRONMENT). Status and automation readiness are derived from them. The test is who could run it: an automation-only kind means a person can still prepare and run the case with what the sources describe and only a harness lacks the fixture, selector or environment. When nobody could reach the starting state that way (no documented path, or the implementation itself prevents it), the unknown is UNKNOWN_SETUP_PATH (or MISSING_EXECUTION_SURFACE) and the case is not READY.",
         "Classify automation.suitability (HIGH, MEDIUM, LOW, MANUAL_ONLY) and automation.layer independently of readiness.",
     ],
 }
@@ -1710,6 +1753,11 @@ def _work_order(run_dir: Path) -> Path:
         }
     if stage == "design":
         order["sources"] = [{k: r[k] for k in ("path", "role", "status", "reason")} for r in source_state["records"]]
+        if (run_dir / "reading" / "source-catalog.json").is_file():
+            status_of = {e["path"]: e.get("reading_status") for e in read_json(run_dir / "reading" / "source-catalog.json")["sources"]}
+            for entry in order["sources"]:
+                if status_of.get(entry["path"]):
+                    entry["reading_status"] = status_of[entry["path"]]
         if (run_dir / "reading" / "reconciliation.json").is_file():
             order["reader_catalog"] = str(run_dir / "reading" / "source-catalog.json")
             order["reading_reconciliation"] = str(run_dir / "reading" / "reconciliation.json")

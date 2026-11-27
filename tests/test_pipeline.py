@@ -303,3 +303,26 @@ class PublicationOrganizationTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class EvidenceLineRangeTests(unittest.TestCase):
+    """Found by the v2.6.0 dogfood: a line range on implementation evidence was always rejected,
+    because ranges were checked only against functional authority texts."""
+
+    def finding(self, start: int, end: int):
+        def mutate(pack):
+            pack["stages"]["design"]["findings"][0]["source_refs"] = [
+                {"source": "src/invitations.py", "reference": "seat check", "line_start": start, "line_end": end}]
+        run = PackRun("saas-accounts", mutate)
+        self.addCleanup(run.close)
+        run.start()
+        return run
+
+    def test_a_valid_implementation_line_range_is_accepted(self) -> None:
+        self.assertEqual("expansion", self.finding(4, 6).submit("design")["next_stage"])
+
+    def test_an_implementation_range_outside_the_file_is_still_refused(self) -> None:
+        run = self.finding(4, 400)
+        with self.assertRaises(StageError) as caught:
+            run.submit("design")
+        self.assertIn("src/invitations.py:4-400 is not a valid line range", " ".join(caught.exception.errors))

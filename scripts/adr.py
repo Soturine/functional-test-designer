@@ -291,8 +291,9 @@ def inventory(scope: Path, ledger: dict[str, Any], text_dir: Path | None = None,
             entry.update(disposition="FAILED", reason=reason)
         if entry["disposition"] in {"UNSUPPORTED", "FAILED"} and fmt in sources.NATIVE_FORMATS:
             # Not text to the runtime, but readable by a host that opens it natively.
-            entry.update(format=fmt, native_reading=sources.NATIVE_READING[fmt] + "; then start the round again "
-                         f"with --transcription {key}=<text file>")
+            entry.update(format=fmt, native_reading=f"open the original {fmt} natively (vision or the host's document "
+                         "reader), transcribe every statement verbatim, then start the round again with "
+                         f"--transcription {key}=<text file>; if the host cannot open it, leave it {entry['disposition']}")
         entries.append(entry)
     present = {entry["path"] for entry in entries}
     for key in sorted(set(ledger) - present):

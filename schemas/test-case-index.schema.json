@@ -1001,6 +1001,11 @@
           "type": "integer",
           "minimum": 1
         },
+        "locator": {
+          "description": "Page, table or figure of an identifier defined only in visual content of the authority.",
+          "type": "string",
+          "minLength": 1
+        },
         "disposition": {
           "enum": [
             "COVERED_BY_ATOMIC_TC",
