@@ -170,3 +170,5 @@ Generate the suite once with `/ftd-gen`; when ADRs, approved decisions or other 
 ## Completion
 
 Finalize produces `output/` (HTML report, JSON, Markdown per Test Case) and a verified manifest. Report honestly: identifier dispositions, gap metrics (`0 gaps` only when every gap dimension is zero), open Questions, Findings, readiness, and `baseline: NOT_APPLIED` unless a benchmark baseline was loaded. Output contract: [output-contract.md](references/output-contract.md). Gates and metrics: [validation.md](references/validation.md).
+
+For selected legacy or reused test assets, apply the [migration review lenses](references/method.md#existing-plan-and-migration-review-lenses-qe-lessons) within the existing stage and publication contracts.
